@@ -33,7 +33,7 @@ import {
     renderNoData, renderError
 } from '../utils.js';
 import { showToast, addNftToWallet } from '../ui-feedback.js';
-import { addresses, boosterTiers, getTierByBoost, getBurnRateFromBoost, getKeepRateFromBoost } from '../config.js';
+import { addresses, boosterTiers, getTierByBoost, getRecycleRateFromBoost, getKeepRateFromBoost } from '../config.js';
 
 // ============================================================================
 // LOCAL STATE
@@ -111,7 +111,14 @@ const ACTIVITY_ICONS = {
     CHARITY_GOAL_REACHED: { icon: 'fa-trophy', color: '#fbbf24', bg: 'rgba(251,191,36,0.15)', label: '🏆 Goal Reached!', emoji: '🏆' },
     FAUCET: { icon: 'fa-droplet', color: '#22d3ee', bg: 'rgba(6,182,212,0.15)', label: '💧 Faucet Claim', emoji: '💧' },
     FEE_COLLECTED: { icon: 'fa-receipt', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', label: '🧾 Fee Collected', emoji: '🧾' },
-    REFERRER_SET: { icon: 'fa-link', color: '#8b5cf6', bg: 'rgba(139,92,246,0.15)', label: '🔗 Referral Set', emoji: '🔗' },
+    TUTOR_SET: { icon: 'fa-graduation-cap', color: '#8b5cf6', bg: 'rgba(139,92,246,0.15)', label: '🎓 Tutor Set', emoji: '🎓' },
+    TUTOR_CHANGED: { icon: 'fa-arrows-rotate', color: '#a78bfa', bg: 'rgba(167,139,250,0.15)', label: '🔄 Tutor Changed', emoji: '🔄' },
+    TUTOR_EARNED: { icon: 'fa-hand-holding-dollar', color: '#10b981', bg: 'rgba(16,185,129,0.15)', label: '💰 Tutor Earned', emoji: '💰' },
+    REWARD_RECYCLED: { icon: 'fa-recycle', color: '#22d3ee', bg: 'rgba(6,182,212,0.15)', label: '♻️ Rewards Recycled', emoji: '♻️' },
+    NFT_FUSION: { icon: 'fa-fire', color: '#f97316', bg: 'rgba(249,115,22,0.15)', label: '🔥 NFT Fused', emoji: '🔥' },
+    NFT_SPLIT: { icon: 'fa-scissors', color: '#60a5fa', bg: 'rgba(59,130,246,0.15)', label: '✂️ NFT Split', emoji: '✂️' },
+    GOVERNANCE_VOTE: { icon: 'fa-check-to-slot', color: '#a78bfa', bg: 'rgba(167,139,250,0.15)', label: '🗳️ Voted', emoji: '🗳️' },
+    GOVERNANCE_PROPOSE: { icon: 'fa-scroll', color: '#818cf8', bg: 'rgba(99,102,241,0.15)', label: '📜 Proposal Created', emoji: '📜' },
     BUYBACK: { icon: 'fa-hammer', color: '#f97316', bg: 'rgba(249,115,22,0.15)', label: '⛏️ Buyback', emoji: '⛏️' },
     SWAP: { icon: 'fa-arrow-right-arrow-left', color: '#22d3ee', bg: 'rgba(6,182,212,0.15)', label: '🔄 Swap', emoji: '🔄' },
     LIQUIDITY_ADD: { icon: 'fa-droplet', color: '#4ade80', bg: 'rgba(34,197,94,0.15)', label: '💧 Liquidity Added', emoji: '💧' },
@@ -227,7 +234,14 @@ function getActivityStyle(type, details = {}) {
     if (t === 'NOTARYREGISTER' || t === 'NOTARIZED' || t.includes('NOTARY') || t.includes('DOCUMENT')) return ACTIVITY_ICONS.NOTARY;
     if (t === 'FAUCETCLAIM' || t.includes('FAUCET') || t.includes('DISTRIBUTED')) return ACTIVITY_ICONS.FAUCET;
     if (t === 'FEECOLLECTED' || t === 'FEE_COLLECTED') return ACTIVITY_ICONS.FEE_COLLECTED;
-    if (t === 'REFERRERSET' || t === 'REFERRER_SET') return ACTIVITY_ICONS.REFERRER_SET;
+    if (t === 'TUTORSET' || t === 'TUTOR_SET' || t === 'REFERRERSET' || t === 'REFERRER_SET') return ACTIVITY_ICONS.TUTOR_SET;
+    if (t === 'TUTORCHANGED' || t === 'TUTOR_CHANGED') return ACTIVITY_ICONS.TUTOR_CHANGED;
+    if (t === 'TUTOREARNED' || t === 'TUTOR_EARNED' || t === 'TUTOR_BONUS') return ACTIVITY_ICONS.TUTOR_EARNED;
+    if (t === 'REWARDRECYCLED' || t === 'REWARD_RECYCLED' || t === 'RECYCLED') return ACTIVITY_ICONS.REWARD_RECYCLED;
+    if (t === 'NFTFUSION' || t === 'NFT_FUSION' || t === 'FUSED' || t === 'FUSION') return ACTIVITY_ICONS.NFT_FUSION;
+    if (t === 'NFTSPLIT' || t === 'NFT_SPLIT' || t === 'SPLIT') return ACTIVITY_ICONS.NFT_SPLIT;
+    if (t === 'GOVERNANCEVOTE' || t === 'GOVERNANCE_VOTE' || t === 'VOTED') return ACTIVITY_ICONS.GOVERNANCE_VOTE;
+    if (t === 'GOVERNANCEPROPOSE' || t === 'GOVERNANCE_PROPOSE' || t === 'PROPOSAL_CREATED') return ACTIVITY_ICONS.GOVERNANCE_PROPOSE;
     if (t === 'BUYBACKEXECUTED' || t === 'BUYBACK_EXECUTED' || t.includes('BUYBACK')) return ACTIVITY_ICONS.BUYBACK;
     if (t === 'SWAPETHFORBKC' || t === 'SWAPBKCFORETH' || t.includes('SWAP')) return ACTIVITY_ICONS.SWAP;
     if (t === 'LIQUIDITYADDED' || t === 'LIQUIDITY_ADDED') return ACTIVITY_ICONS.LIQUIDITY_ADD;
@@ -345,9 +359,9 @@ function updateFaucetWidget() {
 }
 
 // ============================================================================
-// REFERRAL FUNCTIONS
+// TUTOR FUNCTIONS
 // ============================================================================
-function detectReferralFromURL() {
+function detectTutorFromURL() {
     try {
         const hash = window.location.hash || '';
         const qIdx = hash.indexOf('?');
@@ -355,41 +369,41 @@ function detectReferralFromURL() {
         const params = new URLSearchParams(hash.substring(qIdx));
         const ref = params.get('ref');
         if (ref && ethers.isAddress(ref)) {
-            const current = localStorage.getItem('backchain_referrer');
+            const current = localStorage.getItem('backchain_tutor');
             if (!current || current.toLowerCase() !== ref.toLowerCase()) {
-                localStorage.setItem('backchain_referrer', ref);
-                console.log('[Referral] Saved referrer from URL:', ref);
+                localStorage.setItem('backchain_tutor', ref);
+                console.log('[Tutor] Saved tutor from URL:', ref);
             }
         }
     } catch (e) { /* ignore */ }
 }
 
-// tryAutoSetReferrer removed — now handled gaslessly by api/referral.js + app.js processReferralAfterConnect()
+// Tutor setup handled gaslessly by api/referral.js + app.js processTutorAfterConnect()
 
-async function loadReferralData() {
-    if (!State.isConnected || !State.userAddress) return { count: 0, referrer: null };
+async function loadTutorData() {
+    if (!State.isConnected || !State.userAddress) return { count: 0, tutor: null };
     try {
         const ecosystemAddr = addresses?.backchainEcosystem;
-        if (!ecosystemAddr) return { count: 0, referrer: null };
+        if (!ecosystemAddr) return { count: 0, tutor: null };
         const { ecosystemManagerABI } = await import('../config.js');
         const { NetworkManager } = await import('../modules/core/index.js');
         const provider = NetworkManager.getProvider();
         const eco = new ethers.Contract(ecosystemAddr, ecosystemManagerABI, provider);
-        const [count, referrer] = await Promise.all([
-            eco.referralCount(State.userAddress),
-            eco.referredBy(State.userAddress)
+        const [count, tutor] = await Promise.all([
+            eco.tutorCount(State.userAddress),
+            eco.tutorOf(State.userAddress)
         ]);
         return {
             count: Number(count),
-            referrer: referrer !== '0x0000000000000000000000000000000000000000' ? referrer : null
+            tutor: tutor !== '0x0000000000000000000000000000000000000000' ? tutor : null
         };
     } catch (e) {
-        console.warn('[Referral] Load failed:', e.message);
-        return { count: 0, referrer: null };
+        console.warn('[Tutor] Load failed:', e.message);
+        return { count: 0, tutor: null };
     }
 }
 
-async function updateReferralWidget() {
+async function updateTutorWidget() {
     const widget = document.getElementById('dashboard-referral-widget');
     if (!widget) return;
 
@@ -403,8 +417,8 @@ async function updateReferralWidget() {
 
     if (!State.isConnected || !State.userAddress) {
         widget.style.opacity = '0.5';
-        if (titleEl) titleEl.innerText = "Invite & Earn Forever";
-        if (descEl) descEl.innerText = "Connect your wallet to get your referral link";
+        if (titleEl) titleEl.innerText = "Become a Tutor";
+        if (descEl) descEl.innerText = "Connect your wallet to get your tutor link";
         if (statsEl) statsEl.style.display = 'none';
         if (linkContainer) linkContainer.style.display = 'none';
         if (shareBtn) shareBtn.style.display = 'none';
@@ -412,43 +426,69 @@ async function updateReferralWidget() {
     }
 
     widget.style.opacity = '1';
-    const refLink = `${window.location.origin}/#dashboard?ref=${State.userAddress}`;
+    const tutorLink = `${window.location.origin}/#dashboard?ref=${State.userAddress}`;
 
-    if (linkText) linkText.textContent = refLink;
+    if (linkText) linkText.textContent = tutorLink;
     if (linkContainer) linkContainer.style.display = 'flex';
     if (shareBtn) shareBtn.style.display = '';
 
     // Load stats async
-    const data = await loadReferralData();
+    const data = await loadTutorData();
     if (countEl) countEl.textContent = data.count;
     if (statsEl) statsEl.style.display = 'flex';
 
+    // Show tutor info area
+    const tutorInfoEl = document.getElementById('tutor-info-area');
+    if (data.tutor) {
+        if (tutorInfoEl) {
+            tutorInfoEl.style.display = 'flex';
+            tutorInfoEl.innerHTML = `
+                <span class="dash-referral-stat" style="color:#22d3ee">
+                    <i class="fa-solid fa-graduation-cap" style="font-size:10px"></i>
+                    Tutor: ${truncateAddress(data.tutor)}
+                </span>
+                <a href="#referral" class="dash-referral-stat" style="color:#f59e0b;cursor:pointer;text-decoration:none" title="Change your tutor">
+                    <i class="fa-solid fa-pen" style="font-size:9px"></i>
+                    Change
+                </a>
+            `;
+        }
+    } else if (tutorInfoEl) {
+        tutorInfoEl.style.display = 'flex';
+        tutorInfoEl.innerHTML = `
+            <span class="dash-referral-stat" style="color:var(--dash-text-3)">
+                <i class="fa-solid fa-graduation-cap" style="font-size:10px"></i>
+                No tutor yet
+            </span>
+        `;
+    }
+
     if (data.count > 0) {
-        if (titleEl) titleEl.innerText = `${data.count} Referral${data.count > 1 ? 's' : ''} Earning for You`;
-        if (descEl) descEl.innerText = "You earn 10% ETH on all fees + 5% BKC on staking claims. Keep sharing!";
+        if (titleEl) titleEl.innerText = `${data.count} Student${data.count > 1 ? 's' : ''} Earning for You`;
+        if (descEl) descEl.innerText = "You earn 10% ETH on all fees + 5% BKC on staking rewards. Keep sharing!";
     } else {
-        if (titleEl) titleEl.innerText = "Invite & Earn Dual Rewards";
-        if (descEl) descEl.innerText = "Share your link. Earn 10% ETH + 5% BKC from your referrals — forever.";
+        if (titleEl) titleEl.innerText = "Be Someone's Tutor";
+        if (descEl) descEl.innerText = "Share your link. Earn 10% of all fees + 5% BKC from your students — forever.";
     }
 }
 
-function copyReferralLink() {
+function copyTutorLink() {
     if (!State.userAddress) return;
     const link = `${window.location.origin}/#dashboard?ref=${State.userAddress}`;
     navigator.clipboard.writeText(link).then(() => {
-        showToast('Referral link copied!', 'success');
+        showToast('Tutor link copied!', 'success');
         const btn = document.getElementById('referral-copy-btn');
         if (btn) { btn.innerHTML = '<i class="fa-solid fa-check"></i>'; setTimeout(() => { btn.innerHTML = '<i class="fa-solid fa-copy"></i>'; }, 2000); }
     }).catch(() => showToast('Failed to copy', 'error'));
 }
 
-function shareReferralLink() {
+function shareTutorLink() {
     if (!State.userAddress) return;
     const link = `${window.location.origin}/#dashboard?ref=${State.userAddress}`;
-    const text = `Join Backchain and earn crypto!\n\nStake BKC and earn daily rewards\nRefer friends — earn 10% ETH + 5% BKC FOREVER\n\n${link}\n\n#Backchain #DeFi #Arbitrum #Web3`;
+    const text = `Join Backchain and earn crypto!\n\nStake BKC and earn daily rewards\nBe a tutor — earn 10% ETH + 5% BKC FOREVER\n\n${link}\n\n#Backchain #DeFi #Arbitrum #Web3`;
 
     if (navigator.share) {
-        navigator.share({ title: 'Backchain — Invite & Earn', text, url: link }).catch(() => {});
+        navigator.share({ title: 'Backchain — Become a Tutor', text, url: link }).catch(() => {});
     } else {
         navigator.clipboard.writeText(text).then(() => showToast('Share text copied!', 'success')).catch(() => {});
     }
@@ -1084,24 +1124,25 @@ function renderDashboardLayout() {
                 </div>
             </div>
 
-            <!-- REFERRAL SECTION -->
+            <!-- TUTOR SECTION -->
             <div id="dashboard-referral-widget" class="dash-referral-section" style="margin-bottom: 14px;">
                 <div class="dash-referral-icon">
-                    <i class="fa-solid fa-user-plus"></i>
+                    <i class="fa-solid fa-graduation-cap"></i>
                 </div>
                 <div class="dash-referral-info">
-                    <h3 id="referral-title">Invite & Earn Dual Rewards</h3>
-                    <p id="referral-desc">Share your link. Earn 10% ETH + 5% BKC from your referrals — forever.</p>
+                    <h3 id="referral-title">Be Someone's Tutor</h3>
+                    <p id="referral-desc">Share your link. Earn 10% of all fees + 5% BKC from your students — forever.</p>
                     <div id="referral-stats" class="dash-referral-stats" style="display:none">
                         <span class="dash-referral-stat" style="color:#a78bfa">
                             <i class="fa-solid fa-users" style="font-size:10px"></i>
-                            <span id="referral-count">0</span> referred
+                            <span id="referral-count">0</span> students
                         </span>
                         <span class="dash-referral-stat" style="color:#4ade80">
                             <i class="fa-solid fa-coins" style="font-size:10px"></i>
                             10% ETH + 5% BKC
                         </span>
                     </div>
+                    <div id="tutor-info-area" class="dash-referral-stats" style="display:none"></div>
                     <div id="referral-link-container" class="dash-referral-link-box" style="display:none">
                         <span id="referral-link-text"></span>
                         <button id="referral-copy-btn" title="Copy link"><i class="fa-solid fa-copy"></i></button>
@@ -1526,7 +1567,7 @@ function updateBoosterDisplay(data, claimDetails) {
 
                 <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:8px">
                     <span style="font-size:20px;font-weight:800;color:var(--dash-accent)">${keepRate}%</span>
-                    <span style="font-size:10px;color:var(--dash-text-3);text-align:left;line-height:1.2">reward<br>keep rate</span>
+                    <span style="font-size:10px;color:var(--dash-text-3);text-align:left;line-height:1.2">you<br>keep</span>
                 </div>
 
                 <div style="width:100%;background:var(--dash-surface-2);border-radius:20px;height:6px;overflow:hidden;margin-bottom:10px">
@@ -1538,7 +1579,7 @@ function updateBoosterDisplay(data, claimDetails) {
                     <i class="fa-solid fa-arrow-up" style="color:var(--dash-green);margin-right:3px"></i>Get up to <span style="color:var(--dash-green);font-weight:700">+${formatBigNumber(potentialBonus).toFixed(2)} BKC</span> with NFT
                 </p>` : `
                 <p style="font-size:10px;color:var(--dash-text-3);margin:0 0 10px">
-                    <i class="fa-solid fa-gem" style="color:var(--dash-accent);margin-right:3px"></i>Diamond holders keep <span style="color:var(--dash-green);font-weight:700">100%</span>
+                    <i class="fa-solid fa-recycle" style="color:var(--dash-accent);margin-right:3px"></i>60% recycled to stakers. <span style="color:var(--dash-green);font-weight:700">Diamond: keep 100%</span>
                 </p>`}
 
                 <div style="display:flex;gap:6px;justify-content:center">
@@ -1559,7 +1600,7 @@ function updateBoosterDisplay(data, claimDetails) {
     const isRented = data.source === 'rented';
     const tierName = tierInfo?.name || data.boostName?.replace(' Booster', '').replace('Booster', '').trim() || 'Booster';
     const tierColor = tierInfo?.color || 'color:var(--dash-accent)';
-    const withoutNftReward = (grossReward * 50n) / 100n;
+    const withoutNftReward = (grossReward * 40n) / 100n; // No NFT: keeps 40% (60% recycled)
     const bonusGained = netReward - withoutNftReward;
 
     const statusIcon = isRented ? 'fa-clock' : 'fa-check-circle';
@@ -1588,7 +1629,7 @@ function updateBoosterDisplay(data, claimDetails) {
                 </div>
                 <div style="text-align:right;flex-shrink:0">
                     <div style="font-size:18px;font-weight:800;color:var(--dash-green)">${keepRate}%</div>
-                    <div style="font-size:8px;color:var(--dash-text-3);text-transform:uppercase;letter-spacing:0.05em">keep rate</div>
+                    <div style="font-size:8px;color:var(--dash-text-3);text-transform:uppercase;letter-spacing:0.05em">you keep</div>
                 </div>
             </div>
             ${grossReward > 0n ? `
@@ -1884,8 +1925,8 @@ function attachDashboardListeners() {
         if (target.closest('#emergency-faucet-btn')) await requestSmartFaucet(target.closest('#emergency-faucet-btn'));
 
         // Referral
-        if (target.closest('#referral-copy-btn')) copyReferralLink();
-        if (target.closest('#referral-share-btn')) shareReferralLink();
+        if (target.closest('#referral-copy-btn')) copyTutorLink();
+        if (target.closest('#referral-share-btn')) shareTutorLink();
 
         // Navigation
         if (target.closest('.delegate-link')) { e.preventDefault(); window.navigateTo('mine'); }
@@ -1969,10 +2010,10 @@ function attachDashboardListeners() {
 export const DashboardPage = {
     async render(isNewPage) {
         renderDashboardLayout();
-        detectReferralFromURL();
+        detectTutorFromURL();
         updateGlobalMetrics();
         fetchAndProcessActivities();
-        updateReferralWidget();
+        updateTutorWidget();
 
         // Restore faucet claimed state from localStorage
         if (State.isConnected && State.userAddress) {
@@ -1990,13 +2031,13 @@ export const DashboardPage = {
             setTimeout(async () => {
                 if (State.isConnected) {
                     await updateUserHub(false);
-                    updateReferralWidget();
+                    updateTutorWidget();
                 }
             }, 500);
             setTimeout(async () => {
                 if (State.isConnected) {
                     await updateUserHub(false);
-                    updateReferralWidget();
+                    updateTutorWidget();
                 }
             }, 1500);
         }
@@ -2009,7 +2050,7 @@ export const DashboardPage = {
             updateGlobalMetrics();
             if (isConnected) {
                 updateUserHub(false);
-                updateReferralWidget();
+                updateTutorWidget();
             }
             fetchAndProcessActivities();
         }

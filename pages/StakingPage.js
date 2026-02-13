@@ -10,7 +10,7 @@
 // - Complete visual redesign with CSS injection (stk-styles-v10)
 // - Hero rewards card with animated amount + NFT boost panel
 // - Full-width layout, mobile-first responsive design
-// - Removed duplicate code (BURN_TIERS, NFT load, claim preview)
+// - Removed duplicate code (RECYCLE_TIERS, NFT load, claim preview)
 //
 // Website: https://backcoin.org
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -36,12 +36,12 @@ import { StakingTx } from '../modules/transactions/index.js';
 // ============================================================================
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 
-const BURN_TIERS = {
-    NONE:    { boost: 0,    burnRate: 50, keepRate: 50,  color: '#71717a', name: 'None',    icon: '○',  class: 'stk-tier-none' },
-    BRONZE:  { boost: 1000, burnRate: 40, keepRate: 60,  color: '#cd7f32', name: 'Bronze',  icon: '🥉', class: 'stk-tier-bronze' },
-    SILVER:  { boost: 2500, burnRate: 25, keepRate: 75,  color: '#c0c0c0', name: 'Silver',  icon: '🥈', class: 'stk-tier-silver' },
-    GOLD:    { boost: 4000, burnRate: 10, keepRate: 90,  color: '#ffd700', name: 'Gold',    icon: '🥇', class: 'stk-tier-gold' },
-    DIAMOND: { boost: 5000, burnRate: 0,  keepRate: 100, color: '#b9f2ff', name: 'Diamond', icon: '💎', class: 'stk-tier-diamond' }
+const RECYCLE_TIERS = {
+    NONE:    { boost: 0,    recycleRate: 60, keepRate: 40,  color: '#71717a', name: 'None',    icon: '○',  class: 'stk-tier-none' },
+    BRONZE:  { boost: 1000, recycleRate: 40, keepRate: 60,  color: '#cd7f32', name: 'Bronze',  icon: '🥉', class: 'stk-tier-bronze' },
+    SILVER:  { boost: 2500, recycleRate: 30, keepRate: 70,  color: '#c0c0c0', name: 'Silver',  icon: '🥈', class: 'stk-tier-silver' },
+    GOLD:    { boost: 4000, recycleRate: 20, keepRate: 80,  color: '#ffd700', name: 'Gold',    icon: '🥇', class: 'stk-tier-gold' },
+    DIAMOND: { boost: 5000, recycleRate: 0,  keepRate: 100, color: '#b9f2ff', name: 'Diamond', icon: '💎', class: 'stk-tier-diamond' }
 };
 
 // ============================================================================
@@ -58,7 +58,7 @@ let currentHistoryFilter = 'ALL';
 
 // NFT Boost State
 let userNftBoost = 0;
-let userBurnRate = 50;
+let userRecycleRate = 60;
 let nftSource = 'none';
 let claimPreview = null;
 let claimEthFee = 0n;
@@ -110,11 +110,11 @@ function formatDate(timestamp) {
 
 function getTierFromBoost(boost) {
     const b = Number(boost);
-    if (b >= 5000) return BURN_TIERS.DIAMOND;
-    if (b >= 4000) return BURN_TIERS.GOLD;
-    if (b >= 2500) return BURN_TIERS.SILVER;
-    if (b >= 1000) return BURN_TIERS.BRONZE;
-    return BURN_TIERS.NONE;
+    if (b >= 5000) return RECYCLE_TIERS.DIAMOND;
+    if (b >= 4000) return RECYCLE_TIERS.GOLD;
+    if (b >= 2500) return RECYCLE_TIERS.SILVER;
+    if (b >= 1000) return RECYCLE_TIERS.BRONZE;
+    return RECYCLE_TIERS.NONE;
 }
 
 // ============================================================================
@@ -461,7 +461,7 @@ function render() {
                     <div class="stk-header-icon"><i class="fa-solid fa-layer-group"></i></div>
                     <div>
                         <div class="stk-header-title">Stake & Earn</div>
-                        <div class="stk-header-sub">Delegate BKC, earn rewards, reduce burn</div>
+                        <div class="stk-header-sub">Delegate BKC, earn rewards, reduce recycle</div>
                     </div>
                 </div>
                 <button id="stk-refresh-btn" class="stk-refresh-btn"><i class="fa-solid fa-rotate"></i></button>
@@ -482,6 +482,10 @@ function render() {
                             <div class="stk-breakdown-row">
                                 <span class="stk-breakdown-label"><i class="fa-solid fa-coins" style="color:var(--stk-accent)"></i> Mining</span>
                                 <span id="stk-break-mining" class="stk-breakdown-val" style="color:var(--stk-text)">0</span>
+                            </div>
+                            <div class="stk-breakdown-row">
+                                <span class="stk-breakdown-label"><i class="fa-solid fa-recycle" style="color:#22d3ee"></i> Recycled</span>
+                                <span id="stk-break-recycled" class="stk-breakdown-val" style="color:#22d3ee">0</span>
                             </div>
                             <div class="stk-breakdown-row">
                                 <span class="stk-breakdown-label"><i class="fa-solid fa-fire" style="color:var(--stk-red)"></i> Burned</span>
@@ -683,7 +687,7 @@ async function loadNftBoostData() {
             nftSource = 'active';
         }
         const tier = getTierFromBoost(userNftBoost);
-        userBurnRate = tier.burnRate;
+        userRecycleRate = tier.recycleRate;
     } catch (e) {
         console.error('NFT boost load error:', e);
     }
@@ -696,23 +700,23 @@ async function loadClaimPreview() {
     try {
         const preview = await safeContractCall(stakingContract, 'previewClaim', [State.userAddress], null);
         if (preview) {
-            // V9: (totalRewards, burnAmount, referrerCut, userReceives, burnRateBps, nftBoost)
+            // V10: (totalRewards, recycleAmount, burnAmount, tutorCut, userReceives, recycleRateBps, nftBoost)
             claimPreview = {
                 totalRewards: preview.totalRewards || preview[0] || 0n,
-                burnAmount: preview.burnAmount || preview[1] || 0n,
-                referrerCut: preview.referrerCut || preview[2] || 0n,
-                userReceives: preview.userReceives || preview[3] || 0n,
-                burnRateBips: preview.burnRateBps || preview[4] || 0n,
-                nftBoost: preview.nftBoost || preview[5] || 0n
+                recycleAmount: preview.recycleAmount || preview[1] || 0n,
+                burnAmount: preview.burnAmount || preview[2] || 0n,
+                tutorCut: preview.tutorCut || preview[3] || 0n,
+                userReceives: preview.userReceives || preview[4] || 0n,
+                recycleRateBps: preview.recycleRateBps || preview[5] || 0n,
+                nftBoost: preview.nftBoost || preview[6] || 0n
             };
         }
-        // V9: Claim ETH fee is optional (0 if not sent)
         claimEthFee = 0n;
     } catch (e) {
         console.error('Claim preview error:', e);
         const total = stakingRewardsAmount + minerRewardsAmount;
-        const burnAmount = (total * BigInt(userBurnRate)) / 100n;
-        claimPreview = { totalRewards: total, burnAmount, referrerCut: 0n, userReceives: total - burnAmount, burnRateBips: BigInt(userBurnRate * 100), nftBoost: BigInt(userNftBoost) };
+        const recycleAmount = (total * BigInt(userRecycleRate)) / 100n;
+        claimPreview = { totalRewards: total, recycleAmount, burnAmount: 0n, tutorCut: 0n, userReceives: total - recycleAmount, recycleRateBps: BigInt(userRecycleRate * 100), nftBoost: BigInt(userNftBoost) };
     }
 }
 
@@ -727,6 +731,7 @@ function updateHeroRewards() {
 
     const receiveAmount = claimPreview?.userReceives || 0n;
     const totalAmount = claimPreview?.totalRewards || 0n;
+    const recycleAmount = claimPreview?.recycleAmount || 0n;
     const burnAmount = claimPreview?.burnAmount || 0n;
     const hasRewards = receiveAmount > 0n;
 
@@ -744,9 +749,15 @@ function updateHeroRewards() {
         breakdownEl.style.display = '';
         const stakNum = formatBigNumber(stakingRewardsAmount).toFixed(4);
         const minNum = formatBigNumber(minerRewardsAmount).toFixed(4);
+        const recycleNum = formatBigNumber(recycleAmount).toFixed(4);
         const burnNum = formatBigNumber(burnAmount).toFixed(4);
         document.getElementById('stk-break-staking').textContent = `${stakNum} BKC`;
         document.getElementById('stk-break-mining').textContent = `${minNum} BKC`;
+        const recycledEl = document.getElementById('stk-break-recycled');
+        if (recycledEl) {
+            recycledEl.textContent = recycleAmount > 0n ? `-${recycleNum} BKC` : 'None';
+            recycledEl.style.color = recycleAmount > 0n ? '#22d3ee' : 'var(--stk-green)';
+        }
         document.getElementById('stk-break-burned').textContent = burnAmount > 0n ? `-${burnNum} BKC` : 'None';
         document.getElementById('stk-break-burned').style.color = burnAmount > 0n ? 'var(--stk-red)' : 'var(--stk-green)';
     } else if (breakdownEl) {
@@ -783,24 +794,24 @@ function updateNftBoostPanel() {
             </div>
 
             <div class="stk-burn-bar">
-                <div class="stk-burn-fill" style="width:${tier.burnRate}%"></div>
+                <div class="stk-burn-fill" style="width:${tier.recycleRate}%"></div>
                 <div class="stk-keep-fill" style="width:${tier.keepRate}%"></div>
             </div>
             <div style="display:flex;justify-content:space-between;font-size:10px">
-                <span style="color:rgba(239,68,68,0.7)"><i class="fa-solid fa-fire" style="margin-right:3px"></i>Burn ${tier.burnRate}%</span>
+                <span style="color:rgba(6,182,212,0.7)"><i class="fa-solid fa-recycle" style="margin-right:3px"></i>Recycle ${tier.recycleRate}%</span>
                 <span style="color:rgba(74,222,128,0.7)"><i class="fa-solid fa-check" style="margin-right:3px"></i>Keep ${tier.keepRate}%</span>
             </div>
 
             ${!hasNft ? `
-                <div style="margin-top:12px;padding:8px 10px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.15);border-radius:8px">
-                    <p style="font-size:11px;color:var(--stk-red);font-weight:600;margin:0">You're losing ${tier.burnRate}% of your rewards!</p>
+                <div style="margin-top:12px;padding:8px 10px;background:rgba(6,182,212,0.06);border:1px solid rgba(6,182,212,0.15);border-radius:8px">
+                    <p style="font-size:11px;color:#22d3ee;font-weight:600;margin:0">${tier.recycleRate}% of rewards recycled to stakers</p>
                     <p style="font-size:10px;color:var(--stk-text-3);margin:4px 0 0">Diamond holders keep 100%</p>
                 </div>
                 <button class="stk-boost-cta go-to-store"><i class="fa-solid fa-gem" style="font-size:10px"></i> Get an NFT</button>
             ` : userNftBoost < 5000 ? `
                 <p style="font-size:10px;color:var(--stk-text-3);margin-top:10px">
                     <i class="fa-solid fa-arrow-up" style="color:var(--stk-cyan);margin-right:3px"></i>
-                    Upgrade to ${BURN_TIERS.DIAMOND.icon} Diamond to keep 100%
+                    Upgrade to ${RECYCLE_TIERS.DIAMOND.icon} Diamond to keep 100%
                     <span class="go-to-store" style="color:var(--stk-accent);cursor:pointer;margin-left:4px">Upgrade</span>
                 </p>
             ` : ''}

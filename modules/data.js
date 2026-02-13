@@ -680,19 +680,19 @@ export async function calculateUserTotalRewards() {
 }
 
 export async function calculateClaimDetails() {
-    // V9: Use previewClaim from StakingPool — returns exact on-chain calculation
+    // V10: Use previewClaim from StakingPool — returns exact on-chain calculation (recycle model)
     const contract = State.stakingPoolContractPublic || State.stakingPoolContract;
     if (!contract || !State.userAddress) {
-        return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n, burnRateBps: 0, nftBoost: 0 };
+        return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n, recycleRateBps: 0, nftBoost: 0 };
     }
 
     const { totalRewards } = await calculateUserTotalRewards();
     if (totalRewards === 0n) {
-        return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n, burnRateBps: 0, nftBoost: 0 };
+        return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n, recycleRateBps: 0, nftBoost: 0 };
     }
 
     try {
-        // V9 previewClaim returns (totalRewards, burnAmount, referrerCut, userReceives, burnRateBps, nftBoost)
+        // V10 previewClaim returns (totalRewards, recycleAmount, burnAmount, tutorCut, userReceives, recycleRateBps, nftBoost)
         const preview = await safeContractCall(
             contract,
             'previewClaim',
@@ -702,35 +702,37 @@ export async function calculateClaimDetails() {
 
         if (preview) {
             const totalRew = preview.totalRewards || preview[0] || 0n;
-            const burnAmount = preview.burnAmount || preview[1] || 0n;
-            const referrerCut = preview.referrerCut || preview[2] || 0n;
-            const userReceives = preview.userReceives || preview[3] || 0n;
-            const burnRateBps = Number(preview.burnRateBps || preview[4] || 0);
-            const nftBoost = Number(preview.nftBoost || preview[5] || 0);
+            const recycleAmount = preview.recycleAmount || preview[1] || 0n;
+            const burnAmount = preview.burnAmount || preview[2] || 0n;
+            const tutorCut = preview.tutorCut || preview[3] || 0n;
+            const userReceives = preview.userReceives || preview[4] || 0n;
+            const recycleRateBps = Number(preview.recycleRateBps || preview[5] || 0);
+            const nftBoost = Number(preview.nftBoost || preview[6] || 0);
 
-            const feeAmount = burnAmount + referrerCut;
+            const feeAmount = recycleAmount + burnAmount + tutorCut;
 
-            console.log('[Data] V9 Claim preview:', {
+            console.log('[Data] V10 Claim preview:', {
                 totalRewards: Number(totalRew) / 1e18,
+                recycleAmount: Number(recycleAmount) / 1e18,
                 burnAmount: Number(burnAmount) / 1e18,
-                referrerCut: Number(referrerCut) / 1e18,
+                tutorCut: Number(tutorCut) / 1e18,
                 userReceives: Number(userReceives) / 1e18,
-                burnRateBps,
+                recycleRateBps,
                 nftBoost
             });
 
             return {
                 netClaimAmount: userReceives,
                 feeAmount,
+                recycleAmount,
                 burnAmount,
-                referrerCut,
+                tutorCut,
                 discountPercent: nftBoost / 100,
                 totalRewards: totalRew,
-                burnRateBps,
+                recycleRateBps,
                 nftBoost,
-                // Backward-compatible aliases
-                baseFeeBips: 5000, // V9 base burn is 50%
-                finalFeeBips: burnRateBps
+                baseFeeBips: 6000, // V10 base recycle is 60%
+                finalFeeBips: recycleRateBps
             };
         }
     } catch (e) {
@@ -738,7 +740,7 @@ export async function calculateClaimDetails() {
     }
 
     // Fallback: return raw total with no fee info
-    return { netClaimAmount: totalRewards, feeAmount: 0n, discountPercent: 0, totalRewards, burnRateBps: 0, nftBoost: 0 };
+    return { netClaimAmount: totalRewards, feeAmount: 0n, discountPercent: 0, totalRewards, recycleRateBps: 0, nftBoost: 0 };
 }
 
 // ====================================================================

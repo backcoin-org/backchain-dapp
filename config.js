@@ -342,17 +342,18 @@ export const FAUCET_AMOUNT_WEI = 20n * 10n**18n;
 // ✅ V6.8: NFT BOOST TIERS - Now only 4 tiers with BURN RATE reduction
 // ============================================================================
 // The boost value REDUCES the burn rate on delegation claim rewards:
-// - No NFT: 50% burn → user keeps 50%
-// - Bronze (10%): 40% burn → user keeps 60%
-// - Silver (25%): 25% burn → user keeps 75%
-// - Gold (40%): 10% burn → user keeps 90%
-// - Diamond (50%): 0% burn → user keeps 100%
+// Recycle Model (V2): Penalties are recycled back to stakers, NOT burned
+// - No NFT: 60% recycled → user keeps 40%
+// - Bronze (10%): 40% recycled → user keeps 60%
+// - Silver (25%): 30% recycled → user keeps 70%
+// - Gold (40%): 20% recycled → user keeps 80%
+// - Diamond (50%): 0% recycled → user keeps 100%
 
 export const boosterTiers = [
     {
         name: "Diamond",
-        boostBips: 5000,  // 50% boost → 0% burn
-        burnRate: 0,
+        boostBips: 5000,  // 50% boost → 0% recycled
+        recycleRate: 0,
         keepRate: 100,
         color: "text-cyan-400",
         emoji: "💎",
@@ -363,9 +364,9 @@ export const boosterTiers = [
     },
     {
         name: "Gold",
-        boostBips: 4000,  // 40% boost → 10% burn
-        burnRate: 10,
-        keepRate: 90,
+        boostBips: 4000,  // 40% boost → 20% recycled
+        recycleRate: 20,
+        keepRate: 80,
         color: "text-amber-400",
         emoji: "🥇",
         image: "https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeifponccrbicg2pcjrn2hrfoqgc77xhm2r4ld7hdpw6cxxkbsckf44",
@@ -375,9 +376,9 @@ export const boosterTiers = [
     },
     {
         name: "Silver",
-        boostBips: 2500,  // 25% boost → 25% burn
-        burnRate: 25,
-        keepRate: 75,
+        boostBips: 2500,  // 25% boost → 30% recycled
+        recycleRate: 30,
+        keepRate: 70,
         color: "text-gray-300",
         emoji: "🥈",
         image: "https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeihvi2inujm5zpi7tl667g4srq273536pjkglwyrtbwmgnskmu7jg4",
@@ -387,8 +388,8 @@ export const boosterTiers = [
     },
     {
         name: "Bronze",
-        boostBips: 1000,  // 10% boost → 40% burn
-        burnRate: 40,
+        boostBips: 1000,  // 10% boost → 40% recycled
+        recycleRate: 40,
         keepRate: 60,
         color: "text-yellow-600",
         emoji: "🥉",
@@ -408,18 +409,21 @@ export function getTierByBoost(boostBips) {
     return null; // No NFT
 }
 
-// Helper function to calculate burn rate from boost
-export function getBurnRateFromBoost(boostBips) {
-    if (boostBips >= 5000) return 0;   // Diamond: 0% burn
-    if (boostBips >= 4000) return 10;  // Gold: 10% burn
-    if (boostBips >= 2500) return 25;  // Silver: 25% burn
-    if (boostBips >= 1000) return 40;  // Bronze: 40% burn
-    return 50; // No NFT: 50% burn
+// Helper function to calculate recycle rate from boost (V2 recycle model)
+export function getRecycleRateFromBoost(boostBips) {
+    if (boostBips >= 5000) return 0;   // Diamond: 0% recycled
+    if (boostBips >= 4000) return 20;  // Gold: 20% recycled
+    if (boostBips >= 2500) return 30;  // Silver: 30% recycled
+    if (boostBips >= 1000) return 40;  // Bronze: 40% recycled
+    return 60; // No NFT: 60% recycled
 }
+
+// Backwards compat alias
+export const getBurnRateFromBoost = getRecycleRateFromBoost;
 
 // Helper to get user's effective keep rate
 export function getKeepRateFromBoost(boostBips) {
-    return 100 - getBurnRateFromBoost(boostBips);
+    return 100 - getRecycleRateFromBoost(boostBips);
 }
 
 // ============================================================================
@@ -445,7 +449,7 @@ export const bkcTokenABI = [
     "event Approval(address indexed owner, address indexed spender, uint256 value)"
 ];
 
-// StakingPool V9 ABI — MasterChef-style rewards, NFT burn reduction
+// StakingPool V10 ABI — Recycle model, tutor system, force unstake ETH fee
 export const stakingPoolABI = [
     // Core staking
     "function totalPStake() view returns (uint256)",
@@ -455,8 +459,11 @@ export const stakingPoolABI = [
     "function savedRewards(address _user) view returns (uint256)",
     "function MIN_LOCK_DAYS() view returns (uint256)",
     "function MAX_LOCK_DAYS() view returns (uint256)",
-    "function REFERRER_CUT_BPS() view returns (uint256)",
-    "function forceUnstakePenaltyBps() view returns (uint256)",
+    "function TUTOR_BPS() view returns (uint256)",
+    "function NO_TUTOR_BURN_BPS() view returns (uint256)",
+    "function TUTOR_PENALTY_BPS() view returns (uint256)",
+    "function NO_TUTOR_BURN_PENALTY_BPS() view returns (uint256)",
+    "function forceUnstakeEthFee() view returns (uint256)",
     "function getDelegationsOf(address _user) view returns (tuple(uint128 amount, uint128 pStake, uint64 lockEnd, uint64 lockDays, uint256 rewardDebt)[])",
     "function getDelegation(address _user, uint256 _index) view returns (uint256 amount, uint256 pStake, uint256 lockEnd, uint256 lockDays, uint256 pendingReward)",
     "function delegationCount(address _user) view returns (uint256)",
@@ -468,22 +475,22 @@ export const stakingPoolABI = [
     "function claimRewards(address _operator) external payable",
     "function claimRewards() external",
 
-    // NFT Boost & Burn Rate
+    // NFT Boost & Recycle Rate
     "function getUserBestBoost(address _user) view returns (uint256)",
-    "function getBurnRateForBoost(uint256 _boostBps) pure returns (uint256)",
+    "function getRecycleRateForBoost(uint256 _boostBps) pure returns (uint256)",
     "function getTierName(uint256 _boostBps) pure returns (string)",
-    "function previewClaim(address _user) view returns (uint256 totalRewards, uint256 burnAmount, uint256 referrerCut, uint256 userReceives, uint256 burnRateBps, uint256 nftBoost)",
+    "function previewClaim(address _user) view returns (uint256 totalRewards, uint256 recycleAmount, uint256 burnAmount, uint256 tutorCut, uint256 userReceives, uint256 recycleRateBps, uint256 nftBoost)",
+    "function previewForceUnstake(address _user, uint256 _index) view returns (uint256 stakedAmount, uint256 totalPenalty, uint256 recycleAmount, uint256 burnAmount, uint256 tutorCut, uint256 userReceives, uint256 penaltyRateBps, uint256 nftBoost, uint256 ethFeeRequired)",
 
     // Stats
-    "function getStakingStats() view returns (uint256 totalPStake, uint256 totalBkcDelegated, uint256 totalRewardsDistributed, uint256 totalBurnedOnClaim, uint256 totalForceUnstakePenalties, uint256 totalEthFeesCollected, uint256 accRewardPerShare)",
-    "function getUserSummary(address _user) view returns (uint256 userTotalPStake, uint256 delegationCount, uint256 savedRewards, uint256 totalPending, uint256 nftBoost, uint256 burnRateBps)",
+    "function getStakingStats() view returns (uint256 totalPStake, uint256 totalBkcDelegated, uint256 totalRewardsDistributed, uint256 totalBurnedOnClaim, uint256 totalRecycledOnClaim, uint256 totalForceUnstakePenalties, uint256 totalTutorPayments, uint256 totalEthFeesCollected, uint256 accRewardPerShare)",
+    "function getUserSummary(address _user) view returns (uint256 userTotalPStake, uint256 delegationCount, uint256 savedRewards, uint256 totalPending, uint256 nftBoost, uint256 recycleRateBps)",
 
     // Events
     "event Delegated(address indexed user, uint256 indexed delegationIndex, uint256 amount, uint256 pStake, uint256 lockDays, address operator)",
     "event Unstaked(address indexed user, uint256 indexed delegationIndex, uint256 amountReturned)",
-    "event ForceUnstaked(address indexed user, uint256 indexed delegationIndex, uint256 amountReturned, uint256 penaltyBurned, address operator)",
-    "event RewardsClaimed(address indexed user, uint256 totalRewards, uint256 burnedAmount, uint256 userReceived, uint256 cutAmount, address cutRecipient, uint256 nftBoostUsed, address operator)",
-    "event TokensBurnedOnClaim(address indexed user, uint256 burnedAmount, uint256 burnRateBps, uint256 totalBurnedAllTime)"
+    "event ForceUnstaked(address indexed user, uint256 indexed delegationIndex, uint256 amountReturned, uint256 totalPenalty, uint256 recycledAmount, uint256 burnedAmount, uint256 tutorAmount, address tutor, address operator)",
+    "event RewardsClaimed(address indexed user, uint256 totalRewards, uint256 recycledAmount, uint256 burnedAmount, uint256 tutorAmount, uint256 userReceived, uint256 nftBoostUsed, address tutor, address operator)"
 ];
 
 // (Old rewardBoosterABI removed — V9 version is below, after fortunePoolABI)
@@ -672,7 +679,7 @@ export const faucetABI = [
     "event Claimed(address indexed recipient, uint256 tokens, uint256 eth, address indexed via)"
 ];
 
-// BackchainEcosystem V10 ABI — Central fee hub with module registration + ecosystem-wide referral
+// BackchainEcosystem V10 ABI — Central fee hub with module registration + tutor system
 export const ecosystemManagerABI = [
     // Fee calculation & collection
     "function calculateFee(bytes32 _actionId, uint256 _txValue) view returns (uint256)",
@@ -681,15 +688,18 @@ export const ecosystemManagerABI = [
     "function bkcToken() view returns (address)",
     "function treasury() view returns (address)",
     "function buybackAccumulated() view returns (uint256)",
-    "function referredBy(address _user) view returns (address)",
-    "function referralCount(address _referrer) view returns (uint256)",
-    "function setReferrer(address _referrer) external",
-    "function setReferrerFor(address _user, address _referrer) external",
-    "function referralRelayer() view returns (address)",
-    "function referralBps() view returns (uint16)",
-    "event ReferrerSet(address indexed user, address indexed referrer)",
-    "event ReferralRelayerUpdated(address indexed oldRelayer, address indexed newRelayer)",
-    "event ReferralBpsUpdated(uint16 newBps)",
+    "function tutorOf(address _user) view returns (address)",
+    "function tutorCount(address _tutor) view returns (uint256)",
+    "function setTutor(address _tutor) external payable",
+    "function setTutorFor(address _user, address _tutor) external",
+    "function tutorRelayer() view returns (address)",
+    "function tutorBps() view returns (uint16)",
+    "function tutorFee() view returns (uint256)",
+    "function changeTutorFee() view returns (uint256)",
+    "event TutorSet(address indexed user, address indexed tutor)",
+    "event TutorChanged(address indexed user, address indexed oldTutor, address indexed newTutor)",
+    "event TutorRelayerUpdated(address indexed oldRelayer, address indexed newRelayer)",
+    "event TutorBpsUpdated(uint16 newBps)",
 
     // Stats
     "function totalEthCollected() view returns (uint256)",

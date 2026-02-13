@@ -45,7 +45,7 @@ const TIER_CONFIG = {
         icon: '💎',
         image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeicgip72jcqgsirlrhn3tq5cc226vmko6etnndzl6nlhqrktfikafq',
         keepRate: 100,
-        burnRate: 0
+        recycleRate: 0
     },
     'Gold': {
         color: '#fbbf24',
@@ -55,8 +55,8 @@ const TIER_CONFIG = {
         glow: 'shadow-yellow-500/30',
         icon: '🥇',
         image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeifponccrbicg2pcjrn2hrfoqgc77xhm2r4ld7hdpw6cxxkbsckf44',
-        keepRate: 90,
-        burnRate: 10
+        keepRate: 80,
+        recycleRate: 20
     },
     'Silver': {
         color: '#9ca3af',
@@ -66,8 +66,8 @@ const TIER_CONFIG = {
         glow: 'shadow-gray-400/30',
         icon: '🥈',
         image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeihvi2inujm5zpi7tl667g4srq273536pjkglwyrtbwmgnskmu7jg4',
-        keepRate: 75,
-        burnRate: 25
+        keepRate: 70,
+        recycleRate: 30
     },
     'Bronze': {
         color: '#f97316',
@@ -78,7 +78,7 @@ const TIER_CONFIG = {
         icon: '🥉',
         image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeiclqidb67rt3tchhjpsib62s624li7j2bpxnr6b5w5mfp4tomhu7m',
         keepRate: 60,
-        burnRate: 40
+        recycleRate: 40
     }
 };
 

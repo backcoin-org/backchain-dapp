@@ -67,7 +67,8 @@ const STAKING_ABI = [
 
     // Read functions - Rewards
     'function pendingRewards(address user) view returns (uint256)',
-    'function previewClaim(address user) view returns (uint256 totalRewards, uint256 burnAmount, uint256 referrerCut, uint256 userReceives, uint256 burnRateBps, uint256 nftBoost)',
+    'function previewClaim(address user) view returns (uint256 totalRewards, uint256 recycleAmount, uint256 burnAmount, uint256 tutorCut, uint256 userReceives, uint256 recycleRateBps, uint256 nftBoost)',
+    'function previewForceUnstake(address user, uint256 index) view returns (uint256 stakedAmount, uint256 totalPenalty, uint256 recycleAmount, uint256 burnAmount, uint256 tutorCut, uint256 userReceives, uint256 penaltyRateBps, uint256 nftBoost, uint256 ethFeeRequired)',
 
     // Read functions - Delegations
     'function getDelegationsOf(address user) view returns (tuple(uint128 amount, uint128 pStake, uint64 lockEnd, uint64 lockDays, uint256 rewardDebt)[])',
@@ -81,22 +82,22 @@ const STAKING_ABI = [
     // Read functions - Config
     'function MIN_LOCK_DAYS() view returns (uint256)',
     'function MAX_LOCK_DAYS() view returns (uint256)',
-    'function forceUnstakePenaltyBps() view returns (uint256)',
+    'function forceUnstakeEthFee() view returns (uint256)',
 
     // Read functions - NFT Boost
     'function getUserBestBoost(address user) view returns (uint256)',
-    'function getBurnRateForBoost(uint256 boostBps) view returns (uint256)',
+    'function getRecycleRateForBoost(uint256 boostBps) view returns (uint256)',
     'function getTierName(uint256 boostBps) view returns (string)',
 
     // Read functions - Stats
-    'function getUserSummary(address user) view returns (uint256 userTotalPStake, uint256 delegationCount, uint256 savedRewards, uint256 totalPending, uint256 nftBoost, uint256 burnRateBps)',
-    'function getStakingStats() view returns (uint256 totalPStake, uint256 totalBkcDelegated, uint256 totalRewardsDistributed, uint256 totalBurnedOnClaim, uint256 totalForceUnstakePenalties, uint256 totalEthFeesCollected, uint256 accRewardPerShare)',
+    'function getUserSummary(address user) view returns (uint256 userTotalPStake, uint256 delegationCount, uint256 savedRewards, uint256 totalPending, uint256 nftBoost, uint256 recycleRateBps)',
+    'function getStakingStats() view returns (uint256 totalPStake, uint256 totalBkcDelegated, uint256 totalRewardsDistributed, uint256 totalBurnedOnClaim, uint256 totalRecycledOnClaim, uint256 totalForceUnstakePenalties, uint256 totalTutorPayments, uint256 totalEthFeesCollected, uint256 accRewardPerShare)',
 
     // Events
     'event Delegated(address indexed user, uint256 indexed delegationIndex, uint256 amount, uint256 pStake, uint256 lockDays, address operator)',
     'event Unstaked(address indexed user, uint256 indexed delegationIndex, uint256 amountReturned)',
-    'event ForceUnstaked(address indexed user, uint256 indexed delegationIndex, uint256 amountReturned, uint256 penaltyBurned, address operator)',
-    'event RewardsClaimed(address indexed user, uint256 totalRewards, uint256 burnedAmount, uint256 userReceived, uint256 cutAmount, address cutRecipient, uint256 nftBoostUsed, address operator)'
+    'event ForceUnstaked(address indexed user, uint256 indexed delegationIndex, uint256 amountReturned, uint256 totalPenalty, uint256 recycledAmount, uint256 burnedAmount, uint256 tutorAmount, address tutor, address operator)',
+    'event RewardsClaimed(address indexed user, uint256 totalRewards, uint256 recycledAmount, uint256 burnedAmount, uint256 tutorAmount, uint256 userReceived, uint256 nftBoostUsed, address tutor, address operator)'
 ];
 
 // ============================================================================
@@ -363,34 +364,35 @@ export async function getStakingConfig() {
 }
 
 /**
- * Preview claim — V9 returns 6-tuple (added referrerCut)
+ * Preview claim — V10 returns 7-tuple (recycle model + tutor)
  */
 export async function previewClaim(userAddress) {
     const contract = await getStakingContractReadOnly();
     const result = await contract.previewClaim(userAddress);
     return {
         totalRewards: result.totalRewards,
+        recycleAmount: result.recycleAmount,
         burnAmount: result.burnAmount,
-        referrerCut: result.referrerCut,
+        tutorCut: result.tutorCut,
         userReceives: result.userReceives,
-        burnRateBps: Number(result.burnRateBps),
+        recycleRateBps: Number(result.recycleRateBps),
         nftBoost: Number(result.nftBoost)
     };
 }
 
 /**
- * User summary — V9 new
+ * User summary — V10 with recycleRateBps
  */
 export async function getUserSummary(userAddress) {
     const contract = await getStakingContractReadOnly();
     const result = await contract.getUserSummary(userAddress);
     return {
-        userTotalPStake: result.userTotalPStake || result[0],
-        delegationCount: Number(result.delegationCount || result[1]),
-        savedRewards: result.savedRewards || result[2],
-        totalPending: result.totalPending || result[3],
-        nftBoost: Number(result.nftBoost || result[4]),
-        burnRateBps: Number(result.burnRateBps || result[5])
+        userTotalPStake: result._userTotalPStake || result[0],
+        delegationCount: Number(result._delegationCount || result[1]),
+        savedRewards: result._savedRewards || result[2],
+        totalPending: result._totalPending || result[3],
+        nftBoost: Number(result._nftBoost || result[4]),
+        recycleRateBps: Number(result._recycleRateBps || result[5])
     };
 }
 

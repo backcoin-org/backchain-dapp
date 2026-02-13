@@ -309,9 +309,9 @@ function onWalletStateChange(changes) {
     
     if (isConnected && isNewConnection) {
         showToast(`Connected: ${formatAddress(address)}`, "success");
-        // Gasless referral onboarding: auto-set referrer + faucet bonus via API
-        if (localStorage.getItem('backchain_referrer')) {
-            processReferralAfterConnect();
+        // Gasless tutor onboarding: auto-set tutor + faucet bonus via API
+        if (localStorage.getItem('backchain_tutor')) {
+            processTutorAfterConnect();
         }
     }
     else if (!isConnected && wasConnected) showToast("Wallet disconnected.", "info");
@@ -484,11 +484,10 @@ function getInitialPageFromHash() {
 }
 
 /**
- * ✅ V8: Capture referral param from URL hash (?ref=0x...)
+ * Capture tutor param from URL hash (?ref=0x...)
  * Stores in localStorage for deferred execution (wallet may not be connected yet).
- * The BackchatPage will consume it via setReferrer() when the user connects.
  */
-function captureReferralParam() {
+function captureTutorParam() {
     try {
         const hash = window.location.hash;
         const qIndex = hash.indexOf('?');
@@ -498,23 +497,23 @@ function captureReferralParam() {
         const ref = params.get('ref');
 
         if (ref && /^0x[a-fA-F0-9]{40}$/.test(ref)) {
-            const existing = localStorage.getItem('backchain_referrer');
+            const existing = localStorage.getItem('backchain_tutor');
             if (!existing) {
-                localStorage.setItem('backchain_referrer', ref);
-                console.log('[Referral] Captured referrer from URL:', ref);
+                localStorage.setItem('backchain_tutor', ref);
+                console.log('[Tutor] Captured tutor from URL:', ref);
             }
         }
     } catch (e) {
-        console.warn('[Referral] Failed to parse referral param:', e.message);
+        console.warn('[Tutor] Failed to parse tutor param:', e.message);
     }
 }
 
 // ============================================================================
-// REFERRAL WELCOME OVERLAY — Gasless onboarding
+// TUTOR WELCOME OVERLAY — Gasless onboarding
 // ============================================================================
 
-function showReferralWelcomeOverlay(referrerAddress) {
-    const shortAddr = `${referrerAddress.slice(0, 6)}...${referrerAddress.slice(-4)}`;
+function showTutorWelcomeOverlay(tutorAddress) {
+    const shortAddr = `${tutorAddress.slice(0, 6)}...${tutorAddress.slice(-4)}`;
 
     // Inject shared splash styles
     if (!document.getElementById('splash-styles')) {
@@ -560,9 +559,9 @@ function showReferralWelcomeOverlay(referrerAddress) {
                 <div class="h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent mt-3 quote-line"></div>
             </div>
 
-            <!-- Referral info -->
+            <!-- Tutor info -->
             <div class="mb-4">
-                <p class="text-zinc-500 text-xs mb-1.5">Invited by</p>
+                <p class="text-zinc-500 text-xs mb-1.5">Your Tutor</p>
                 <span class="inline-flex items-center gap-1.5 bg-zinc-800/80 border border-zinc-700/50 rounded-full px-3 py-1">
                     <i class="fa-solid fa-user-plus text-amber-400 text-[10px]"></i>
                     <span class="font-mono text-sm text-amber-400">${shortAddr}</span>
@@ -592,11 +591,11 @@ function showReferralWelcomeOverlay(referrerAddress) {
     });
 }
 
-async function processReferralAfterConnect() {
-    const referrer = localStorage.getItem('backchain_referrer');
-    if (!referrer || !State.isConnected || !State.userAddress) return;
-    if (referrer.toLowerCase() === State.userAddress.toLowerCase()) {
-        localStorage.removeItem('backchain_referrer');
+async function processTutorAfterConnect() {
+    const tutor = localStorage.getItem('backchain_tutor');
+    if (!tutor || !State.isConnected || !State.userAddress) return;
+    if (tutor.toLowerCase() === State.userAddress.toLowerCase()) {
+        localStorage.removeItem('backchain_tutor');
         return;
     }
 
@@ -618,14 +617,14 @@ async function processReferralAfterConnect() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 userAddress: State.userAddress,
-                referrerAddress: referrer
+                referrerAddress: tutor
             })
         });
 
         const data = await response.json();
 
         if (data.success) {
-            localStorage.removeItem('backchain_referrer');
+            localStorage.removeItem('backchain_tutor');
 
             if (stateEl) {
                 let successMsg = '';
@@ -633,7 +632,7 @@ async function processReferralAfterConnect() {
                     successMsg = `<p class="text-amber-400 font-bold mb-1">You received ${data.bonusBkc} BKC!</p>`;
                 }
                 successMsg += data.referrerSet
-                    ? `<p class="text-zinc-500 text-xs">Referrer set on-chain</p>`
+                    ? `<p class="text-zinc-500 text-xs">Tutor set on-chain</p>`
                     : `<p class="text-zinc-500 text-xs">Welcome to Backchain!</p>`;
 
                 stateEl.innerHTML = `
@@ -657,14 +656,14 @@ async function processReferralAfterConnect() {
                 showToast(`Welcome bonus: ${data.bonusBkc} BKC sent to your wallet!`, 'success');
             }
         } else {
-            localStorage.removeItem('backchain_referrer');
+            localStorage.removeItem('backchain_tutor');
             dismissSplash();
             if (data.error) showToast(data.error, 'warning');
         }
     } catch (e) {
-        console.warn('[Referral] API call failed:', e.message);
+        console.warn('[Tutor] API call failed:', e.message);
         dismissSplash();
-        showToast('Referral setup failed. You can set it manually on the Invite page.', 'warning');
+        showToast('Tutor setup failed. You can set it manually on the Tutor page.', 'warning');
     }
 }
 
@@ -689,13 +688,13 @@ window.addEventListener('load', async () => {
     await initPublicProvider();
     initWalletSubscriptions(onWalletStateChange);
 
-    // ✅ V8: Capture referral param before navigation
-    captureReferralParam();
+    // Capture tutor param before navigation
+    captureTutorParam();
 
-    // Show referral welcome overlay if pending referrer, otherwise generic welcome
-    const pendingReferrer = localStorage.getItem('backchain_referrer');
-    if (pendingReferrer && !State.isConnected) {
-        showReferralWelcomeOverlay(pendingReferrer);
+    // Show tutor welcome overlay if pending tutor, otherwise generic welcome
+    const pendingTutor = localStorage.getItem('backchain_tutor');
+    if (pendingTutor && !State.isConnected) {
+        showTutorWelcomeOverlay(pendingTutor);
     } else {
         showWelcomeModal();
     }
@@ -714,7 +713,7 @@ window.addEventListener('load', async () => {
 
 // ✅ FIX: Listen for hash changes (browser back/forward, direct URL changes)
 window.addEventListener('hashchange', () => {
-    captureReferralParam();
+    captureTutorParam();
     const newPage = getInitialPageFromHash();
     const currentHash = window.location.hash;
     
