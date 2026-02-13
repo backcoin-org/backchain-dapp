@@ -1,5 +1,5 @@
 // pages/StorePage.js
-// ✅ PRODUCTION V14.0 — Card-Based NFT Marketplace + Tutor + Fusion/Split
+// ✅ PRODUCTION V15.0 — Card-Based NFT Marketplace + Interactive Fusion/Split UI
 // ═══════════════════════════════════════════════════════════════════════════════
 //                          BACKCHAIN PROTOCOL
 //                    NFT Market — Buy & Sell Booster NFTs
@@ -20,7 +20,7 @@ const ethers = window.ethers;
 import { State } from '../state.js';
 import { loadUserData, loadMyBoostersFromAPI, loadRentalListings, safeContractCall, getHighestBoosterBoostFromAPI, loadSystemDataFromAPI, API_ENDPOINTS } from '../modules/data.js';
 import { formatBigNumber, renderNoData } from '../utils.js';
-import { showToast } from '../ui-feedback.js';
+import { showToast, openModal, closeModal } from '../ui-feedback.js';
 import { boosterTiers, addresses, nftPoolABI, ipfsGateway, getTierByBoost, getKeepRateFromBoost } from '../config.js';
 import { NftTx, FusionTx } from '../modules/transactions/index.js';
 
@@ -74,6 +74,11 @@ let userTutor = null;
 let hasTutor = false;
 let userBestBoost = 0;
 let currentHistoryFilter = 'ALL';
+let fuseSelected = []; // tokenIds selected for fuse (max 2)
+let fuseTierFilter = null; // auto-set when first NFT selected
+let splitSelectedTokenId = null; // tokenId selected for split
+let splitTargetTier = null; // target tier for split
+let splitConfirmPending = false; // waiting for split confirmation
 
 const factoryABI = [
     "function getPoolAddress(uint256 boostBips) view returns (address)",
@@ -308,43 +313,169 @@ function injectStyles() {
         }
         .nft-inv-rent:hover { text-decoration: underline; }
 
-        /* Fusion Section */
-        .nft-fusion-card { background: var(--nft-surface); border: 1px solid var(--nft-border); border-radius: var(--nft-radius); margin-bottom: 12px; overflow: hidden; animation: nft-scaleIn 0.3s ease-out; }
-        .nft-fusion-tabs { display: flex; border-bottom: 1px solid var(--nft-border); }
+        /* Fusion Section — Premium Interactive UI */
+        .nft-fusion-card {
+            background: var(--nft-surface); border: 1px solid var(--nft-border);
+            border-radius: var(--nft-radius); margin-bottom: 12px; overflow: hidden;
+            animation: nft-scaleIn 0.3s ease-out;
+            box-shadow: 0 0 20px rgba(245,158,11,0.04);
+        }
+        .nft-fusion-tabs { display: flex; border-bottom: 1px solid var(--nft-border); position: relative; }
         .nft-fusion-tab {
-            flex: 1; padding: 10px 16px; font-size: 11px; font-weight: 700;
+            flex: 1; padding: 11px 16px; font-size: 11px; font-weight: 700;
             color: var(--nft-text-3); text-align: center; cursor: pointer;
             border-bottom: 2px solid transparent; transition: all var(--nft-tr);
             background: none; border-top: none; border-left: none; border-right: none;
         }
-        .nft-fusion-tab:hover { color: var(--nft-text-2); }
+        .nft-fusion-tab:hover { color: var(--nft-text-2); background: rgba(255,255,255,0.02); }
         .nft-fusion-tab.active { color: var(--nft-accent); border-bottom-color: var(--nft-accent); }
-        .nft-fusion-body { padding: 12px; }
-        .nft-fusion-row {
-            display: flex; align-items: center; justify-content: space-between; gap: 10px;
-            padding: 10px 12px; background: var(--nft-surface-2); border: 1px solid var(--nft-border);
-            border-radius: var(--nft-radius-sm); margin-bottom: 6px; transition: all var(--nft-tr);
+        .nft-fusion-body { padding: 14px; }
+        .nft-fusion-hint { font-size: 10px; color: var(--nft-text-3); margin-bottom: 10px; }
+
+        /* Tier Filter Buttons */
+        .nft-fusion-filters { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+        .nft-fusion-filter {
+            padding: 5px 12px; border-radius: 20px; font-size: 10px; font-weight: 700;
+            border: 1px solid var(--nft-border); background: var(--nft-surface-2);
+            color: var(--nft-text-3); cursor: pointer; transition: all var(--nft-tr);
         }
-        .nft-fusion-row:hover { border-color: var(--nft-border-h); }
-        .nft-fusion-info { flex: 1; min-width: 0; }
-        .nft-fusion-label { font-size: 11px; font-weight: 700; color: var(--nft-text); margin-bottom: 2px; }
-        .nft-fusion-desc { font-size: 9px; color: var(--nft-text-3); }
-        .nft-fusion-fee { font-size: 9px; color: var(--nft-text-2); white-space: nowrap; margin-right: 8px; }
-        .nft-fusion-btn {
-            padding: 6px 14px; border-radius: 8px; font-size: 10px; font-weight: 800;
-            border: none; cursor: pointer; transition: all var(--nft-tr); white-space: nowrap;
+        .nft-fusion-filter:hover:not(:disabled) { border-color: var(--nft-border-h); color: var(--nft-text-2); }
+        .nft-fusion-filter.active { border-color: var(--nft-accent); color: var(--nft-accent); background: rgba(245,158,11,0.08); }
+        .nft-fusion-filter:disabled { opacity: 0.3; cursor: not-allowed; }
+        .nft-fusion-filter .ff-count { font-size: 8px; opacity: 0.6; margin-left: 3px; }
+
+        /* Selectable NFT Grid */
+        .nft-fusion-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+        .nft-fusion-nft {
+            position: relative; padding: 10px 6px 8px; border-radius: 10px; text-align: center;
+            background: var(--nft-surface-2); border: 2px solid var(--nft-border);
+            cursor: pointer; transition: all 0.2s ease; user-select: none;
         }
-        .nft-fusion-btn.fuse { background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; }
-        .nft-fusion-btn.fuse:hover { transform: scale(1.05); }
-        .nft-fusion-btn.split { background: linear-gradient(135deg, #a78bfa, #7c3aed); color: #fff; }
-        .nft-fusion-btn.split:hover { transform: scale(1.05); }
-        .nft-fusion-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+        .nft-fusion-nft:hover { border-color: var(--nft-border-h); transform: translateY(-1px); }
+        .nft-fusion-nft.selected {
+            border-color: var(--nft-accent); background: rgba(245,158,11,0.08);
+            box-shadow: 0 0 12px rgba(245,158,11,0.2);
+        }
+        .nft-fusion-nft.selected::after {
+            content: ''; position: absolute; inset: -4px; border-radius: 12px;
+            border: 2px solid var(--nft-accent); opacity: 0.4;
+            animation: nft-pulse-ring 1.5s ease-in-out infinite;
+        }
+        .nft-fusion-nft-icon { font-size: 22px; margin-bottom: 3px; display: block; }
+        .nft-fusion-nft-id { font-size: 9px; font-weight: 800; color: var(--nft-text); }
+        .nft-fusion-nft-tier { font-size: 8px; color: var(--nft-text-3); margin-top: 1px; }
+        .nft-fusion-nft-check {
+            position: absolute; top: 3px; right: 3px; width: 16px; height: 16px;
+            border-radius: 50%; background: var(--nft-accent); color: #000;
+            display: none; align-items: center; justify-content: center; font-size: 8px; font-weight: 900;
+        }
+        .nft-fusion-nft.selected .nft-fusion-nft-check { display: flex; }
+
+        /* Transformation Preview */
+        .nft-fusion-preview {
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+            padding: 12px 14px; background: var(--nft-surface-2);
+            border: 1px solid rgba(245,158,11,0.25); border-radius: 10px;
+            margin-bottom: 10px; animation: nft-fadeIn 0.3s ease-out;
+        }
+        .nft-fusion-preview-item { text-align: center; }
+        .nft-fusion-preview-icon { font-size: 20px; display: block; }
+        .nft-fusion-preview-label { font-size: 9px; font-weight: 700; margin-top: 2px; }
+        .nft-fusion-preview-plus { font-size: 14px; font-weight: 900; color: var(--nft-text-3); }
+        .nft-fusion-preview-arrow {
+            font-size: 16px; color: var(--nft-accent); animation: nft-bounce-arrow 1s ease-in-out infinite;
+        }
+        .nft-fusion-preview-result { text-align: center; }
+        .nft-fusion-preview-result-icon { font-size: 26px; display: block; filter: drop-shadow(0 0 6px rgba(245,158,11,0.3)); }
+        .nft-fusion-preview-result-label { font-size: 10px; font-weight: 800; margin-top: 2px; }
+        .nft-fusion-preview-fee { font-size: 9px; color: var(--nft-text-3); margin-top: 6px; text-align: center; }
+
+        /* CTA Button */
+        .nft-fusion-cta {
+            width: 100%; padding: 10px; border: none; border-radius: 10px;
+            font-size: 12px; font-weight: 800; cursor: pointer;
+            transition: all 0.2s ease; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .nft-fusion-cta.fuse-cta {
+            background: linear-gradient(135deg, #f59e0b, #d97706); color: #000;
+            box-shadow: 0 2px 10px rgba(245,158,11,0.25);
+        }
+        .nft-fusion-cta.fuse-cta:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(245,158,11,0.35); }
+        .nft-fusion-cta.split-cta {
+            background: linear-gradient(135deg, #a78bfa, #7c3aed); color: #fff;
+            box-shadow: 0 2px 10px rgba(124,58,237,0.25);
+        }
+        .nft-fusion-cta.split-cta:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(124,58,237,0.35); }
+        .nft-fusion-cta:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+
+        /* Split Options Panel */
+        .nft-split-options {
+            padding: 10px; margin-top: 8px; background: var(--nft-surface-3);
+            border: 1px solid var(--nft-border); border-radius: 8px;
+            animation: nft-fadeIn 0.2s ease-out;
+        }
+        .nft-split-option {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 7px 10px; border-radius: 6px; cursor: pointer;
+            transition: all var(--nft-tr); margin-bottom: 4px;
+            border: 1px solid transparent;
+        }
+        .nft-split-option:hover { background: rgba(255,255,255,0.03); }
+        .nft-split-option.active {
+            background: rgba(124,58,237,0.08); border-color: rgba(124,58,237,0.3);
+        }
+        .nft-split-option-left { display: flex; align-items: center; gap: 6px; }
+        .nft-split-option-radio {
+            width: 14px; height: 14px; border-radius: 50%;
+            border: 2px solid var(--nft-border); transition: all var(--nft-tr);
+        }
+        .nft-split-option.active .nft-split-option-radio {
+            border-color: #a78bfa; background: #a78bfa;
+            box-shadow: inset 0 0 0 2px var(--nft-surface-3);
+        }
+        .nft-split-option-label { font-size: 10px; font-weight: 700; color: var(--nft-text); }
+        .nft-split-option-fee { font-size: 9px; color: var(--nft-text-3); }
+
+        /* Split Confirmation Inline */
+        .nft-split-confirm {
+            margin-top: 8px; padding: 10px 12px; background: rgba(239,68,68,0.06);
+            border: 1px solid rgba(239,68,68,0.2); border-radius: 8px;
+            animation: nft-fadeIn 0.2s ease-out;
+        }
+        .nft-split-confirm-text { font-size: 10px; color: #fca5a5; margin-bottom: 8px; line-height: 1.4; }
+        .nft-split-confirm-btns { display: flex; gap: 8px; }
+        .nft-split-confirm-cancel {
+            flex: 1; padding: 7px; border-radius: 6px; font-size: 10px; font-weight: 700;
+            background: var(--nft-surface-2); color: var(--nft-text-3); border: 1px solid var(--nft-border);
+            cursor: pointer; transition: all var(--nft-tr);
+        }
+        .nft-split-confirm-cancel:hover { color: var(--nft-text); border-color: var(--nft-border-h); }
+        .nft-split-confirm-go {
+            flex: 1; padding: 7px; border-radius: 6px; font-size: 10px; font-weight: 800;
+            background: linear-gradient(135deg, #ef4444, #b91c1c); color: #fff; border: none;
+            cursor: pointer; transition: all var(--nft-tr);
+        }
+        .nft-split-confirm-go:hover { transform: scale(1.02); }
+        .nft-split-confirm-go:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+
+        /* Empty & Stats */
         .nft-fusion-empty { text-align: center; padding: 20px; color: var(--nft-text-3); font-size: 11px; }
         .nft-fusion-empty i { font-size: 20px; margin-bottom: 6px; display: block; opacity: 0.3; }
-        .nft-split-select {
-            padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: 600;
-            background: var(--nft-surface-3); color: var(--nft-text); border: 1px solid var(--nft-border);
-            cursor: pointer; margin-right: 6px;
+        .nft-fusion-stats {
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+            padding: 8px 12px; border-top: 1px solid var(--nft-border);
+            font-size: 9px; color: var(--nft-text-3);
+        }
+        .nft-fusion-stats-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--nft-text-3); opacity: 0.4; }
+
+        /* Animations */
+        @keyframes nft-pulse-ring {
+            0%, 100% { opacity: 0.4; transform: scale(1); }
+            50% { opacity: 0.15; transform: scale(1.03); }
+        }
+        @keyframes nft-bounce-arrow {
+            0%, 100% { transform: translateX(0); }
+            50% { transform: translateX(4px); }
         }
 
         /* History */
@@ -380,6 +511,8 @@ function injectStyles() {
             .nft-tier-grid { grid-template-columns: 1fr; }
             .nft-impact-grid { grid-template-columns: repeat(2, 1fr); }
             .nft-inv-grid { grid-template-columns: repeat(3, 1fr); }
+            .nft-fusion-grid { grid-template-columns: repeat(3, 1fr); }
+            .nft-fusion-preview { flex-wrap: wrap; gap: 6px; }
         }
     `;
     document.head.appendChild(style);
@@ -825,26 +958,13 @@ function getTierFromBoostLocal(boost) {
 }
 
 // ============================================================================
-// FUSION & SPLIT SECTION
+// FUSION & SPLIT SECTION — Premium Interactive UI
 // ============================================================================
 let fusionActiveTab = 'fuse'; // 'fuse' | 'split'
+const TIER_NAMES_MAP = { 0: 'Bronze', 1: 'Silver', 2: 'Gold', 3: 'Diamond' };
 
-function renderFusionSection() {
-    const container = document.getElementById('nft-fusion-section');
-    if (!container) return;
-
-    if (!State.isConnected) {
-        container.innerHTML = '';
-        return;
-    }
-
+function getAvailableNftsByTier() {
     const boosters = State.myBoosters || [];
-    if (boosters.length === 0) {
-        container.innerHTML = '';
-        return;
-    }
-
-    // Group NFTs by tier (0=Bronze, 1=Silver, 2=Gold, 3=Diamond)
     const rentalListings = State.rentalListings || [];
     const now = Math.floor(Date.now() / 1000);
     const nftsByTier = { 0: [], 1: [], 2: [], 3: [] };
@@ -856,7 +976,6 @@ function renderFusionSection() {
         else if (boost >= 4000) tier = 2;
         else if (boost >= 2500) tier = 1;
 
-        // Skip rented/listed NFTs
         const listing = rentalListings.find(l => l.tokenId?.toString() === nft.tokenId?.toString());
         const isRented = listing && listing.rentalEndTime && Number(listing.rentalEndTime) > now;
         const isListed = listing && !isRented;
@@ -864,6 +983,21 @@ function renderFusionSection() {
 
         nftsByTier[tier].push({ tokenId: Number(nft.tokenId), tier, boost });
     }
+    return nftsByTier;
+}
+
+function renderFusionSection() {
+    const container = document.getElementById('nft-fusion-section');
+    if (!container) return;
+
+    if (!State.isConnected) { container.innerHTML = ''; return; }
+
+    const boosters = State.myBoosters || [];
+    if (boosters.length === 0) { container.innerHTML = ''; return; }
+
+    const nftsByTier = getAvailableNftsByTier();
+    const totalAvailable = Object.values(nftsByTier).reduce((s, arr) => s + arr.length, 0);
+    if (totalAvailable === 0) { container.innerHTML = ''; return; }
 
     container.innerHTML = `
         <div class="nft-fusion-card">
@@ -878,45 +1012,32 @@ function renderFusionSection() {
             <div class="nft-fusion-body">
                 ${fusionActiveTab === 'fuse' ? renderFuseTab(nftsByTier) : renderSplitTab(nftsByTier)}
             </div>
+            <div class="nft-fusion-stats" id="nft-fusion-stats"></div>
         </div>
     `;
+
+    // Load stats non-blocking
+    FusionTx.getFusionStats().then(stats => {
+        const el = document.getElementById('nft-fusion-stats');
+        if (!el) return;
+        const parts = [];
+        if (stats.totalFusions > 0) parts.push(`${stats.totalFusions} fusions`);
+        if (stats.totalSplits > 0) parts.push(`${stats.totalSplits} splits`);
+        if (parts.length === 0) { el.style.display = 'none'; return; }
+        el.innerHTML = `<i class="fa-solid fa-chart-simple" style="font-size:8px;opacity:0.5"></i> ${parts.join(' &middot; ')} on the platform`;
+    }).catch(() => {});
 }
 
 function renderFuseTab(nftsByTier) {
-    // Show tiers where user has 2+ available NFTs (Bronze→Silver, Silver→Gold, Gold→Diamond)
-    const fuseRows = [];
-
-    for (let tier = 0; tier <= 2; tier++) {
-        const nfts = nftsByTier[tier];
-        if (nfts.length < 2) continue;
-
-        const sourceName = TIER_NAMES_MAP[tier];
-        const resultName = TIER_NAMES_MAP[tier + 1];
-        const sourceStyle = getTierStyle(sourceName);
-        const resultStyle = getTierStyle(resultName);
-
-        // Pick first 2 available NFTs
-        const t1 = nfts[0].tokenId;
-        const t2 = nfts[1].tokenId;
-
-        fuseRows.push(`
-            <div class="nft-fusion-row">
-                <div class="nft-fusion-info">
-                    <div class="nft-fusion-label">
-                        2x <span style="color:${sourceStyle.color}">${sourceStyle.icon} ${sourceName}</span>
-                        &rarr; 1x <span style="color:${resultStyle.color}">${resultStyle.icon} ${resultName}</span>
-                    </div>
-                    <div class="nft-fusion-desc">Burn #${t1} + #${t2} &rarr; mint 1 ${resultName} (${nfts.length} available)</div>
-                </div>
-                <span class="nft-fusion-fee" id="fuse-fee-${tier}">Fee: ...</span>
-                <button class="nft-fusion-btn fuse" data-fuse-tier="${tier}" data-fuse-t1="${t1}" data-fuse-t2="${t2}">
-                    Fuse
-                </button>
-            </div>
-        `);
+    // Find tiers where user has 2+ NFTs (fuse-eligible)
+    const eligibleTiers = [];
+    for (let t = 0; t <= 2; t++) {
+        if (nftsByTier[t].length >= 2) eligibleTiers.push(t);
     }
 
-    if (fuseRows.length === 0) {
+    if (eligibleTiers.length === 0) {
+        fuseSelected = [];
+        fuseTierFilter = null;
         return `
             <div class="nft-fusion-empty">
                 <i class="fa-solid fa-fire"></i>
@@ -926,53 +1047,112 @@ function renderFuseTab(nftsByTier) {
         `;
     }
 
-    // Load fees async
-    setTimeout(() => loadFuseFees(), 50);
-    return fuseRows.join('');
+    // Auto-select tier filter if not set or invalid
+    if (fuseTierFilter === null || !eligibleTiers.includes(fuseTierFilter)) {
+        fuseTierFilter = eligibleTiers[0];
+        fuseSelected = [];
+    }
+
+    // Clean up stale selections (NFTs that no longer exist in current tier)
+    const currentTierIds = new Set(nftsByTier[fuseTierFilter].map(n => n.tokenId));
+    fuseSelected = fuseSelected.filter(id => currentTierIds.has(id));
+
+    // Tier filter buttons
+    const filterBtns = [0, 1, 2].map(t => {
+        const name = TIER_NAMES_MAP[t];
+        const style = getTierStyle(name);
+        const count = nftsByTier[t].length;
+        const isActive = t === fuseTierFilter;
+        const isDisabled = count < 2;
+        return `<button class="nft-fusion-filter ${isActive ? 'active' : ''}" data-fuse-filter="${t}" ${isDisabled ? 'disabled' : ''} style="${isActive ? `border-color:${style.color};color:${style.color};background:${style.bg}` : ''}">
+            ${style.icon} ${name}<span class="ff-count">(${count})</span>
+        </button>`;
+    }).join('');
+
+    // NFT grid for selected tier
+    const nfts = nftsByTier[fuseTierFilter];
+    const tierName = TIER_NAMES_MAP[fuseTierFilter];
+    const tierStyle = getTierStyle(tierName);
+
+    const nftCards = nfts.map(nft => {
+        const isSelected = fuseSelected.includes(nft.tokenId);
+        return `<div class="nft-fusion-nft ${isSelected ? 'selected' : ''}" data-fuse-nft="${nft.tokenId}" style="${isSelected ? `border-color:${tierStyle.color}` : ''}">
+            <div class="nft-fusion-nft-check">&check;</div>
+            <span class="nft-fusion-nft-icon">${tierStyle.icon}</span>
+            <div class="nft-fusion-nft-id" style="color:${tierStyle.color}">#${nft.tokenId}</div>
+            <div class="nft-fusion-nft-tier">${tierName}</div>
+        </div>`;
+    }).join('');
+
+    // Preview (only when 2 selected)
+    let previewHtml = '';
+    if (fuseSelected.length === 2) {
+        const resultTier = fuseTierFilter + 1;
+        const resultName = TIER_NAMES_MAP[resultTier];
+        const resultStyle = getTierStyle(resultName);
+
+        previewHtml = `
+            <div class="nft-fusion-preview">
+                <div class="nft-fusion-preview-item">
+                    <span class="nft-fusion-preview-icon">${tierStyle.icon}</span>
+                    <div class="nft-fusion-preview-label" style="color:${tierStyle.color}">#${fuseSelected[0]}</div>
+                </div>
+                <span class="nft-fusion-preview-plus">+</span>
+                <div class="nft-fusion-preview-item">
+                    <span class="nft-fusion-preview-icon">${tierStyle.icon}</span>
+                    <div class="nft-fusion-preview-label" style="color:${tierStyle.color}">#${fuseSelected[1]}</div>
+                </div>
+                <span class="nft-fusion-preview-arrow"><i class="fa-solid fa-arrow-right"></i></span>
+                <div class="nft-fusion-preview-result">
+                    <span class="nft-fusion-preview-result-icon">${resultStyle.icon}</span>
+                    <div class="nft-fusion-preview-result-label" style="color:${resultStyle.color}">${resultName}</div>
+                </div>
+            </div>
+            <div class="nft-fusion-preview-fee" id="fuse-fee-display">Fee: loading...</div>
+            <button class="nft-fusion-cta fuse-cta" id="fuse-execute-btn">
+                <i class="fa-solid fa-fire"></i> Fuse Now
+            </button>
+        `;
+
+        // Load fee async
+        setTimeout(() => {
+            FusionTx.getEstimatedFusionFee(fuseTierFilter).then(fee => {
+                const el = document.getElementById('fuse-fee-display');
+                if (el) el.textContent = `Fee: ${Number(ethers.formatEther(fee)).toFixed(6)} ETH`;
+            }).catch(() => {
+                const el = document.getElementById('fuse-fee-display');
+                if (el) el.textContent = 'Fee: N/A';
+            });
+        }, 50);
+    }
+
+    const hint = fuseSelected.length === 0
+        ? 'Select 2 NFTs to fuse into a higher tier:'
+        : fuseSelected.length === 1
+            ? 'Select 1 more NFT:'
+            : '';
+
+    return `
+        <div class="nft-fusion-filters">${filterBtns}</div>
+        ${hint ? `<div class="nft-fusion-hint">${hint}</div>` : ''}
+        <div class="nft-fusion-grid">${nftCards}</div>
+        ${previewHtml}
+    `;
 }
 
 function renderSplitTab(nftsByTier) {
-    // Show NFTs above Bronze that can be split
-    const splitRows = [];
-
+    // Collect all splittable NFTs (Silver+)
+    const splittableNfts = [];
     for (let tier = 1; tier <= 3; tier++) {
-        const nfts = nftsByTier[tier];
-        if (nfts.length === 0) continue;
-
-        const sourceName = TIER_NAMES_MAP[tier];
-        const sourceStyle = getTierStyle(sourceName);
-
-        for (const nft of nfts) {
-            // Build target tier options
-            const options = [];
-            for (let target = tier - 1; target >= 0; target--) {
-                const levels = tier - target;
-                const count = 1 << levels;
-                const targetName = TIER_NAMES_MAP[target];
-                options.push(`<option value="${target}">${count}x ${targetName}</option>`);
-            }
-
-            splitRows.push(`
-                <div class="nft-fusion-row">
-                    <div class="nft-fusion-info">
-                        <div class="nft-fusion-label">
-                            <span style="color:${sourceStyle.color}">${sourceStyle.icon} ${sourceName} #${nft.tokenId}</span>
-                        </div>
-                        <div class="nft-fusion-desc">Split into lower-tier NFTs</div>
-                    </div>
-                    <select class="nft-split-select" data-split-tokenid="${nft.tokenId}" data-split-source="${tier}">
-                        ${options.join('')}
-                    </select>
-                    <span class="nft-fusion-fee" id="split-fee-${nft.tokenId}">Fee: ...</span>
-                    <button class="nft-fusion-btn split" data-split-tokenid="${nft.tokenId}" data-split-source="${tier}">
-                        Split
-                    </button>
-                </div>
-            `);
+        for (const nft of nftsByTier[tier]) {
+            splittableNfts.push(nft);
         }
     }
 
-    if (splitRows.length === 0) {
+    if (splittableNfts.length === 0) {
+        splitSelectedTokenId = null;
+        splitTargetTier = null;
+        splitConfirmPending = false;
         return `
             <div class="nft-fusion-empty">
                 <i class="fa-solid fa-scissors"></i>
@@ -982,35 +1162,105 @@ function renderSplitTab(nftsByTier) {
         `;
     }
 
-    setTimeout(() => loadSplitFees(), 50);
-    return splitRows.join('');
-}
-
-const TIER_NAMES_MAP = { 0: 'Bronze', 1: 'Silver', 2: 'Gold', 3: 'Diamond' };
-
-async function loadFuseFees() {
-    const ethers = window.ethers;
-    for (let tier = 0; tier <= 2; tier++) {
-        const el = document.getElementById(`fuse-fee-${tier}`);
-        if (!el) continue;
-        try {
-            const fee = await FusionTx.getEstimatedFusionFee(tier);
-            el.textContent = `Fee: ${Number(ethers.formatEther(fee)).toFixed(6)} ETH`;
-        } catch { el.textContent = 'Fee: N/A'; }
+    // Validate selection still exists
+    if (splitSelectedTokenId !== null && !splittableNfts.find(n => n.tokenId === splitSelectedTokenId)) {
+        splitSelectedTokenId = null;
+        splitTargetTier = null;
+        splitConfirmPending = false;
     }
+
+    // Set default target if selected NFT exists but no target set
+    if (splitSelectedTokenId !== null && splitTargetTier === null) {
+        const selNft = splittableNfts.find(n => n.tokenId === splitSelectedTokenId);
+        if (selNft) splitTargetTier = selNft.tier - 1;
+    }
+
+    return `
+        <div class="nft-fusion-hint">Select an NFT to split into lower-tier NFTs:</div>
+        <div class="nft-fusion-grid" style="${splitSelectedTokenId !== null ? 'margin-bottom:0' : ''}">${splittableNfts.map(nft => {
+            const name = TIER_NAMES_MAP[nft.tier];
+            const style = getTierStyle(name);
+            const isSelected = nft.tokenId === splitSelectedTokenId;
+            return `<div class="nft-fusion-nft ${isSelected ? 'selected' : ''}" data-split-nft="${nft.tokenId}" data-split-nft-tier="${nft.tier}" style="${isSelected ? `border-color:${style.color}` : ''}">
+                <div class="nft-fusion-nft-check">&check;</div>
+                <span class="nft-fusion-nft-icon">${style.icon}</span>
+                <div class="nft-fusion-nft-id" style="color:${style.color}">#${nft.tokenId}</div>
+                <div class="nft-fusion-nft-tier">${name}</div>
+            </div>`;
+        }).join('')}</div>
+        ${splitSelectedTokenId !== null ? (() => {
+            const nft = splittableNfts.find(n => n.tokenId === splitSelectedTokenId);
+            if (!nft) return '';
+            const name = TIER_NAMES_MAP[nft.tier];
+            const style = getTierStyle(name);
+
+            const options = [];
+            for (let target = nft.tier - 1; target >= 0; target--) {
+                const levels = nft.tier - target;
+                const count = 1 << levels;
+                const targetName = TIER_NAMES_MAP[target];
+                const targetStyle = getTierStyle(targetName);
+                const isActive = splitTargetTier === target;
+                options.push(`
+                    <div class="nft-split-option ${isActive ? 'active' : ''}" data-split-target="${target}" data-split-source="${nft.tier}" data-split-tokenid="${nft.tokenId}">
+                        <div class="nft-split-option-left">
+                            <div class="nft-split-option-radio"></div>
+                            <span class="nft-split-option-label">${count}x ${targetStyle.icon} ${targetName}</span>
+                        </div>
+                        <span class="nft-split-option-fee" id="split-fee-${nft.tokenId}-${target}">Fee: ...</span>
+                    </div>
+                `);
+            }
+
+            let confirmHtml = '';
+            if (splitConfirmPending) {
+                const count = 1 << (nft.tier - splitTargetTier);
+                const targetName = TIER_NAMES_MAP[splitTargetTier];
+                confirmHtml = `
+                    <div class="nft-split-confirm">
+                        <div class="nft-split-confirm-text">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            Burn ${name} #${nft.tokenId} &rarr; create ${count}x ${targetName}?<br>
+                            This action is <strong>irreversible</strong>.
+                        </div>
+                        <div class="nft-split-confirm-btns">
+                            <button class="nft-split-confirm-cancel" id="split-cancel-btn">Cancel</button>
+                            <button class="nft-split-confirm-go" id="split-confirm-btn" data-split-tokenid="${nft.tokenId}" data-split-source="${nft.tier}" data-split-target="${splitTargetTier}">
+                                <i class="fa-solid fa-scissors"></i> Confirm Split
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Load fees async
+            setTimeout(() => loadSplitFeesForNft(nft.tokenId, nft.tier), 50);
+
+            return `
+                <div class="nft-split-options">
+                    <div style="font-size:9px;color:var(--nft-text-3);margin-bottom:6px">
+                        <span style="color:${style.color}">${style.icon} ${name} #${nft.tokenId}</span> &mdash; Split into:
+                    </div>
+                    ${options.join('')}
+                    ${!splitConfirmPending ? `
+                        <button class="nft-fusion-cta split-cta" id="split-execute-btn" style="margin-top:8px"
+                            data-split-tokenid="${nft.tokenId}" data-split-source="${nft.tier}">
+                            <i class="fa-solid fa-scissors"></i> Split ${name} #${nft.tokenId}
+                        </button>
+                    ` : ''}
+                    ${confirmHtml}
+                </div>
+            `;
+        })() : ''}
+    `;
 }
 
-async function loadSplitFees() {
-    const ethers = window.ethers;
-    const selects = document.querySelectorAll('.nft-split-select');
-    for (const select of selects) {
-        const tokenId = select.dataset.splitTokenid;
-        const sourceTier = Number(select.dataset.splitSource);
-        const targetTier = Number(select.value);
-        const el = document.getElementById(`split-fee-${tokenId}`);
+async function loadSplitFeesForNft(tokenId, sourceTier) {
+    for (let target = sourceTier - 1; target >= 0; target--) {
+        const el = document.getElementById(`split-fee-${tokenId}-${target}`);
         if (!el) continue;
         try {
-            const fee = await FusionTx.getEstimatedMultiSplitFee(sourceTier, targetTier);
+            const fee = await FusionTx.getEstimatedMultiSplitFee(sourceTier, target);
             el.textContent = `Fee: ${Number(ethers.formatEther(fee)).toFixed(6)} ETH`;
         } catch { el.textContent = 'Fee: N/A'; }
     }
@@ -1228,26 +1478,55 @@ function setupEventListeners() {
         const fusionTab = e.target.closest('.nft-fusion-tab');
         if (fusionTab) {
             fusionActiveTab = fusionTab.dataset.fusionTab;
+            fuseSelected = [];
+            fuseTierFilter = null;
+            splitSelectedTokenId = null;
+            splitTargetTier = null;
+            splitConfirmPending = false;
             renderFusionSection();
             return;
         }
 
-        // Fuse button
-        const fuseBtn = e.target.closest('.nft-fusion-btn.fuse');
-        if (fuseBtn && !fuseBtn.disabled && !isTransactionInProgress) {
+        // Fuse tier filter
+        const fuseFilter = e.target.closest('.nft-fusion-filter');
+        if (fuseFilter && !fuseFilter.disabled) {
+            fuseTierFilter = Number(fuseFilter.dataset.fuseFilter);
+            fuseSelected = [];
+            renderFusionSection();
+            return;
+        }
+
+        // Fuse NFT selection
+        const fuseNftEl = e.target.closest('[data-fuse-nft]');
+        if (fuseNftEl && fusionActiveTab === 'fuse') {
+            const tokenId = Number(fuseNftEl.dataset.fuseNft);
+            const idx = fuseSelected.indexOf(tokenId);
+            if (idx >= 0) {
+                fuseSelected.splice(idx, 1);
+            } else if (fuseSelected.length < 2) {
+                fuseSelected.push(tokenId);
+            }
+            renderFusionSection();
+            return;
+        }
+
+        // Fuse execute button
+        const fuseExecBtn = e.target.closest('#fuse-execute-btn');
+        if (fuseExecBtn && !fuseExecBtn.disabled && !isTransactionInProgress && fuseSelected.length === 2) {
             e.preventDefault();
-            const t1 = Number(fuseBtn.dataset.fuseT1);
-            const t2 = Number(fuseBtn.dataset.fuseT2);
+            const t1 = fuseSelected[0];
+            const t2 = fuseSelected[1];
 
             isTransactionInProgress = true;
             try {
                 await FusionTx.fuseNfts({
                     tokenId1: t1,
                     tokenId2: t2,
-                    button: fuseBtn,
+                    button: fuseExecBtn,
                     onSuccess: async ({ newTokenId, resultTier }) => {
                         const tierName = TIER_NAMES_MAP[resultTier] || 'NFT';
                         showToast(`Fused into ${tierName} #${newTokenId}!`, "success");
+                        fuseSelected = [];
                         invalidateAllPoolCaches();
                         await Promise.all([loadMyBoostersFromAPI(true), loadAllPoolsData()]);
                         renderTierCards(); renderInventory(); renderImpactPreview(); renderFusionSection();
@@ -1262,57 +1541,86 @@ function setupEventListeners() {
             return;
         }
 
-        // Split button
-        const splitBtn = e.target.closest('.nft-fusion-btn.split');
-        if (splitBtn && !splitBtn.disabled && !isTransactionInProgress) {
-            e.preventDefault();
-            const tokenId = Number(splitBtn.dataset.splitTokenid);
-            const sourceTier = Number(splitBtn.dataset.splitSource);
+        // Split NFT selection
+        const splitNftEl = e.target.closest('[data-split-nft]');
+        if (splitNftEl && fusionActiveTab === 'split' && !e.target.closest('.nft-split-options')) {
+            const tokenId = Number(splitNftEl.dataset.splitNft);
+            if (splitSelectedTokenId === tokenId) {
+                splitSelectedTokenId = null;
+                splitTargetTier = null;
+                splitConfirmPending = false;
+            } else {
+                splitSelectedTokenId = tokenId;
+                const tier = Number(splitNftEl.dataset.splitNftTier);
+                splitTargetTier = tier - 1;
+                splitConfirmPending = false;
+            }
+            renderFusionSection();
+            return;
+        }
 
-            // Find target tier from the dropdown
-            const row = splitBtn.closest('.nft-fusion-row');
-            const select = row?.querySelector('.nft-split-select');
-            const targetTier = select ? Number(select.value) : sourceTier - 1;
+        // Split target option click
+        const splitOption = e.target.closest('.nft-split-option');
+        if (splitOption) {
+            splitTargetTier = Number(splitOption.dataset.splitTarget);
+            splitConfirmPending = false;
+            renderFusionSection();
+            return;
+        }
+
+        // Split execute button (shows confirmation)
+        const splitExecBtn = e.target.closest('#split-execute-btn');
+        if (splitExecBtn && !splitExecBtn.disabled && !isTransactionInProgress) {
+            e.preventDefault();
+            splitConfirmPending = true;
+            renderFusionSection();
+            return;
+        }
+
+        // Split cancel confirmation
+        const splitCancelBtn = e.target.closest('#split-cancel-btn');
+        if (splitCancelBtn) {
+            splitConfirmPending = false;
+            renderFusionSection();
+            return;
+        }
+
+        // Split confirm (actual transaction)
+        const splitConfirmBtn = e.target.closest('#split-confirm-btn');
+        if (splitConfirmBtn && !splitConfirmBtn.disabled && !isTransactionInProgress) {
+            e.preventDefault();
+            const tokenId = Number(splitConfirmBtn.dataset.splitTokenid);
+            const sourceTier = Number(splitConfirmBtn.dataset.splitSource);
+            const targetTier = Number(splitConfirmBtn.dataset.splitTarget);
             const levels = sourceTier - targetTier;
 
             isTransactionInProgress = true;
             try {
-                if (levels === 1) {
-                    await FusionTx.splitNft({
-                        tokenId,
-                        button: splitBtn,
-                        onSuccess: async ({ newTokenIds, targetTier: tt }) => {
-                            const tierName = TIER_NAMES_MAP[tt] || 'NFT';
-                            showToast(`Split into 2x ${tierName}!`, "success");
-                            invalidateAllPoolCaches();
-                            await Promise.all([loadMyBoostersFromAPI(true), loadAllPoolsData()]);
-                            renderTierCards(); renderInventory(); renderImpactPreview(); renderFusionSection();
-                        },
-                        onError: (error) => {
-                            if (!error.cancelled && error.type !== 'user_rejected') {
-                                showToast("Split failed: " + (error.message || 'Unknown'), "error");
-                            }
+                const txFn = levels === 1 ? FusionTx.splitNft : FusionTx.splitNftTo;
+                const txParams = levels === 1
+                    ? { tokenId, button: splitConfirmBtn }
+                    : { tokenId, targetTier, button: splitConfirmBtn };
+
+                await txFn({
+                    ...txParams,
+                    onSuccess: async ({ newTokenIds, targetTier: tt }) => {
+                        const tierName = TIER_NAMES_MAP[tt] || 'NFT';
+                        showToast(`Split into ${newTokenIds.length}x ${tierName}!`, "success");
+                        splitSelectedTokenId = null;
+                        splitTargetTier = null;
+                        splitConfirmPending = false;
+                        invalidateAllPoolCaches();
+                        await Promise.all([loadMyBoostersFromAPI(true), loadAllPoolsData()]);
+                        renderTierCards(); renderInventory(); renderImpactPreview(); renderFusionSection();
+                    },
+                    onError: (error) => {
+                        splitConfirmPending = false;
+                        renderFusionSection();
+                        if (!error.cancelled && error.type !== 'user_rejected') {
+                            showToast("Split failed: " + (error.message || 'Unknown'), "error");
                         }
-                    });
-                } else {
-                    await FusionTx.splitNftTo({
-                        tokenId,
-                        targetTier,
-                        button: splitBtn,
-                        onSuccess: async ({ newTokenIds, targetTier: tt }) => {
-                            const tierName = TIER_NAMES_MAP[tt] || 'NFT';
-                            showToast(`Split into ${newTokenIds.length}x ${tierName}!`, "success");
-                            invalidateAllPoolCaches();
-                            await Promise.all([loadMyBoostersFromAPI(true), loadAllPoolsData()]);
-                            renderTierCards(); renderInventory(); renderImpactPreview(); renderFusionSection();
-                        },
-                        onError: (error) => {
-                            if (!error.cancelled && error.type !== 'user_rejected') {
-                                showToast("Split failed: " + (error.message || 'Unknown'), "error");
-                            }
-                        }
-                    });
-                }
+                    }
+                });
             } finally { isTransactionInProgress = false; }
             return;
         }
@@ -1405,37 +1713,9 @@ function setupEventListeners() {
                 }
             } finally {
                 isTransactionInProgress = false;
-                // Delayed refresh as safety net
-                setTimeout(async () => {
-                    try {
-                        invalidateAllPoolCaches();
-                        await Promise.all([loadMyBoostersFromAPI(true), loadAllPoolsData()]);
-                        renderTierCards();
-                        renderInventory();
-                        renderImpactPreview();
-                        renderFusionSection();
-                        loadTradeHistory();
-                    } catch (err) {
-                        console.warn('[NFT Market] Post-tx refresh failed:', err.message);
-                    }
-                }, 2000);
             }
         }
     });
 
-    // Split target tier change → update fee estimate
-    container.addEventListener('change', async (e) => {
-        const select = e.target.closest('.nft-split-select');
-        if (!select) return;
-        const tokenId = select.dataset.splitTokenid;
-        const sourceTier = Number(select.dataset.splitSource);
-        const targetTier = Number(select.value);
-        const feeEl = document.getElementById(`split-fee-${tokenId}`);
-        if (!feeEl) return;
-        try {
-            feeEl.textContent = 'Fee: ...';
-            const fee = await FusionTx.getEstimatedMultiSplitFee(sourceTier, targetTier);
-            feeEl.textContent = `Fee: ${Number(ethers.formatEther(fee)).toFixed(6)} ETH`;
-        } catch { feeEl.textContent = 'Fee: N/A'; }
-    });
+    // (Split target selection is now handled via click handlers above)
 }
