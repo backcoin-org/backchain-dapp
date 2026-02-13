@@ -1,19 +1,19 @@
 // pages/StorePage.js
-// ✅ PRODUCTION V6.8 - NFT Burn Rate System (4 Tiers)
+// ✅ PRODUCTION V13.0 — Card-Based NFT Marketplace + Tutor Integration
+// ═══════════════════════════════════════════════════════════════════════════════
+//                          BACKCHAIN PROTOCOL
+//                    NFT Market — Buy & Sell Booster NFTs
+// ═══════════════════════════════════════════════════════════════════════════════
 //
-// V6.8 Changes:
-// - Updated to 4 tiers: Diamond (50%), Gold (40%), Silver (25%), Bronze (10%)
-// - Shows "keep rate" instead of boost percentage (what user receives)
-// - Positive messaging: "Keep 100%" instead of "50% boost"
-// - Tier display shows emoji and keep rate
+// V13.0 Changes:
+// - Complete redesign: DEX swap → 4-tier card marketplace
+// - All 4 pools load in parallel (no tier selector tab switching)
+// - Tutor system integration (banner + reward impact preview)
+// - Inventory open by default with rental links
+// - CSS variables design system matching StakingPage
 //
-// V12.1 Changes:
-// - Added auto-refresh in finally block (2s after any transaction)
-// - Ensures UI updates even if onSuccess callback fails
-//
-// V12.0 Changes:
-// - Removed 2-second throttle for instant tier switching
-// - Added pool data cache (30s TTL) to avoid redundant contract calls
+// Website: https://backcoin.org
+// ═══════════════════════════════════════════════════════════════════════════════
 
 const ethers = window.ethers;
 
@@ -22,63 +22,38 @@ import { loadUserData, loadMyBoostersFromAPI, loadRentalListings, safeContractCa
 import { formatBigNumber, renderNoData } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
 import { boosterTiers, addresses, nftPoolABI, ipfsGateway, getTierByBoost, getKeepRateFromBoost } from '../config.js';
-
-// V10: Import new transaction module
 import { NftTx } from '../modules/transactions/index.js';
 
 // ============================================================================
 // CONSTANTS
 // ============================================================================
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
-const POOL_CACHE_TTL = 30000; // V12: 30 seconds cache for pool data
+const POOL_CACHE_TTL = 30000;
 
-// ============================================================================
-// TIER CONFIGURATION - V6.8 (4 TIERS)
-// ============================================================================
 const TIER_CONFIG = {
     'Diamond': {
-        color: '#22d3ee',
-        gradient: 'from-cyan-500/20 to-blue-500/20',
-        border: 'border-cyan-500/40',
-        text: 'text-cyan-400',
-        glow: 'shadow-cyan-500/30',
-        icon: '💎',
-        image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeicgip72jcqgsirlrhn3tq5cc226vmko6etnndzl6nlhqrktfikafq',
-        keepRate: 100,
-        recycleRate: 0
+        color: '#22d3ee', border: 'rgba(34,211,238,0.4)', bg: 'rgba(34,211,238,0.06)',
+        gradient: 'linear-gradient(135deg, rgba(34,211,238,0.12), rgba(59,130,246,0.08))',
+        icon: '💎', keepRate: 100, recycleRate: 0,
+        image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeicgip72jcqgsirlrhn3tq5cc226vmko6etnndzl6nlhqrktfikafq'
     },
     'Gold': {
-        color: '#fbbf24',
-        gradient: 'from-yellow-500/20 to-amber-500/20',
-        border: 'border-yellow-500/40',
-        text: 'text-yellow-400',
-        glow: 'shadow-yellow-500/30',
-        icon: '🥇',
-        image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeifponccrbicg2pcjrn2hrfoqgc77xhm2r4ld7hdpw6cxxkbsckf44',
-        keepRate: 80,
-        recycleRate: 20
+        color: '#fbbf24', border: 'rgba(251,191,36,0.4)', bg: 'rgba(251,191,36,0.06)',
+        gradient: 'linear-gradient(135deg, rgba(251,191,36,0.12), rgba(217,119,6,0.08))',
+        icon: '🥇', keepRate: 80, recycleRate: 20,
+        image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeifponccrbicg2pcjrn2hrfoqgc77xhm2r4ld7hdpw6cxxkbsckf44'
     },
     'Silver': {
-        color: '#9ca3af',
-        gradient: 'from-gray-400/20 to-slate-400/20',
-        border: 'border-gray-400/40',
-        text: 'text-gray-300',
-        glow: 'shadow-gray-400/30',
-        icon: '🥈',
-        image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeihvi2inujm5zpi7tl667g4srq273536pjkglwyrtbwmgnskmu7jg4',
-        keepRate: 70,
-        recycleRate: 30
+        color: '#9ca3af', border: 'rgba(156,163,175,0.4)', bg: 'rgba(156,163,175,0.06)',
+        gradient: 'linear-gradient(135deg, rgba(156,163,175,0.12), rgba(100,116,139,0.08))',
+        icon: '🥈', keepRate: 70, recycleRate: 30,
+        image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeihvi2inujm5zpi7tl667g4srq273536pjkglwyrtbwmgnskmu7jg4'
     },
     'Bronze': {
-        color: '#f97316',
-        gradient: 'from-orange-600/20 to-amber-700/20',
-        border: 'border-orange-600/40',
-        text: 'text-orange-400',
-        glow: 'shadow-orange-500/30',
-        icon: '🥉',
-        image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeiclqidb67rt3tchhjpsib62s624li7j2bpxnr6b5w5mfp4tomhu7m',
-        keepRate: 60,
-        recycleRate: 40
+        color: '#f97316', border: 'rgba(249,115,22,0.4)', bg: 'rgba(249,115,22,0.06)',
+        gradient: 'linear-gradient(135deg, rgba(249,115,22,0.12), rgba(180,83,9,0.08))',
+        icon: '🥉', keepRate: 60, recycleRate: 40,
+        image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeiclqidb67rt3tchhjpsib62s624li7j2bpxnr6b5w5mfp4tomhu7m'
     }
 };
 
@@ -89,27 +64,16 @@ function getTierStyle(tierName) {
 // ============================================================================
 // LOCAL STATE
 // ============================================================================
-const TradeState = {
-    tradeDirection: 'buy',
-    selectedPoolBoostBips: null,
-    buyPrice: 0n,
-    sellPrice: 0n,
-    netSellPrice: 0n,
-    poolNFTCount: 0,
-    userBalanceOfSelectedNFT: 0,
-    availableToSellCount: 0,
-    firstAvailableTokenId: null,
-    firstAvailableTokenIdForBuy: null,
-    bestBoosterTokenId: 0n,
-    bestBoosterBips: 0,
-    isDataLoading: false,
-    tradeHistory: []
-};
-
+const poolDataMap = new Map(); // boostBips → { buyPrice, sellPrice, netSellPrice, poolNFTCount, ... }
 const poolAddressCache = new Map();
-const poolDataCache = new Map(); // V12: Cache pool data
+const poolDataCache = new Map();
+
 let isTransactionInProgress = false;
-let currentLoadingRequest = null; // V12: Track current request to cancel stale ones
+let tradeHistory = [];
+let userTutor = null;
+let hasTutor = false;
+let userBestBoost = 0;
+let currentHistoryFilter = 'ALL';
 
 const factoryABI = [
     "function getPoolAddress(uint256 boostBips) view returns (address)",
@@ -119,29 +83,17 @@ const factoryABI = [
 // ============================================================================
 // HELPERS
 // ============================================================================
-function buildImageUrl(ipfsIoUrl) {
-    if (!ipfsIoUrl) return './assets/bkc_logo_3d.png';
-    if (ipfsIoUrl.startsWith('https://') || ipfsIoUrl.startsWith('http://')) return ipfsIoUrl;
-    if (ipfsIoUrl.includes('ipfs.io/ipfs/')) return `${ipfsGateway}${ipfsIoUrl.split('ipfs.io/ipfs/')[1]}`;
-    if (ipfsIoUrl.startsWith('ipfs://')) return `${ipfsGateway}${ipfsIoUrl.substring(7)}`;
-    return ipfsIoUrl;
-}
-
 function formatDate(timestamp) {
     if (!timestamp) return '';
     try {
         const secs = timestamp.seconds || timestamp._seconds || (new Date(timestamp).getTime() / 1000);
-        const date = new Date(secs * 1000);
-        return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-    } catch (e) { return ''; }
+        return new Date(secs * 1000).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch { return ''; }
 }
 
-// V12: Pool data cache functions
 function getCachedPoolData(boostBips) {
     const cached = poolDataCache.get(boostBips);
-    if (cached && (Date.now() - cached.timestamp < POOL_CACHE_TTL)) {
-        return cached.data;
-    }
+    if (cached && (Date.now() - cached.timestamp < POOL_CACHE_TTL)) return cached.data;
     return null;
 }
 
@@ -149,691 +101,713 @@ function setCachedPoolData(boostBips, data) {
     poolDataCache.set(boostBips, { data, timestamp: Date.now() });
 }
 
-function invalidatePoolCache(boostBips) {
-    poolDataCache.delete(boostBips);
+function invalidateAllPoolCaches() {
+    poolDataCache.clear();
 }
 
 // ============================================================================
-// INJECT STYLES
+// CSS INJECTION
 // ============================================================================
 function injectStyles() {
-    if (document.getElementById('swap-styles-v9')) return;
-    
+    if (document.getElementById('nft-styles-v13')) return;
     const style = document.createElement('style');
-    style.id = 'swap-styles-v9';
+    style.id = 'nft-styles-v13';
     style.textContent = `
-        /* Trade Image Animations */
-        @keyframes trade-float {
-            0%, 100% { transform: translateY(0) rotate(-1deg); }
-            50% { transform: translateY(-8px) rotate(1deg); }
+        .nft-shell {
+            --nft-bg: #0c0c0e;
+            --nft-surface: #141417;
+            --nft-surface-2: #1c1c21;
+            --nft-surface-3: #222228;
+            --nft-border: rgba(255,255,255,0.06);
+            --nft-border-h: rgba(255,255,255,0.12);
+            --nft-text: #f0f0f2;
+            --nft-text-2: #a0a0ab;
+            --nft-text-3: #5c5c68;
+            --nft-accent: #f59e0b;
+            --nft-green: #4ade80;
+            --nft-purple: #a78bfa;
+            --nft-cyan: #22d3ee;
+            --nft-red: #ef4444;
+            --nft-radius: 16px;
+            --nft-radius-sm: 10px;
+            --nft-tr: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        @keyframes trade-pulse {
-            0%, 100% { filter: drop-shadow(0 0 15px rgba(34,197,94,0.3)); }
-            50% { filter: drop-shadow(0 0 30px rgba(34,197,94,0.6)); }
+
+        @keyframes nft-fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes nft-scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes nft-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+        @keyframes nft-shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+        @keyframes nft-success { 0% { transform: scale(1); } 50% { transform: scale(1.08); } 100% { transform: scale(1); } }
+
+        .nft-shell { max-width: 960px; margin: 0 auto; padding: 0 16px 40px; animation: nft-fadeIn 0.4s ease-out; }
+
+        /* Header */
+        .nft-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+        .nft-header-left { display: flex; align-items: center; gap: 14px; }
+        .nft-header-icon {
+            width: 48px; height: 48px; border-radius: var(--nft-radius);
+            background: linear-gradient(135deg, rgba(245,158,11,0.15), rgba(217,119,6,0.1));
+            border: 1px solid rgba(245,158,11,0.2);
+            display: flex; align-items: center; justify-content: center;
+            animation: nft-float 4s ease-in-out infinite;
         }
-        @keyframes trade-buy {
-            0%, 100% { filter: drop-shadow(0 0 20px rgba(34,197,94,0.4)); transform: scale(1); }
-            50% { filter: drop-shadow(0 0 40px rgba(34,197,94,0.7)); transform: scale(1.05); }
+        .nft-header-icon i { font-size: 20px; color: var(--nft-accent); }
+        .nft-header-title { font-size: 20px; font-weight: 800; color: var(--nft-text); }
+        .nft-header-sub { font-size: 11px; color: var(--nft-text-3); }
+        .nft-refresh-btn {
+            width: 40px; height: 40px; border-radius: var(--nft-radius-sm);
+            background: var(--nft-surface); border: 1px solid var(--nft-border);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all var(--nft-tr); color: var(--nft-text-3);
         }
-        @keyframes trade-sell {
-            0%, 100% { filter: drop-shadow(0 0 20px rgba(239,68,68,0.4)); transform: scale(1); }
-            50% { filter: drop-shadow(0 0 40px rgba(239,68,68,0.7)); transform: scale(1.05); }
+        .nft-refresh-btn:hover { color: var(--nft-text); border-color: var(--nft-border-h); }
+
+        /* Tutor Banner */
+        .nft-tutor-banner {
+            display: flex; align-items: center; gap: 8px;
+            padding: 10px 14px; border-radius: var(--nft-radius-sm);
+            margin-bottom: 14px; font-size: 11px; font-weight: 600;
+            animation: nft-fadeIn 0.4s ease-out;
         }
-        @keyframes trade-spin {
-            0% { transform: rotateY(0deg); }
-            100% { transform: rotateY(360deg); }
+        .nft-tutor-banner a { color: var(--nft-accent); text-decoration: none; font-weight: 700; margin-left: 4px; }
+        .nft-tutor-banner a:hover { text-decoration: underline; }
+
+        /* Tier Cards Grid */
+        .nft-tier-grid {
+            display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
+            margin-bottom: 14px;
         }
-        @keyframes trade-success {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.2); filter: drop-shadow(0 0 50px rgba(34,197,94,0.9)); }
-            100% { transform: scale(1); }
+        .nft-tier-card {
+            position: relative; overflow: hidden;
+            background: var(--nft-surface);
+            border: 1px solid var(--nft-border);
+            border-radius: var(--nft-radius);
+            padding: 16px;
+            transition: all var(--nft-tr);
+            animation: nft-scaleIn 0.5s ease-out both;
         }
-        .trade-float { animation: trade-float 4s ease-in-out infinite; }
-        .trade-pulse { animation: trade-pulse 2s ease-in-out infinite; }
-        .trade-buy { animation: trade-buy 2s ease-in-out infinite; }
-        .trade-sell { animation: trade-sell 2s ease-in-out infinite; }
-        .trade-spin { animation: trade-spin 1.5s ease-in-out; }
-        .trade-success { animation: trade-success 0.8s ease-out; }
-        
-        .swap-container {
-            font-family: 'Inter', -apple-system, sans-serif;
+        .nft-tier-card:nth-child(1) { animation-delay: 0s; }
+        .nft-tier-card:nth-child(2) { animation-delay: 0.05s; }
+        .nft-tier-card:nth-child(3) { animation-delay: 0.1s; }
+        .nft-tier-card:nth-child(4) { animation-delay: 0.15s; }
+        .nft-tier-card:hover { border-color: var(--nft-border-h); }
+        .nft-tier-card.nft-user-tier { box-shadow: 0 0 20px rgba(245,158,11,0.1); }
+        .nft-user-badge {
+            position: absolute; top: 8px; right: 8px;
+            padding: 2px 8px; border-radius: 10px; font-size: 8px; font-weight: 800;
+            text-transform: uppercase; letter-spacing: 0.05em;
+            background: var(--nft-accent); color: #000;
         }
-        
-        .swap-card {
-            background: linear-gradient(180deg, rgba(24,24,27,0.95) 0%, rgba(9,9,11,0.98) 100%);
-            border: 1px solid rgba(63,63,70,0.5);
-            backdrop-filter: blur(20px);
+
+        .nft-tier-top { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+        .nft-tier-img {
+            width: 48px; height: 48px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            overflow: hidden; flex-shrink: 0;
         }
-        
-        .tier-chip {
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        .nft-tier-img img { width: 100%; height: 100%; object-contain: cover; }
+        .nft-tier-name { font-size: 16px; font-weight: 800; }
+        .nft-keep-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 8px;
+            font-size: 10px; font-weight: 700; margin-top: 2px;
         }
-        
-        .tier-chip:hover {
-            transform: translateY(-2px);
+
+        .nft-tier-prices { margin-bottom: 10px; }
+        .nft-price-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 4px 0; font-size: 11px;
         }
-        
-        .tier-chip.active {
-            transform: scale(1.02);
-            box-shadow: 0 0 20px rgba(139,92,246,0.3);
+        .nft-price-label { color: var(--nft-text-3); display: flex; align-items: center; gap: 4px; }
+        .nft-price-val { font-weight: 700; font-family: 'SF Mono', monospace; font-size: 12px; }
+
+        .nft-tier-stats {
+            display: flex; justify-content: space-between;
+            padding: 6px 0; margin-bottom: 10px;
+            border-top: 1px solid var(--nft-border); border-bottom: 1px solid var(--nft-border);
         }
-        
-        .swap-input-box {
-            background: rgba(39,39,42,0.5);
-            border: 1px solid rgba(63,63,70,0.4);
-            transition: all 0.2s ease;
+        .nft-tier-stat { text-align: center; flex: 1; }
+        .nft-tier-stat-label { font-size: 8px; color: var(--nft-text-3); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+        .nft-tier-stat-val { font-size: 13px; font-weight: 800; }
+
+        .nft-tier-actions { display: flex; gap: 6px; }
+        .nft-action-btn {
+            flex: 1; padding: 8px; font-size: 11px; font-weight: 700;
+            border-radius: 8px; border: none; cursor: pointer;
+            transition: all var(--nft-tr); display: flex; align-items: center;
+            justify-content: center; gap: 4px;
         }
-        
-        .swap-input-box:hover {
-            border-color: rgba(113,113,122,0.5);
+        .nft-action-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        .nft-action-btn:not(:disabled):hover { transform: translateY(-1px); filter: brightness(1.1); }
+        .nft-buy-btn { background: linear-gradient(135deg, #22c55e, #10b981); color: white; }
+        .nft-sell-btn { background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; }
+
+        /* Impact Card */
+        .nft-impact {
+            background: var(--nft-surface);
+            border: 1px solid var(--nft-border);
+            border-radius: var(--nft-radius);
+            padding: 16px; margin-bottom: 14px;
+            animation: nft-fadeIn 0.5s ease-out 0.2s both;
         }
-        
-        .swap-input-box.active {
-            border-color: rgba(245,158,11,0.5);
-            background: rgba(39,39,42,0.7);
+        .nft-impact-title { font-size: 12px; font-weight: 700; color: var(--nft-text); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+        .nft-impact-title i { color: var(--nft-text-3); font-size: 11px; }
+        .nft-impact-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
         }
-        
-        .swap-arrow-btn {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        .nft-impact-item {
+            text-align: center; padding: 8px 4px;
+            background: var(--nft-surface-2); border-radius: 8px;
         }
-        
-        .swap-arrow-btn:hover {
-            transform: rotate(180deg);
-            background: rgba(63,63,70,0.8);
+        .nft-impact-num { font-size: 16px; font-weight: 800; }
+        .nft-impact-label { font-size: 8px; color: var(--nft-text-3); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; margin-top: 2px; }
+        .nft-impact-cta { margin-top: 8px; font-size: 10px; }
+        .nft-impact-cta a { color: var(--nft-accent); text-decoration: none; font-weight: 700; cursor: pointer; }
+        .nft-impact-cta a:hover { text-decoration: underline; }
+
+        /* Card Base */
+        .nft-card {
+            background: var(--nft-surface); border: 1px solid var(--nft-border);
+            border-radius: var(--nft-radius); margin-bottom: 14px;
+            animation: nft-fadeIn 0.5s ease-out 0.25s both;
         }
-        
-        .swap-btn {
-            transition: all 0.2s ease;
+        .nft-card-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 16px; cursor: pointer; transition: background var(--nft-tr);
         }
-        
-        .swap-btn:not(:disabled):hover {
-            transform: translateY(-1px);
-            box-shadow: 0 10px 40px -10px currentColor;
+        .nft-card-header:hover { background: var(--nft-surface-2); }
+        .nft-card-title { font-size: 13px; font-weight: 700; color: var(--nft-text); display: flex; align-items: center; gap: 8px; }
+        .nft-card-title i { color: var(--nft-text-3); font-size: 11px; }
+        .nft-card-badge { font-size: 10px; background: var(--nft-surface-3); padding: 2px 8px; border-radius: 10px; color: var(--nft-text-3); }
+        .nft-card-chevron { color: var(--nft-text-3); font-size: 10px; transition: transform var(--nft-tr); }
+
+        .nft-card-body { padding: 0 16px 16px; }
+
+        /* Inventory */
+        .nft-inv-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+        .nft-inv-item {
+            position: relative; padding: 8px; border-radius: 10px;
+            background: var(--nft-surface-2); border: 1px solid transparent;
+            transition: all var(--nft-tr); cursor: default;
         }
-        
-        .swap-btn:not(:disabled):active {
-            transform: translateY(0);
+        .nft-inv-item:hover { border-color: var(--nft-border-h); background: var(--nft-surface-3); }
+        .nft-inv-img {
+            width: 100%; aspect-ratio: 1; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            overflow: hidden; margin-bottom: 4px;
         }
-        
-        .token-selector {
-            background: rgba(39,39,42,0.8);
-            border: 1px solid rgba(63,63,70,0.5);
-            transition: all 0.2s ease;
+        .nft-inv-img img { width: 100%; height: 100%; object-fit: contain; }
+        .nft-inv-status {
+            position: absolute; top: 4px; right: 4px;
+            padding: 1px 5px; border-radius: 6px; font-size: 7px; font-weight: 800;
         }
-        
-        .token-selector:hover {
-            background: rgba(63,63,70,0.8);
-            border-color: rgba(113,113,122,0.5);
+        .nft-inv-name { font-size: 9px; text-align: center; font-weight: 700; }
+        .nft-inv-id { font-size: 8px; text-align: center; color: var(--nft-text-3); }
+        .nft-inv-rent {
+            display: block; text-align: center; font-size: 8px; font-weight: 700;
+            color: var(--nft-accent); margin-top: 2px; text-decoration: none; cursor: pointer;
         }
-        
-        .inventory-item {
-            transition: all 0.2s ease;
+        .nft-inv-rent:hover { text-decoration: underline; }
+
+        /* History */
+        .nft-hist-list { display: flex; flex-direction: column; gap: 4px; max-height: 300px; overflow-y: auto; }
+        .nft-hist-list::-webkit-scrollbar { width: 4px; }
+        .nft-hist-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
+        .nft-hist-item {
+            display: flex; align-items: center; justify-content: space-between; gap: 8px;
+            padding: 8px 10px; background: var(--nft-surface-2);
+            border: 1px solid transparent; border-radius: 8px;
+            transition: all var(--nft-tr); text-decoration: none;
         }
-        
-        .inventory-item:hover {
-            transform: scale(1.05);
-            border-color: rgba(245,158,11,0.5);
+        .nft-hist-item:hover { background: var(--nft-surface-3); border-color: var(--nft-border-h); }
+        .nft-hist-icon {
+            width: 32px; height: 32px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 12px;
         }
-        
-        .history-item {
-            transition: all 0.2s ease;
-        }
-        
-        .history-item:hover {
-            background: rgba(63,63,70,0.5) !important;
-            transform: translateX(4px);
-        }
-        
-        @keyframes shimmer {
-            0% { background-position: -200% 0; }
-            100% { background-position: 200% 0; }
-        }
-        
-        .skeleton {
-            background: linear-gradient(90deg, rgba(39,39,42,0.5) 25%, rgba(63,63,70,0.5) 50%, rgba(39,39,42,0.5) 75%);
-            background-size: 200% 100%;
-            animation: shimmer 1.5s infinite;
-        }
-        
-        .fade-in {
-            animation: fadeIn 0.3s ease forwards;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(8px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .custom-scroll::-webkit-scrollbar {
-            width: 4px;
-            height: 4px;
-        }
-        .custom-scroll::-webkit-scrollbar-track {
-            background: rgba(39,39,42,0.3);
-        }
-        .custom-scroll::-webkit-scrollbar-thumb {
-            background: rgba(113,113,122,0.5);
-            border-radius: 2px;
-        }
-        
-        /* Tier Grid - Responsive */
-        .tier-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 0.5rem;
-        }
-        
-        @media (max-width: 400px) {
-            .tier-grid {
-                grid-template-columns: repeat(3, 1fr);
-            }
+        .nft-hist-info { flex: 1; min-width: 0; }
+        .nft-hist-label { font-size: 11px; font-weight: 600; color: var(--nft-text); }
+        .nft-hist-date { font-size: 9px; color: var(--nft-text-3); margin-top: 1px; }
+        .nft-hist-amount { font-size: 11px; font-weight: 600; font-family: 'SF Mono', monospace; }
+
+        /* Empty / Loading */
+        .nft-empty { text-align: center; padding: 24px 16px; }
+        .nft-empty i { font-size: 20px; color: var(--nft-text-3); margin-bottom: 6px; display: block; }
+        .nft-empty p { font-size: 11px; color: var(--nft-text-3); }
+        .nft-loading { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px; }
+        .nft-loading-icon { width: 32px; height: 32px; opacity: 0.3; animation: nft-float 2s ease-in-out infinite; }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+            .nft-shell { padding: 0 10px 30px; }
+            .nft-tier-grid { grid-template-columns: 1fr; }
+            .nft-impact-grid { grid-template-columns: repeat(2, 1fr); }
+            .nft-inv-grid { grid-template-columns: repeat(3, 1fr); }
         }
     `;
     document.head.appendChild(style);
 }
 
 // ============================================================================
-// LOADING STATES
-// ============================================================================
-function renderLoading() {
-    return `
-        <div class="flex flex-col items-center justify-center py-12">
-            <div class="relative w-16 h-16">
-                <div class="absolute inset-0 rounded-full border-2 border-zinc-700"></div>
-                <div class="absolute inset-0 rounded-full border-2 border-transparent border-t-purple-500 animate-spin"></div>
-                <div class="absolute inset-2 rounded-full bg-zinc-800 flex items-center justify-center">
-                    <i class="fa-solid fa-gem text-xl text-purple-400"></i>
-                </div>
-            </div>
-            <p class="text-zinc-500 text-xs mt-4">Loading pool...</p>
-        </div>
-    `;
-}
-
-// ============================================================================
-// MAIN RENDER
+// RENDER
 // ============================================================================
 export const StorePage = {
     async render(isNewPage) {
         injectStyles();
         await loadSystemDataFromAPI();
-        
+
         const container = document.getElementById('store');
         if (!container) return;
 
         if (container.innerHTML.trim() === '' || isNewPage) {
             container.innerHTML = `
-                <div class="swap-container max-w-lg mx-auto py-6 px-4">
-                    
-                    <!-- Header with NFT Icon -->
-                    <div class="flex justify-between items-center mb-6">
-                        <div class="flex items-center gap-3">
-                            <div class="w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden"
-                                 id="trade-mascot">
-                                <img src="${TIER_CONFIG['Diamond'].image}" alt="NFT" class="w-full h-full object-contain" onerror="this.outerHTML='<span class=\\'text-3xl\\'>💎</span>'">
-                            </div>
+                <div class="nft-shell">
+
+                    <!-- HEADER -->
+                    <div class="nft-header">
+                        <div class="nft-header-left">
+                            <div class="nft-header-icon"><i class="fa-solid fa-gem"></i></div>
                             <div>
-                                <h1 class="text-lg font-semibold text-white">NFT Market</h1>
-                                <p class="text-xs text-zinc-500">Keep up to 100% of rewards</p>
+                                <div class="nft-header-title">NFT Market</div>
+                                <div class="nft-header-sub">Buy NFTs to keep more staking rewards. NFT + Tutor = max earnings</div>
                             </div>
                         </div>
-                        <button id="refresh-btn" class="w-8 h-8 rounded-lg bg-zinc-800/50 hover:bg-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-colors">
-                            <i class="fa-solid fa-rotate text-xs"></i>
-                        </button>
+                        <button id="nft-refresh-btn" class="nft-refresh-btn"><i class="fa-solid fa-rotate"></i></button>
                     </div>
-                    
-                    <!-- Main Swap Card -->
-                    <div class="swap-card rounded-2xl p-4 mb-4">
-                        
-                        <!-- Tier Selector - GRID Layout V6.8 -->
-                        <div class="mb-4">
-                            <p class="text-xs text-zinc-500 mb-2">Select NFT Tier (Higher = Keep More Rewards)</p>
-                            <div id="tier-selector" class="tier-grid">
-                                ${renderTierChips()}
+
+                    <!-- TUTOR BANNER -->
+                    <div id="nft-tutor-banner"></div>
+
+                    <!-- TIER CARDS GRID -->
+                    <div id="nft-tier-grid" class="nft-tier-grid">
+                        ${boosterTiers.map(() => `
+                            <div class="nft-tier-card" style="min-height:200px">
+                                <div class="nft-loading">
+                                    <img src="./assets/bkc_logo_3d.png" class="nft-loading-icon" alt="">
+                                    <span style="font-size:10px;color:var(--nft-text-3)">Loading...</span>
+                                </div>
                             </div>
-                        </div>
-                        
-                        <!-- Swap Interface -->
-                        <div id="swap-interface">
-                            ${renderLoading()}
-                        </div>
-                        
+                        `).join('')}
                     </div>
-                    
-                    <!-- My NFTs (Collapsible) -->
-                    <div class="swap-card rounded-2xl overflow-hidden mb-4">
-                        <button id="inventory-toggle" class="w-full flex justify-between items-center p-4 hover:bg-zinc-800/30 transition-colors">
-                            <div class="flex items-center gap-2">
-                                <i class="fa-solid fa-wallet text-amber-500 text-sm"></i>
-                                <span class="text-sm font-medium text-white">My NFTs</span>
-                                <span id="nft-count" class="text-xs bg-zinc-700 px-2 py-0.5 rounded-full text-zinc-300">0</span>
+
+                    <!-- REWARD IMPACT PREVIEW -->
+                    <div id="nft-impact"></div>
+
+                    <!-- MY NFTs INVENTORY (open by default) -->
+                    <div class="nft-card">
+                        <div id="nft-inv-toggle" class="nft-card-header">
+                            <div class="nft-card-title">
+                                <i class="fa-solid fa-wallet"></i> My NFTs
+                                <span id="nft-inv-count" class="nft-card-badge">0</span>
                             </div>
-                            <i id="inventory-chevron" class="fa-solid fa-chevron-down text-zinc-500 text-xs transition-transform"></i>
-                        </button>
-                        <div id="inventory-panel" class="hidden border-t border-zinc-800">
-                            <div id="inventory-grid" class="p-4 grid grid-cols-4 gap-2 max-h-[200px] overflow-y-auto custom-scroll">
-                                ${renderNoData("No NFTs")}
+                            <i id="nft-inv-chevron" class="fa-solid fa-chevron-down nft-card-chevron" style="transform:rotate(180deg)"></i>
+                        </div>
+                        <div id="nft-inv-body" class="nft-card-body">
+                            <div id="nft-inv-grid" class="nft-inv-grid">
+                                <div class="nft-empty" style="grid-column:1/-1"><i class="fa-solid fa-gem"></i><p>Loading...</p></div>
                             </div>
                         </div>
                     </div>
-                    
-                    <!-- Trade History (Collapsible) - OPEN by default -->
-                    <div class="swap-card rounded-2xl overflow-hidden">
-                        <button id="history-toggle" class="w-full flex justify-between items-center p-4 hover:bg-zinc-800/30 transition-colors">
-                            <div class="flex items-center gap-2">
-                                <i class="fa-solid fa-clock-rotate-left text-green-500 text-sm"></i>
-                                <span class="text-sm font-medium text-white">Trade History</span>
-                                <span id="history-count" class="text-xs bg-zinc-700 px-2 py-0.5 rounded-full text-zinc-300">0</span>
+
+                    <!-- TRADE HISTORY (open by default) -->
+                    <div class="nft-card">
+                        <div id="nft-hist-toggle" class="nft-card-header">
+                            <div class="nft-card-title">
+                                <i class="fa-solid fa-clock-rotate-left"></i> Trade History
+                                <span id="nft-hist-count" class="nft-card-badge">0</span>
                             </div>
-                            <i id="history-chevron" class="fa-solid fa-chevron-down text-zinc-500 text-xs transition-transform" style="transform: rotate(180deg)"></i>
-                        </button>
-                        <div id="history-panel" class="border-t border-zinc-800">
-                            <div id="history-list" class="p-4 space-y-2 max-h-[300px] overflow-y-auto custom-scroll">
-                                <div class="text-center py-4 text-xs text-zinc-600">Loading history...</div>
+                            <i id="nft-hist-chevron" class="fa-solid fa-chevron-down nft-card-chevron" style="transform:rotate(180deg)"></i>
+                        </div>
+                        <div id="nft-hist-body" class="nft-card-body">
+                            <div id="nft-hist-list" class="nft-hist-list">
+                                <div class="nft-loading">
+                                    <img src="./assets/bkc_logo_3d.png" class="nft-loading-icon" alt="">
+                                    <span style="font-size:10px;color:var(--nft-text-3)">Loading...</span>
+                                </div>
                             </div>
                         </div>
                     </div>
-                    
+
                 </div>
             `;
 
             setupEventListeners();
         }
 
-        if (TradeState.selectedPoolBoostBips === null && boosterTiers.length > 0) {
-            TradeState.selectedPoolBoostBips = boosterTiers[0].boostBips;
-        }
-
-        await loadDataForSelectedPool();
-        await loadTradeHistory();
+        await loadAllData();
     },
 
     async update() {
-        if (TradeState.selectedPoolBoostBips !== null && !TradeState.isDataLoading) {
-            const container = document.getElementById('store');
-            if (container && !document.hidden) {
-                await loadDataForSelectedPool();
-            }
+        const container = document.getElementById('store');
+        if (container && !document.hidden) {
+            await loadAllData();
         }
     }
 };
 
 // ============================================================================
-// TRADE HISTORY - IMPROVED
+// DATA LOADING
 // ============================================================================
-async function loadTradeHistory() {
-    const container = document.getElementById('history-list');
-    
-    if (!State.userAddress) {
-        if (container) {
-            container.innerHTML = `<div class="text-center py-4 text-xs text-zinc-600">Connect wallet to view history</div>`;
-        }
-        return;
-    }
-    
+async function loadAllData() {
     try {
-        const endpoint = API_ENDPOINTS.getHistory || 'https://gethistory-4wvdcuoouq-uc.a.run.app';
-        const response = await fetch(`${endpoint}/${State.userAddress}`);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        // Debug: mostrar todos os tipos de transação
-        console.log("All history types:", [...new Set((data || []).map(item => item.type))]);
-        
-        // Filtro RESTRITO - APENAS compra e venda de NFT
-        TradeState.tradeHistory = (data || []).filter(item => {
-            const t = (item.type || '').toUpperCase();
-            
-            // APENAS estes tipos específicos de trade de NFT
-            return t === 'NFTBOUGHT' || 
-                   t === 'NFTSOLD' ||
-                   t === 'NFT_BOUGHT' ||
-                   t === 'NFT_SOLD' ||
-                   t === 'NFTPURCHASED' ||
-                   t === 'NFT_PURCHASED' ||
-                   t.includes('NFTBOUGHT') ||
-                   t.includes('NFTSOLD') ||
-                   t.includes('NFTPURCHASED');
+        // Load tutor + NFT data + user data in parallel
+        await Promise.all([
+            loadTutorData(),
+            loadMyBoostersFromAPI(),
+            loadRentalListings(),
+            loadUserData()
+        ]);
+
+        // Determine user's best boost
+        const boosters = State.myBoosters || [];
+        userBestBoost = 0;
+        boosters.forEach(nft => {
+            const b = Number(nft.boostBips);
+            if (b > userBestBoost) userBestBoost = b;
         });
-        
-        console.log("NFT trade history:", TradeState.tradeHistory.length, "items");
-        
-        // Update count badge
-        const countEl = document.getElementById('history-count');
-        if (countEl) countEl.textContent = TradeState.tradeHistory.length;
-        
-        renderTradeHistory();
-        
+
+        // Load all 4 pool data in parallel
+        await loadAllPoolsData();
+
+        // Render everything
+        renderTutorBanner();
+        renderTierCards();
+        renderImpactPreview();
+        renderInventory();
+        loadTradeHistory();
     } catch (e) {
-        console.error('History load error:', e);
-        // Mesmo com erro, renderizar estado vazio
-        TradeState.tradeHistory = [];
-        renderTradeHistory();
+        console.error('NFT Market data load error:', e);
     }
 }
 
-function renderTradeHistory() {
-    const container = document.getElementById('history-list');
-    if (!container) return;
-
-    if (!State.isConnected) {
-        container.innerHTML = `<div class="text-center py-4 text-xs text-zinc-600">Connect wallet to view history</div>`;
-        return;
-    }
-
-    if (TradeState.tradeHistory.length === 0) {
-        container.innerHTML = `
-            <div class="text-center py-6">
-                <div class="w-12 h-12 mx-auto rounded-full bg-zinc-800/50 flex items-center justify-center mb-2">
-                    <i class="fa-solid fa-receipt text-zinc-600 text-lg"></i>
-                </div>
-                <p class="text-zinc-600 text-xs">No NFT trades yet</p>
-                <p class="text-zinc-700 text-[10px] mt-1">Buy or sell NFTs to see history</p>
-            </div>
-        `;
-        return;
-    }
-
-    container.innerHTML = TradeState.tradeHistory.slice(0, 20).map(item => {
-        const t = (item.type || '').toUpperCase();
-        const details = item.details || {};
-        const dateStr = formatDate(item.timestamp || item.createdAt);
-        
-        // Determinar se é Buy ou Sell
-        const isBuy = t.includes('BOUGHT') || t.includes('PURCHASED');
-        
-        const icon = isBuy ? 'fa-cart-plus' : 'fa-money-bill-transfer';
-        const iconColor = isBuy ? '#22c55e' : '#f59e0b';
-        const bgColor = isBuy ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)';
-        const label = isBuy ? '🛒 Bought NFT' : '💰 Sold NFT';
-        const amountPrefix = isBuy ? '-' : '+';
-
-        const txLink = item.txHash ? `${EXPLORER_TX}${item.txHash}` : '#';
-        
-        // Handle amount safely
-        let amountDisplay = '';
-        try {
-            let rawAmount = item.amount || details.amount || details.price || details.payout || "0";
-            if (typeof rawAmount === 'string' && rawAmount !== "0") {
-                const amountNum = formatBigNumber(BigInt(rawAmount));
-                if (amountNum > 0.001) {
-                    amountDisplay = amountNum.toFixed(2);
-                }
-            }
-        } catch (e) {
-            // Ignore parse errors
+async function loadTutorData() {
+    if (!State.userAddress) { userTutor = null; hasTutor = false; return; }
+    try {
+        const eco = State.ecosystemContractPublic || State.ecosystemContract;
+        if (eco) {
+            const tutor = await safeContractCall(eco, 'tutorOf', [State.userAddress], ethers.ZeroAddress);
+            userTutor = (tutor && tutor !== ethers.ZeroAddress) ? tutor : null;
+            hasTutor = !!userTutor;
         }
-        
-        const tokenId = details.tokenId || '';
-        const boostBips = details.boostBips || details.boost || '';
+    } catch (e) {
+        console.error('Tutor data load error:', e);
+    }
+}
 
-        return `
-            <a href="${txLink}" target="_blank" class="history-item flex items-center justify-between p-3 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-all group bg-zinc-800/20">
-                <div class="flex items-center gap-3">
-                    <div class="w-9 h-9 rounded-lg flex items-center justify-center border border-zinc-700/30" style="background: ${bgColor}">
-                        <i class="fa-solid ${icon} text-sm" style="color: ${iconColor}"></i>
-                    </div>
-                    <div>
-                        <p class="text-white text-xs font-medium">
-                            ${label}
-                            ${tokenId ? `<span class="ml-1 text-[10px] text-amber-400 font-mono">#${tokenId}</span>` : ''}
-                            ${boostBips ? `<span class="ml-1 text-[9px] text-purple-400">+${Number(boostBips)/100}%</span>` : ''}
-                        </p>
-                        <p class="text-zinc-600 text-[10px]">${dateStr}</p>
-                    </div>
-                </div>
-                <div class="flex items-center gap-2">
-                    ${amountDisplay ? `<span class="text-xs font-mono font-bold ${isBuy ? 'text-white' : 'text-green-400'}">${amountPrefix}${amountDisplay} <span class="text-zinc-500">BKC</span></span>` : ''}
-                    <i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-blue-400 text-[9px]"></i>
-                </div>
-            </a>
-        `;
-    }).join('');
+async function loadAllPoolsData() {
+    const promises = boosterTiers.map(tier => loadSinglePoolData(tier));
+    await Promise.allSettled(promises);
+}
+
+async function loadSinglePoolData(tier) {
+    const boostBips = tier.boostBips;
+
+    // Check cache first
+    const cached = getCachedPoolData(boostBips);
+    if (cached) {
+        poolDataMap.set(boostBips, cached);
+        return;
+    }
+
+    const poolKey = `pool_${tier.name.toLowerCase()}`;
+    let poolAddress = addresses[poolKey] || poolAddressCache.get(boostBips);
+
+    if (!poolAddress) {
+        const factoryAddress = addresses.nftPoolFactory || addresses.nftLiquidityPoolFactory;
+        if (factoryAddress && State.publicProvider) {
+            try {
+                const factory = new ethers.Contract(factoryAddress, factoryABI, State.publicProvider);
+                poolAddress = await factory.getPoolAddress(boostBips);
+                if (poolAddress && poolAddress !== ethers.ZeroAddress) {
+                    poolAddressCache.set(boostBips, poolAddress);
+                }
+            } catch (e) {
+                console.warn('Factory lookup failed for', tier.name, e.message);
+            }
+        }
+    }
+
+    if (!poolAddress || poolAddress === ethers.ZeroAddress) {
+        poolDataMap.set(boostBips, { unavailable: true });
+        return;
+    }
+
+    try {
+        const poolContract = new ethers.Contract(poolAddress, nftPoolABI, State.publicProvider);
+
+        const [buyPriceResult, sellPriceResult, availableNFTsResult] = await Promise.all([
+            safeContractCall(poolContract, 'getBuyPrice', [], ethers.MaxUint256).catch(() => ethers.MaxUint256),
+            safeContractCall(poolContract, 'getSellPrice', [], 0n).catch(() => 0n),
+            poolContract.getAvailableNFTs().catch(() => [])
+        ]);
+
+        const availableTokenIds = Array.isArray(availableNFTsResult) ? [...availableNFTsResult] : [];
+        const buyPrice = (buyPriceResult === ethers.MaxUint256) ? 0n : buyPriceResult;
+        const sellPrice = sellPriceResult;
+
+        // Net sell price after tax
+        let baseTaxBips = State.systemFees?.["NFT_POOL_SELL_TAX_BIPS"] || 1000n;
+        const baseTaxBigInt = typeof baseTaxBips === 'bigint' ? baseTaxBips : BigInt(baseTaxBips);
+        const taxAmount = (sellPrice * baseTaxBigInt) / 10000n;
+        const netSellPrice = sellPrice - taxAmount;
+
+        // User NFTs of this tier
+        const userNFTs = State.myBoosters || [];
+        const rentalListings = State.rentalListings || [];
+        const listedTokenIds = new Set(rentalListings.map(l => l.tokenId?.toString()));
+        const nowSec = Math.floor(Date.now() / 1000);
+
+        const userNFTsOfTier = userNFTs.filter(nft => Number(nft.boostBips) === boostBips);
+        const availableNFTsOfTier = userNFTsOfTier.filter(nft => {
+            const tokenIdStr = nft.tokenId?.toString();
+            const listing = rentalListings.find(l => l.tokenId?.toString() === tokenIdStr);
+            const isListed = listedTokenIds.has(tokenIdStr);
+            const isRented = listing && listing.rentalEndTime && Number(listing.rentalEndTime) > nowSec;
+            return !isListed && !isRented;
+        });
+
+        const poolData = {
+            buyPrice, sellPrice, netSellPrice, poolAddress,
+            poolNFTCount: availableTokenIds.length,
+            firstAvailableTokenIdForBuy: availableTokenIds.length > 0 ? BigInt(availableTokenIds[availableTokenIds.length - 1]) : null,
+            userOwned: userNFTsOfTier.length,
+            availableToSell: availableNFTsOfTier.length,
+            firstSellableTokenId: availableNFTsOfTier.length > 0 ? BigInt(availableNFTsOfTier[0].tokenId) : null,
+            unavailable: false
+        };
+
+        setCachedPoolData(boostBips, poolData);
+        poolDataMap.set(boostBips, poolData);
+    } catch (e) {
+        console.warn('Pool data error for', tier.name, e.message);
+        poolDataMap.set(boostBips, { unavailable: true });
+    }
 }
 
 // ============================================================================
-// TIER CHIPS - GRID Layout
+// TUTOR BANNER
 // ============================================================================
-function renderTierChips() {
-    return boosterTiers.map((tier, idx) => {
-        const style = getTierStyle(tier.name);
-        const isFirst = idx === 0;
-        const keepRate = getKeepRateFromBoost(tier.boostBips);
-        const emoji = style.icon || tier.emoji || '💎';
-        
-        return `
-            <button class="tier-chip flex flex-col items-center gap-1 p-2 rounded-xl border transition-all
-                ${isFirst
-                    ? `bg-gradient-to-br ${style.gradient} ${style.border} ${style.text} active`
-                    : 'bg-zinc-800/50 border-zinc-700/50 text-zinc-400 hover:border-zinc-600'
-                }"
-                data-boost="${tier.boostBips}"
-                data-tier="${tier.name}">
-                <div class="w-8 h-8 flex items-center justify-center">
-                    ${style.image ? `<img src="${style.image}" alt="${tier.name}" class="w-full h-full object-contain rounded" onerror="this.outerHTML='<span class=\\'text-2xl\\'>${emoji}</span>'">` : `<span class="text-2xl">${emoji}</span>`}
-                </div>
-                <span class="text-[10px] font-medium truncate w-full text-center">${tier.name}</span>
-                <span class="text-[9px] ${keepRate === 100 ? 'text-green-400 font-bold' : 'opacity-70'}">Keep ${keepRate}%</span>
-            </button>
-        `;
-    }).join('');
-}
-
-function updateTierSelection(boostBips) {
-    document.querySelectorAll('.tier-chip').forEach(btn => {
-        const isSelected = Number(btn.dataset.boost) === boostBips;
-        const tierName = btn.dataset.tier;
-        const style = getTierStyle(tierName);
-        
-        btn.className = `tier-chip flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${
-            isSelected 
-                ? `bg-gradient-to-br ${style.gradient} ${style.border} ${style.text} active` 
-                : 'bg-zinc-800/50 border-zinc-700/50 text-zinc-400 hover:border-zinc-600'
-        }`;
-    });
-}
-
-// ============================================================================
-// SWAP INTERFACE
-// ============================================================================
-function renderSwapInterface() {
-    const el = document.getElementById('swap-interface');
+function renderTutorBanner() {
+    const el = document.getElementById('nft-tutor-banner');
     if (!el) return;
 
-    const tier = boosterTiers.find(t => t.boostBips === TradeState.selectedPoolBoostBips);
-    const style = getTierStyle(tier?.name);
-    const isBuy = TradeState.tradeDirection === 'buy';
-    
-    // Update mascot animation based on trade direction
-    updateMascotAnimation(isBuy);
-    
-    const price = isBuy ? TradeState.buyPrice : TradeState.netSellPrice;
-    const priceFormatted = formatBigNumber(price).toFixed(2);
-    const balance = formatBigNumber(State.currentUserBalance || 0n).toFixed(2);
-    
-    const soldOut = isBuy && TradeState.firstAvailableTokenIdForBuy === null;
-    const noNFTtoSell = !isBuy && TradeState.availableToSellCount === 0;
-    const hasListedNFTs = !isBuy && TradeState.userBalanceOfSelectedNFT > TradeState.availableToSellCount;
-    const insufficientBalance = isBuy && TradeState.buyPrice > (State.currentUserBalance || 0n);
+    if (!State.isConnected) {
+        el.innerHTML = '';
+        return;
+    }
 
-    // Texto de owned que mostra quantos estão disponíveis vs total
-    const ownedText = !isBuy 
-        ? (hasListedNFTs 
-            ? `<span class="${noNFTtoSell ? 'text-red-400' : 'text-zinc-400'}">${TradeState.availableToSellCount}</span>/<span class="text-zinc-500">${TradeState.userBalanceOfSelectedNFT}</span> <span class="text-[9px] text-blue-400">(${TradeState.userBalanceOfSelectedNFT - TradeState.availableToSellCount} rented)</span>`
-            : `<span class="${noNFTtoSell ? 'text-red-400' : 'text-zinc-400'}">${TradeState.userBalanceOfSelectedNFT}</span>`)
-        : '';
+    if (hasTutor) {
+        const short = `${userTutor.slice(0,6)}...${userTutor.slice(-4)}`;
+        el.innerHTML = `
+            <div class="nft-tutor-banner" style="background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.15)">
+                <i class="fa-solid fa-graduation-cap" style="color:var(--nft-green)"></i>
+                <span style="color:var(--nft-green)">Tutor active (${short}) — 5% of rewards go to tutor instead of being burned</span>
+            </div>
+        `;
+    } else {
+        el.innerHTML = `
+            <div class="nft-tutor-banner" style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.15)">
+                <i class="fa-solid fa-graduation-cap" style="color:var(--nft-red)"></i>
+                <span style="color:var(--nft-red)">No tutor — 10% of staking rewards burned.</span>
+                <a href="#" class="go-to-tutor">Set a Tutor</a>
+                <span style="color:var(--nft-text-3);margin-left:2px">to reduce burn to 5%</span>
+            </div>
+        `;
+    }
+}
 
-    // V6.8: Get tier image/emoji for display
-    const tierEmoji = style.icon || tier?.emoji || '💎';
-    const tierImage = style.image || '';
-    const keepRate = getKeepRateFromBoost(tier?.boostBips || 0);
+// ============================================================================
+// TIER CARDS
+// ============================================================================
+function renderTierCards() {
+    const grid = document.getElementById('nft-tier-grid');
+    if (!grid) return;
+
+    grid.innerHTML = boosterTiers.map(tier => {
+        const style = getTierStyle(tier.name);
+        const data = poolDataMap.get(tier.boostBips) || {};
+        const isUserTier = userBestBoost === tier.boostBips && userBestBoost > 0;
+        const isUnavailable = data.unavailable;
+
+        if (isUnavailable) {
+            return `
+                <div class="nft-tier-card" style="border-color:${style.border}">
+                    <div class="nft-tier-top">
+                        <div class="nft-tier-img" style="background:${style.bg};border:1px solid ${style.border}">
+                            <img src="${style.image}" alt="${tier.name}" onerror="this.outerHTML='<span style=\\'font-size:28px\\'>${style.icon}</span>'">
+                        </div>
+                        <div>
+                            <div class="nft-tier-name" style="color:${style.color}">${style.icon} ${tier.name}</div>
+                            <div class="nft-keep-badge" style="background:${style.bg};color:${style.color}">Keep ${style.keepRate}%</div>
+                        </div>
+                    </div>
+                    <div class="nft-empty"><i class="fa-solid fa-store-slash"></i><p>Pool coming soon</p></div>
+                </div>
+            `;
+        }
+
+        const buyPrice = data.buyPrice || 0n;
+        const netSell = data.netSellPrice || 0n;
+        const poolCount = data.poolNFTCount || 0;
+        const userOwned = data.userOwned || 0;
+        const soldOut = data.firstAvailableTokenIdForBuy === null;
+        const noSellable = data.availableToSell === 0;
+        const balance = State.currentUserBalance || 0n;
+        const insufficientBuy = buyPrice > 0n && buyPrice > balance;
+
+        const buyPriceStr = buyPrice > 0n ? formatBigNumber(buyPrice).toFixed(1) : '--';
+        const sellPriceStr = netSell > 0n ? formatBigNumber(netSell).toFixed(1) : '--';
+
+        // Buy button state
+        let buyDisabled = !State.isConnected || soldOut || insufficientBuy || buyPrice === 0n;
+        let buyLabel = soldOut ? 'Sold Out' : (insufficientBuy ? 'Low BKC' : 'Buy');
+        if (!State.isConnected) buyLabel = 'Connect';
+
+        // Sell button state
+        let sellDisabled = !State.isConnected || noSellable;
+        let sellLabel = noSellable ? (userOwned > 0 ? 'Rented' : 'No NFT') : 'Sell';
+        if (!State.isConnected) sellLabel = '--';
+
+        return `
+            <div class="nft-tier-card ${isUserTier ? 'nft-user-tier' : ''}" style="border-color:${isUserTier ? style.color : 'var(--nft-border)'}" data-boost="${tier.boostBips}">
+                ${isUserTier ? '<div class="nft-user-badge">YOUR TIER</div>' : ''}
+                <div class="nft-tier-top">
+                    <div class="nft-tier-img" style="background:${style.bg};border:1px solid ${style.border}">
+                        <img src="${style.image}" alt="${tier.name}" onerror="this.outerHTML='<span style=\\'font-size:28px\\'>${style.icon}</span>'">
+                    </div>
+                    <div>
+                        <div class="nft-tier-name" style="color:${style.color}">${style.icon} ${tier.name}</div>
+                        <div class="nft-keep-badge" style="background:${style.bg};color:${style.keepRate === 100 ? 'var(--nft-green)' : style.color}">Keep ${style.keepRate}%</div>
+                    </div>
+                </div>
+
+                <div class="nft-tier-prices">
+                    <div class="nft-price-row">
+                        <span class="nft-price-label"><i class="fa-solid fa-cart-plus" style="color:var(--nft-green)"></i> Buy</span>
+                        <span class="nft-price-val" style="color:var(--nft-text)">${buyPriceStr} BKC</span>
+                    </div>
+                    <div class="nft-price-row">
+                        <span class="nft-price-label"><i class="fa-solid fa-money-bill-transfer" style="color:var(--nft-accent)"></i> Sell</span>
+                        <span class="nft-price-val" style="color:var(--nft-text)">${sellPriceStr} BKC</span>
+                    </div>
+                </div>
+
+                <div class="nft-tier-stats">
+                    <div class="nft-tier-stat">
+                        <div class="nft-tier-stat-label">In Pool</div>
+                        <div class="nft-tier-stat-val" style="color:${poolCount > 0 ? 'var(--nft-green)' : 'var(--nft-red)'}">${poolCount}</div>
+                    </div>
+                    <div class="nft-tier-stat">
+                        <div class="nft-tier-stat-label">You Own</div>
+                        <div class="nft-tier-stat-val" style="color:${userOwned > 0 ? style.color : 'var(--nft-text-3)'}">${userOwned}</div>
+                    </div>
+                </div>
+
+                <div class="nft-tier-actions">
+                    <button class="nft-action-btn nft-buy-btn" data-action="buy" data-boost="${tier.boostBips}" ${buyDisabled ? 'disabled' : ''}>
+                        <i class="fa-solid fa-cart-plus" style="font-size:10px"></i> ${buyLabel}
+                    </button>
+                    <button class="nft-action-btn nft-sell-btn" data-action="sell" data-boost="${tier.boostBips}" ${sellDisabled ? 'disabled' : ''}>
+                        <i class="fa-solid fa-money-bill-transfer" style="font-size:10px"></i> ${sellLabel}
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ============================================================================
+// REWARD IMPACT PREVIEW
+// ============================================================================
+function renderImpactPreview() {
+    const el = document.getElementById('nft-impact');
+    if (!el) return;
+
+    if (!State.isConnected) {
+        el.innerHTML = '';
+        return;
+    }
+
+    const tierInfo = getTierFromBoostLocal(userBestBoost);
+    const keepPct = tierInfo.keepRate;
+    const recyclePct = tierInfo.recycleRate;
+    const tutorPct = hasTutor ? 5 : 0;
+    const burnPct = hasTutor ? 0 : 10;
+    const netUserPct = keepPct - tutorPct - burnPct;
+
+    // Can improve?
+    const canUpgradeNft = userBestBoost < 5000;
+    const canSetTutor = !hasTutor;
 
     el.innerHTML = `
-        <div class="fade-in">
-            
-            <!-- From Section -->
-            <div class="swap-input-box rounded-2xl p-4 mb-1">
-                <div class="flex justify-between items-center mb-2">
-                    <span class="text-xs text-zinc-500">${isBuy ? 'You pay' : 'You sell'}</span>
-                    <span class="text-xs text-zinc-600">
-                        ${isBuy 
-                            ? `Balance: <span class="${insufficientBalance ? 'text-red-400' : 'text-zinc-400'}">${balance}</span>` 
-                            : `Available: ${ownedText}`
-                        }
-                    </span>
+        <div class="nft-impact">
+            <div class="nft-impact-title"><i class="fa-solid fa-chart-pie"></i> Your Reward Distribution (on 100 BKC claimed)</div>
+            <div class="nft-impact-grid">
+                <div class="nft-impact-item">
+                    <div class="nft-impact-num" style="color:var(--nft-green)">${netUserPct}</div>
+                    <div class="nft-impact-label">You Keep</div>
                 </div>
-                <div class="flex justify-between items-center">
-                    <span class="text-2xl font-semibold ${insufficientBalance && isBuy ? 'text-red-400' : 'text-white'}">
-                        ${isBuy ? priceFormatted : '1'}
-                        ${!isBuy && TradeState.firstAvailableTokenId ? `<span class="text-sm text-amber-400 ml-2">#${TradeState.firstAvailableTokenId.toString()}</span>` : ''}
-                    </span>
-                    <div class="token-selector flex items-center gap-2 px-3 py-2 rounded-xl cursor-default">
-                        ${isBuy
-                            ? `<img src="./assets/bkc_logo_3d.png" class="w-6 h-6 rounded">`
-                            : (tierImage ? `<img src="${tierImage}" alt="${tier?.name}" class="w-6 h-6 object-contain rounded" onerror="this.outerHTML='<span class=\\'text-xl\\'>${tierEmoji}</span>'">` : `<span class="text-xl">${tierEmoji}</span>`)
-                        }
-                        <span class="text-white text-sm font-medium">${isBuy ? 'BKC' : tier?.name || 'NFT'}</span>
-                    </div>
+                <div class="nft-impact-item">
+                    <div class="nft-impact-num" style="color:var(--nft-cyan)">${recyclePct}</div>
+                    <div class="nft-impact-label">Recycled</div>
+                </div>
+                <div class="nft-impact-item">
+                    <div class="nft-impact-num" style="color:${hasTutor ? 'var(--nft-accent)' : 'var(--nft-text-3)'}">${tutorPct}</div>
+                    <div class="nft-impact-label">${hasTutor ? 'To Tutor' : 'Tutor'}</div>
+                </div>
+                <div class="nft-impact-item">
+                    <div class="nft-impact-num" style="color:${burnPct > 0 ? 'var(--nft-red)' : 'var(--nft-green)'}">${burnPct}</div>
+                    <div class="nft-impact-label">Burned</div>
                 </div>
             </div>
-            
-            <!-- Swap Arrow -->
-            <div class="flex justify-center -my-3 relative z-10">
-                <button id="swap-direction-btn" class="swap-arrow-btn w-10 h-10 rounded-xl bg-zinc-800 border-4 border-zinc-900 flex items-center justify-center text-zinc-400 hover:text-white">
-                    <i class="fa-solid fa-arrow-down"></i>
-                </button>
-            </div>
-            
-            <!-- To Section -->
-            <div class="swap-input-box rounded-2xl p-4 mt-1 mb-4">
-                <div class="flex justify-between items-center mb-2">
-                    <span class="text-xs text-zinc-500">${isBuy ? 'You receive' : 'You receive'}</span>
-                    <span class="text-xs text-zinc-600">
-                        ${isBuy 
-                            ? `In pool: <span class="${soldOut ? 'text-red-400' : 'text-green-400'}">${TradeState.poolNFTCount}</span>` 
-                            : `Net after fee`
-                        }
-                    </span>
+            ${(canUpgradeNft || canSetTutor) ? `
+                <div class="nft-impact-cta">
+                    ${canUpgradeNft ? `<span><i class="fa-solid fa-arrow-up" style="color:var(--nft-cyan);font-size:9px;margin-right:3px"></i><a href="#" class="go-to-diamond">Upgrade to Diamond</a> to keep ${hasTutor ? '95' : '90'}%</span>` : ''}
+                    ${canUpgradeNft && canSetTutor ? '<span style="color:var(--nft-text-3);margin:0 6px">|</span>' : ''}
+                    ${canSetTutor ? `<span><i class="fa-solid fa-graduation-cap" style="color:var(--nft-accent);font-size:9px;margin-right:3px"></i><a href="#" class="go-to-tutor">Set a Tutor</a> to convert burn to tutor cut</span>` : ''}
                 </div>
-                <div class="flex justify-between items-center">
-                    <span class="text-2xl font-semibold text-white">${isBuy ? '1' : formatBigNumber(TradeState.netSellPrice).toFixed(2)}</span>
-                    <div class="token-selector flex items-center gap-2 px-3 py-2 rounded-xl cursor-default">
-                        ${isBuy
-                            ? (tierImage ? `<img src="${tierImage}" alt="${tier?.name}" class="w-6 h-6 object-contain rounded" onerror="this.outerHTML='<span class=\\'text-xl\\'>${tierEmoji}</span>'">` : `<span class="text-xl">${tierEmoji}</span>`)
-                            : `<img src="./assets/bkc_logo_3d.png" class="w-6 h-6 rounded">`
-                        }
-                        <span class="text-white text-sm font-medium">${isBuy ? tier?.name || 'NFT' : 'BKC'}</span>
-                    </div>
+            ` : `
+                <div class="nft-impact-cta" style="color:var(--nft-green)">
+                    <i class="fa-solid fa-check-circle" style="font-size:9px;margin-right:3px"></i> Maximum efficiency! ${keepPct === 100 ? 'Diamond + Tutor = only 5% to tutor' : ''}
                 </div>
-            </div>
-            
-            <!-- Pool Info - V6.8 -->
-            <div class="flex justify-between items-center text-[10px] text-zinc-600 mb-4 px-1">
-                <span class="flex items-center gap-1">
-                    ${tierImage ? `<img src="${tierImage}" alt="${tier?.name}" class="w-4 h-4 object-contain" onerror="this.outerHTML='<span>${tierEmoji}</span>'">` : `<span>${tierEmoji}</span>`}
-                    <span>${tier?.name || 'Unknown'} Pool</span>
-                </span>
-                <span class="text-green-400">Keep ${getKeepRateFromBoost(tier?.boostBips || 0)}% of rewards</span>
-            </div>
-            
-            <!-- Execute Button -->
-            ${renderExecuteButton(isBuy, soldOut, noNFTtoSell, insufficientBalance, hasListedNFTs)}
+            `}
         </div>
     `;
 }
 
-function renderExecuteButton(isBuy, soldOut, noNFTtoSell, insufficientBalance, hasListedNFTs = false) {
-    if (!State.isConnected) {
-        return `
-            <button id="execute-btn" data-action="connect" class="swap-btn w-full py-4 rounded-2xl font-semibold text-white bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500">
-                <i class="fa-solid fa-wallet mr-2"></i> Connect Wallet
-            </button>
-        `;
-    }
-
-    if (isBuy) {
-        if (soldOut) {
-            return `
-                <button disabled class="w-full py-4 rounded-2xl font-semibold text-zinc-500 bg-zinc-800 cursor-not-allowed">
-                    <i class="fa-solid fa-box-open mr-2"></i> Sold Out
-                </button>
-            `;
-        }
-        if (insufficientBalance) {
-            return `
-                <button disabled class="w-full py-4 rounded-2xl font-semibold text-red-400 bg-red-950/30 cursor-not-allowed border border-red-500/30">
-                    <i class="fa-solid fa-coins mr-2"></i> Insufficient BKC
-                </button>
-            `;
-        }
-        return `
-            <button id="execute-btn" data-action="buy" class="swap-btn w-full py-4 rounded-2xl font-semibold text-white bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500">
-                <i class="fa-solid fa-cart-plus mr-2"></i> Buy NFT
-            </button>
-        `;
-    } else {
-        if (noNFTtoSell && hasListedNFTs) {
-            // Tem NFTs mas todos estão alugados
-            return `
-                <button disabled class="w-full py-4 rounded-2xl font-semibold text-blue-400 bg-blue-950/30 cursor-not-allowed border border-blue-500/30">
-                    <i class="fa-solid fa-key mr-2"></i> All NFTs Rented
-                </button>
-            `;
-        }
-        if (noNFTtoSell) {
-            return `
-                <button disabled class="w-full py-4 rounded-2xl font-semibold text-zinc-500 bg-zinc-800 cursor-not-allowed">
-                    <i class="fa-solid fa-gem mr-2"></i> No NFT to Sell
-                </button>
-            `;
-        }
-        return `
-            <button id="execute-btn" data-action="sell" class="swap-btn w-full py-4 rounded-2xl font-semibold text-white bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500">
-                <i class="fa-solid fa-money-bill-transfer mr-2"></i> Sell NFT
-            </button>
-        `;
-    }
-}
-
-function updateMascotAnimation(isBuy) {
-    const mascot = document.getElementById('trade-mascot');
-    if (mascot) {
-        mascot.className = `w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden ${isBuy ? 'trade-buy' : 'trade-sell'}`;
-    }
+function getTierFromBoostLocal(boost) {
+    if (boost >= 5000) return { keepRate: 100, recycleRate: 0, name: 'Diamond' };
+    if (boost >= 4000) return { keepRate: 80, recycleRate: 20, name: 'Gold' };
+    if (boost >= 2500) return { keepRate: 70, recycleRate: 30, name: 'Silver' };
+    if (boost >= 1000) return { keepRate: 60, recycleRate: 40, name: 'Bronze' };
+    return { keepRate: 40, recycleRate: 60, name: 'None' };
 }
 
 // ============================================================================
 // INVENTORY
 // ============================================================================
 function renderInventory() {
-    const container = document.getElementById('inventory-grid');
-    const countEl = document.getElementById('nft-count');
-    
+    const container = document.getElementById('nft-inv-grid');
+    const countEl = document.getElementById('nft-inv-count');
     if (!container) return;
 
     const boosters = State.myBoosters || [];
     if (countEl) countEl.textContent = boosters.length;
 
     if (!State.isConnected) {
-        container.innerHTML = `<div class="col-span-4 text-center py-4 text-xs text-zinc-600">Connect wallet</div>`;
+        container.innerHTML = `<div class="nft-empty" style="grid-column:1/-1"><i class="fa-solid fa-wallet"></i><p>Connect wallet to view</p></div>`;
         return;
     }
 
     if (boosters.length === 0) {
         container.innerHTML = `
-            <div class="col-span-4 text-center py-4">
-                <p class="text-zinc-600 text-xs">No NFTs owned</p>
-                <p class="text-zinc-700 text-[10px] mt-1">Buy from pool to get started</p>
+            <div class="nft-empty" style="grid-column:1/-1">
+                <i class="fa-solid fa-gem"></i>
+                <p>No NFTs owned</p>
+                <p style="font-size:10px;color:var(--nft-text-3);margin-top:4px">Buy from a tier above to reduce your recycle rate</p>
             </div>
         `;
         return;
     }
 
-    // Verificar quais NFTs estão listados para aluguel
     const rentalListings = State.rentalListings || [];
     const listedTokenIds = new Set(rentalListings.map(l => l.tokenId?.toString()));
     const now = Math.floor(Date.now() / 1000);
@@ -841,285 +815,134 @@ function renderInventory() {
     container.innerHTML = boosters.map(nft => {
         const tier = boosterTiers.find(t => t.boostBips === Number(nft.boostBips));
         const style = getTierStyle(tier?.name);
-        const keepRate = getKeepRateFromBoost(Number(nft.boostBips));
-        const emoji = style.icon || tier?.emoji || '💎';
-        const isSelected = TradeState.firstAvailableTokenId && BigInt(nft.tokenId) === TradeState.firstAvailableTokenId;
-        
-        // Verificar status de aluguel
+
         const tokenIdStr = nft.tokenId?.toString();
-        const isListed = listedTokenIds.has(tokenIdStr);
         const listing = rentalListings.find(l => l.tokenId?.toString() === tokenIdStr);
+        const isListed = listedTokenIds.has(tokenIdStr);
         const isRented = listing && listing.rentalEndTime && Number(listing.rentalEndTime) > now;
-        const isUnavailable = isListed || isRented;
-        
-        // Status badge
+
         let statusBadge = '';
         if (isRented) {
-            statusBadge = `<span class="absolute top-1 right-1 bg-blue-500 text-white text-[7px] px-1.5 py-0.5 rounded-full font-bold">🔑</span>`;
+            statusBadge = `<div class="nft-inv-status" style="background:rgba(59,130,246,0.8);color:white">Rented</div>`;
         } else if (isListed) {
-            statusBadge = `<span class="absolute top-1 right-1 bg-green-500 text-white text-[7px] px-1.5 py-0.5 rounded-full font-bold">📋</span>`;
+            statusBadge = `<div class="nft-inv-status" style="background:rgba(74,222,128,0.8);color:#000">Listed</div>`;
         }
-        
+
+        const isAvailable = !isListed && !isRented;
+
         return `
-            <div class="inventory-item ${isUnavailable ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} rounded-xl p-2 border ${isSelected && !isUnavailable ? 'border-amber-500 ring-2 ring-amber-500/50 bg-amber-500/10' : 'border-zinc-700/50 bg-zinc-800/30'} hover:bg-zinc-800/50 transition-all relative"
-                 data-boost="${nft.boostBips}" 
-                 data-tokenid="${nft.tokenId}"
-                 data-unavailable="${isUnavailable}">
+            <div class="nft-inv-item" style="${!isAvailable ? 'opacity:0.5' : ''}">
                 ${statusBadge}
-                <div class="w-full aspect-square rounded-lg bg-gradient-to-br ${style.gradient} border ${style.border} flex items-center justify-center overflow-hidden ${isUnavailable ? 'grayscale' : ''}">
-                    ${style.image ? `<img src="${style.image}" alt="${tier?.name}" class="w-full h-full object-contain p-1" onerror="this.outerHTML='<span class=\\'text-3xl\\'>${emoji}</span>'">` : `<span class="text-3xl">${emoji}</span>`}
+                <div class="nft-inv-img" style="background:${style.bg};border:1px solid ${style.border}">
+                    <img src="${style.image}" alt="${tier?.name}" onerror="this.outerHTML='<span style=\\'font-size:24px\\'>${style.icon}</span>'">
                 </div>
-                <p class="text-[9px] text-center mt-1 ${style.text} truncate">${tier?.name || 'NFT'}</p>
-                <p class="text-[8px] text-center ${keepRate === 100 ? 'text-green-400' : 'text-zinc-500'}">Keep ${keepRate}%</p>
-                <p class="text-[7px] text-center ${isSelected && !isUnavailable ? 'text-amber-400 font-bold' : 'text-zinc-600'}">#${nft.tokenId}</p>
+                <div class="nft-inv-name" style="color:${style.color}">${tier?.name || 'NFT'}</div>
+                <div class="nft-inv-id">#${nft.tokenId}</div>
+                ${isAvailable ? `<a href="#" class="nft-inv-rent go-to-rental" data-tokenid="${nft.tokenId}">Rent Out</a>` : ''}
             </div>
         `;
     }).join('');
 }
 
 // ============================================================================
-// DATA LOADING - V12: Optimized with caching
+// TRADE HISTORY
 // ============================================================================
-async function loadDataForSelectedPool(forceRefresh = false) {
-    if (TradeState.selectedPoolBoostBips === null) return;
+async function loadTradeHistory() {
+    const container = document.getElementById('nft-hist-list');
 
-    const boostBips = TradeState.selectedPoolBoostBips;
-    const requestId = Date.now();
-    currentLoadingRequest = requestId;
-
-    // V12: Check cache first (instant response)
-    if (!forceRefresh) {
-        const cachedData = getCachedPoolData(boostBips);
-        if (cachedData) {
-            applyPoolData(cachedData, boostBips);
-            renderSwapInterface();
-            renderInventory();
-            // Refresh in background silently
-            refreshPoolDataInBackground(boostBips, requestId);
-            return;
-        }
-    }
-
-    TradeState.isDataLoading = true;
-
-    try {
-        // Update user NFT data
-        const userNFTs = State.myBoosters || [];
-        const rentalListings = State.rentalListings || [];
-        const listedTokenIds = new Set(rentalListings.map(l => l.tokenId?.toString()));
-        const nowSec = Math.floor(Date.now() / 1000);
-
-        const userNFTsOfTier = userNFTs.filter(nft => Number(nft.boostBips) === boostBips);
-        
-        const availableNFTsOfTier = userNFTsOfTier.filter(nft => {
-            const tokenIdStr = nft.tokenId?.toString();
-            const listing = rentalListings.find(l => l.tokenId?.toString() === tokenIdStr);
-            const isListed = listedTokenIds.has(tokenIdStr);
-            const isRented = listing && listing.rentalEndTime && Number(listing.rentalEndTime) > nowSec;
-            return !isListed && !isRented;
-        });
-
-        const tier = boosterTiers.find(t => t.boostBips === boostBips);
-        if (!tier) {
-            console.warn("Tier not found for boostBips:", boostBips);
-            return;
-        }
-
-        const poolKey = `pool_${tier.name.toLowerCase()}`;
-        let poolAddress = addresses[poolKey] || poolAddressCache.get(boostBips);
-
-        // V9: Pool addresses come from deployment-addresses.json (pool_diamond, pool_gold, etc.)
-        // Factory lookup is a fallback only
-        if (!poolAddress) {
-            const factoryAddress = addresses.nftPoolFactory || addresses.nftLiquidityPoolFactory;
-            if (factoryAddress && State.publicProvider) {
-                try {
-                    const factory = new ethers.Contract(factoryAddress, factoryABI, State.publicProvider);
-                    poolAddress = await factory.getPoolAddress(boostBips);
-                    if (poolAddress && poolAddress !== ethers.ZeroAddress) {
-                        poolAddressCache.set(boostBips, poolAddress);
-                    }
-                } catch (e) {
-                    console.warn('Factory lookup failed:', e.message);
-                }
-            }
-        }
-
-        // Check if request is still valid
-        if (currentLoadingRequest !== requestId) return;
-
-        if (!poolAddress || poolAddress === ethers.ZeroAddress) {
-            const el = document.getElementById('swap-interface');
-            if (el) {
-                el.innerHTML = `
-                    <div class="text-center py-12">
-                        <div class="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-3">
-                            <i class="fa-solid fa-store-slash text-zinc-600"></i>
-                        </div>
-                        <p class="text-zinc-400 text-sm">Pool not available</p>
-                        <p class="text-zinc-600 text-xs mt-1">${tier.name} pool coming soon</p>
-                    </div>
-                `;
-            }
-            return;
-        }
-
-        const poolContract = new ethers.Contract(poolAddress, nftPoolABI, State.publicProvider);
-
-        // V12: Fetch all pool data in parallel for speed
-        const [buyPriceResult, sellPriceResult, availableNFTsResult] = await Promise.all([
-            safeContractCall(poolContract, 'getBuyPrice', [], ethers.MaxUint256).catch(() => ethers.MaxUint256),
-            safeContractCall(poolContract, 'getSellPrice', [], 0n).catch(() => 0n),
-            poolContract.getAvailableNFTs().catch(() => [])
-        ]);
-
-        // Check if request is still valid
-        if (currentLoadingRequest !== requestId) return;
-
-        const availableTokenIds = Array.isArray(availableNFTsResult) ? [...availableNFTsResult] : [];
-        const buyPrice = (buyPriceResult === ethers.MaxUint256) ? 0n : buyPriceResult;
-        const sellPrice = sellPriceResult;
-
-        // Calculate net sell price
-        let baseTaxBips = State.systemFees?.["NFT_POOL_SELL_TAX_BIPS"] || 1000n;
-        let discountBips = BigInt(State.boosterDiscounts?.[TradeState.bestBoosterBips] || 0);
-        const baseTaxBipsBigInt = typeof baseTaxBips === 'bigint' ? baseTaxBips : BigInt(baseTaxBips);
-        const discountBipsBigInt = typeof discountBips === 'bigint' ? discountBips : BigInt(discountBips);
-        const finalTaxBips = (baseTaxBipsBigInt > discountBipsBigInt) ? (baseTaxBipsBigInt - discountBipsBigInt) : 0n;
-        const taxAmount = (sellPrice * finalTaxBips) / 10000n;
-        const netSellPrice = sellPrice - taxAmount;
-
-        // Build pool data object
-        const poolData = {
-            buyPrice,
-            sellPrice,
-            netSellPrice,
-            poolNFTCount: availableTokenIds.length,
-            firstAvailableTokenIdForBuy: (availableTokenIds.length > 0) ? BigInt(availableTokenIds[availableTokenIds.length - 1]) : null,
-            userBalanceOfSelectedNFT: userNFTsOfTier.length,
-            availableToSellCount: availableNFTsOfTier.length,
-            availableNFTsOfTier
-        };
-
-        // Cache the data
-        setCachedPoolData(boostBips, poolData);
-
-        // Apply to state and render
-        applyPoolData(poolData, boostBips);
-
-    } catch (err) {
-        console.warn("Store Data Warning:", err.message);
-        if (currentLoadingRequest === requestId) {
-            const el = document.getElementById('swap-interface');
-            if (el) {
-                el.innerHTML = `
-                    <div class="text-center py-12">
-                        <div class="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-3">
-                            <i class="fa-solid fa-exclamation-triangle text-amber-500"></i>
-                        </div>
-                        <p class="text-zinc-400 text-sm">Pool unavailable</p>
-                        <p class="text-zinc-600 text-xs mt-1">${err.message}</p>
-                    </div>
-                `;
-            }
-        }
+    if (!State.userAddress) {
+        if (container) container.innerHTML = `<div class="nft-empty"><i class="fa-solid fa-wallet"></i><p>Connect wallet to view</p></div>`;
         return;
-    } finally {
-        if (currentLoadingRequest === requestId) {
-            TradeState.isDataLoading = false;
-            renderSwapInterface();
-            renderInventory();
-        }
     }
-}
 
-// V12: Background refresh without blocking UI
-async function refreshPoolDataInBackground(boostBips, requestId) {
     try {
-        // Silently refresh data
-        const userNFTs = State.myBoosters || [];
-        const rentalListings = State.rentalListings || [];
-        const listedTokenIds = new Set(rentalListings.map(l => l.tokenId?.toString()));
-        const nowSec = Math.floor(Date.now() / 1000);
+        const endpoint = API_ENDPOINTS.getHistory || 'https://gethistory-4wvdcuoouq-uc.a.run.app';
+        const response = await fetch(`${endpoint}/${State.userAddress}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-        const userNFTsOfTier = userNFTs.filter(nft => Number(nft.boostBips) === boostBips);
-        const availableNFTsOfTier = userNFTsOfTier.filter(nft => {
-            const tokenIdStr = nft.tokenId?.toString();
-            const listing = rentalListings.find(l => l.tokenId?.toString() === tokenIdStr);
-            const isListed = listedTokenIds.has(tokenIdStr);
-            const isRented = listing && listing.rentalEndTime && Number(listing.rentalEndTime) > nowSec;
-            return !isListed && !isRented;
+        const data = await response.json();
+        tradeHistory = (data || []).filter(item => {
+            const t = (item.type || '').toUpperCase();
+            return t === 'NFTBOUGHT' || t === 'NFTSOLD' || t === 'NFT_BOUGHT' || t === 'NFT_SOLD' ||
+                   t === 'NFTPURCHASED' || t === 'NFT_PURCHASED' ||
+                   t.includes('NFTBOUGHT') || t.includes('NFTSOLD') || t.includes('NFTPURCHASED');
         });
 
-        const tier = boosterTiers.find(t => t.boostBips === boostBips);
-        if (!tier) return;
+        const countEl = document.getElementById('nft-hist-count');
+        if (countEl) countEl.textContent = tradeHistory.length;
 
-        const poolKey = `pool_${tier.name.toLowerCase()}`;
-        let poolAddress = addresses[poolKey] || poolAddressCache.get(boostBips);
-        if (!poolAddress || poolAddress === ethers.ZeroAddress) return;
-
-        const poolContract = new ethers.Contract(poolAddress, nftPoolABI, State.publicProvider);
-
-        const [buyPriceResult, sellPriceResult, availableNFTsResult] = await Promise.all([
-            safeContractCall(poolContract, 'getBuyPrice', [], ethers.MaxUint256).catch(() => ethers.MaxUint256),
-            safeContractCall(poolContract, 'getSellPrice', [], 0n).catch(() => 0n),
-            poolContract.getAvailableNFTs().catch(() => [])
-        ]);
-
-        if (currentLoadingRequest !== requestId) return;
-
-        const availableTokenIds = Array.isArray(availableNFTsResult) ? [...availableNFTsResult] : [];
-        const buyPrice = (buyPriceResult === ethers.MaxUint256) ? 0n : buyPriceResult;
-        const sellPrice = sellPriceResult;
-
-        let baseTaxBips = State.systemFees?.["NFT_POOL_SELL_TAX_BIPS"] || 1000n;
-        let discountBips = BigInt(State.boosterDiscounts?.[TradeState.bestBoosterBips] || 0);
-        const baseTaxBipsBigInt = typeof baseTaxBips === 'bigint' ? baseTaxBips : BigInt(baseTaxBips);
-        const discountBipsBigInt = typeof discountBips === 'bigint' ? discountBips : BigInt(discountBips);
-        const finalTaxBips = (baseTaxBipsBigInt > discountBipsBigInt) ? (baseTaxBipsBigInt - discountBipsBigInt) : 0n;
-        const taxAmount = (sellPrice * finalTaxBips) / 10000n;
-        const netSellPrice = sellPrice - taxAmount;
-
-        const poolData = {
-            buyPrice, sellPrice, netSellPrice,
-            poolNFTCount: availableTokenIds.length,
-            firstAvailableTokenIdForBuy: (availableTokenIds.length > 0) ? BigInt(availableTokenIds[availableTokenIds.length - 1]) : null,
-            userBalanceOfSelectedNFT: userNFTsOfTier.length,
-            availableToSellCount: availableNFTsOfTier.length,
-            availableNFTsOfTier
-        };
-
-        setCachedPoolData(boostBips, poolData);
-
-        // Only update UI if still on same tier
-        if (TradeState.selectedPoolBoostBips === boostBips && currentLoadingRequest === requestId) {
-            applyPoolData(poolData, boostBips);
-            renderSwapInterface();
-        }
+        renderTradeHistory();
     } catch (e) {
-        console.warn('Background refresh failed:', e.message);
+        console.error('History load error:', e);
+        tradeHistory = [];
+        renderTradeHistory();
     }
 }
 
-// V12: Apply pool data to TradeState
-function applyPoolData(poolData, boostBips) {
-    TradeState.buyPrice = poolData.buyPrice;
-    TradeState.sellPrice = poolData.sellPrice;
-    TradeState.netSellPrice = poolData.netSellPrice;
-    TradeState.poolNFTCount = poolData.poolNFTCount;
-    TradeState.firstAvailableTokenIdForBuy = poolData.firstAvailableTokenIdForBuy;
-    TradeState.userBalanceOfSelectedNFT = poolData.userBalanceOfSelectedNFT;
-    TradeState.availableToSellCount = poolData.availableToSellCount;
+function renderTradeHistory() {
+    const container = document.getElementById('nft-hist-list');
+    if (!container) return;
 
-    // Update firstAvailableTokenId for selling
-    const currentSelection = TradeState.firstAvailableTokenId;
-    const selectionIsAvailable = currentSelection && poolData.availableNFTsOfTier?.some(nft => BigInt(nft.tokenId) === currentSelection);
-    
-    if (!selectionIsAvailable && poolData.availableNFTsOfTier?.length > 0) {
-        TradeState.firstAvailableTokenId = BigInt(poolData.availableNFTsOfTier[0].tokenId);
-    } else if (!poolData.availableNFTsOfTier?.length) {
-        TradeState.firstAvailableTokenId = null;
+    if (!State.isConnected) {
+        container.innerHTML = `<div class="nft-empty"><i class="fa-solid fa-wallet"></i><p>Connect wallet to view</p></div>`;
+        return;
     }
+
+    if (tradeHistory.length === 0) {
+        container.innerHTML = `
+            <div class="nft-empty">
+                <i class="fa-solid fa-receipt"></i>
+                <p>No NFT trades yet</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = tradeHistory.slice(0, 20).map(item => {
+        const t = (item.type || '').toUpperCase();
+        const details = item.details || {};
+        const dateStr = formatDate(item.timestamp || item.createdAt);
+        const isBuy = t.includes('BOUGHT') || t.includes('PURCHASED');
+
+        const icon = isBuy ? 'fa-cart-plus' : 'fa-money-bill-transfer';
+        const iconColor = isBuy ? '#22c55e' : '#f59e0b';
+        const iconBg = isBuy ? 'rgba(34,197,94,0.12)' : 'rgba(245,158,11,0.12)';
+        const label = isBuy ? 'Bought NFT' : 'Sold NFT';
+
+        const txLink = item.txHash ? `${EXPLORER_TX}${item.txHash}` : '#';
+
+        let amountDisplay = '';
+        try {
+            const rawAmount = item.amount || details.amount || details.price || details.payout || "0";
+            if (typeof rawAmount === 'string' && rawAmount !== "0") {
+                const amountNum = formatBigNumber(BigInt(rawAmount));
+                if (amountNum > 0.001) amountDisplay = amountNum.toFixed(2);
+            }
+        } catch {}
+
+        const tokenId = details.tokenId || '';
+        const boostBips = details.boostBips || details.boost || '';
+
+        return `
+            <a href="${txLink}" target="_blank" class="nft-hist-item">
+                <div class="nft-hist-icon" style="background:${iconBg}">
+                    <i class="fa-solid ${icon}" style="color:${iconColor}"></i>
+                </div>
+                <div class="nft-hist-info">
+                    <div class="nft-hist-label">
+                        ${label}
+                        ${tokenId ? `<span style="font-size:9px;color:var(--nft-accent);font-family:monospace;margin-left:4px">#${tokenId}</span>` : ''}
+                        ${boostBips ? `<span style="font-size:8px;color:var(--nft-purple);margin-left:4px">+${Number(boostBips)/100}%</span>` : ''}
+                    </div>
+                    <div class="nft-hist-date">${dateStr}</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px">
+                    ${amountDisplay ? `<span class="nft-hist-amount" style="color:${isBuy ? 'var(--nft-text)' : 'var(--nft-green)'}">${isBuy ? '-' : '+'}${amountDisplay} <span style="font-size:9px;color:var(--nft-text-3)">BKC</span></span>` : ''}
+                    <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:8px;color:var(--nft-text-3)"></i>
+                </div>
+            </a>
+        `;
+    }).join('');
 }
 
 // ============================================================================
@@ -1130,213 +953,141 @@ function setupEventListeners() {
     if (!container) return;
 
     container.addEventListener('click', async (e) => {
-        // Refresh button - V12: Invalidate cache and force refresh
-        if (e.target.closest('#refresh-btn')) {
-            const btn = e.target.closest('#refresh-btn');
+        // Refresh
+        if (e.target.closest('#nft-refresh-btn')) {
+            const btn = e.target.closest('#nft-refresh-btn');
             const icon = btn.querySelector('i');
             icon.classList.add('fa-spin');
-            
-            invalidatePoolCache(TradeState.selectedPoolBoostBips);
-            
-            await Promise.all([
-                loadMyBoostersFromAPI(true),
-                loadRentalListings()
-            ]);
-            
-            await loadDataForSelectedPool(true);
-            loadTradeHistory();
+            invalidateAllPoolCaches();
+            await Promise.all([loadMyBoostersFromAPI(true), loadRentalListings()]);
+            await loadAllData();
             icon.classList.remove('fa-spin');
             return;
         }
 
-        // Tier selection - V12: Instant with cache
-        const tierBtn = e.target.closest('.tier-chip');
-        if (tierBtn) {
-            const boost = Number(tierBtn.dataset.boost);
-            if (TradeState.selectedPoolBoostBips !== boost) {
-                TradeState.selectedPoolBoostBips = boost;
-                TradeState.firstAvailableTokenId = null; // Reset selection
-                updateTierSelection(boost);
-                await loadDataForSelectedPool();
-            }
-            return;
-        }
-
-        // Swap direction toggle
-        if (e.target.closest('#swap-direction-btn')) {
-            TradeState.tradeDirection = TradeState.tradeDirection === 'buy' ? 'sell' : 'buy';
-            renderSwapInterface();
-            return;
-        }
-
         // Inventory toggle
-        if (e.target.closest('#inventory-toggle')) {
-            const panel = document.getElementById('inventory-panel');
-            const chevron = document.getElementById('inventory-chevron');
-            if (panel && chevron) {
-                panel.classList.toggle('hidden');
-                chevron.style.transform = panel.classList.contains('hidden') ? '' : 'rotate(180deg)';
+        if (e.target.closest('#nft-inv-toggle')) {
+            const body = document.getElementById('nft-inv-body');
+            const chevron = document.getElementById('nft-inv-chevron');
+            if (body && chevron) {
+                const isHidden = body.style.display === 'none';
+                body.style.display = isHidden ? '' : 'none';
+                chevron.style.transform = isHidden ? 'rotate(180deg)' : '';
             }
             return;
         }
 
         // History toggle
-        if (e.target.closest('#history-toggle')) {
-            const panel = document.getElementById('history-panel');
-            const chevron = document.getElementById('history-chevron');
-            if (panel && chevron) {
-                panel.classList.toggle('hidden');
-                chevron.style.transform = panel.classList.contains('hidden') ? '' : 'rotate(180deg)';
+        if (e.target.closest('#nft-hist-toggle')) {
+            const body = document.getElementById('nft-hist-body');
+            const chevron = document.getElementById('nft-hist-chevron');
+            if (body && chevron) {
+                const isHidden = body.style.display === 'none';
+                body.style.display = isHidden ? '' : 'none';
+                chevron.style.transform = isHidden ? 'rotate(180deg)' : '';
             }
             return;
         }
 
-        // Inventory item click - user selected a specific NFT to sell
-        const invItem = e.target.closest('.inventory-item');
-        if (invItem) {
-            // Verificar se o NFT está disponível para venda
-            const isUnavailable = invItem.dataset.unavailable === 'true';
-            if (isUnavailable) {
-                showToast("This NFT is listed for rental and cannot be sold", "warning");
-                return;
-            }
-            
-            const boost = Number(invItem.dataset.boost);
-            const tokenId = invItem.dataset.tokenid;
-            
-            TradeState.selectedPoolBoostBips = boost;
-            TradeState.tradeDirection = 'sell';
-            
-            // CORREÇÃO: Salvar o tokenId específico que o usuário clicou
-            if (tokenId) {
-                TradeState.firstAvailableTokenId = BigInt(tokenId);
-                console.log("User selected NFT #" + tokenId + " for sale");
-            }
-            
-            updateTierSelection(boost);
-            await loadDataForSelectedPool();
-            return;
-        }
+        // Navigation
+        if (e.target.closest('.go-to-tutor')) { e.preventDefault(); window.navigateTo('referral'); return; }
+        if (e.target.closest('.go-to-rental')) { e.preventDefault(); window.navigateTo('rental'); return; }
+        if (e.target.closest('.go-to-diamond')) { e.preventDefault(); return; } // Already on page
+        if (e.target.closest('.go-to-staking')) { e.preventDefault(); window.navigateTo('mine'); return; }
 
-        // Execute button
-        const executeBtn = e.target.closest('#execute-btn');
-        if (executeBtn) {
+        // Buy / Sell buttons on tier cards
+        const actionBtn = e.target.closest('.nft-action-btn');
+        if (actionBtn && !actionBtn.disabled) {
             e.preventDefault();
             e.stopPropagation();
-            
-            if (isTransactionInProgress || executeBtn.disabled) return;
-            
-            const action = executeBtn.dataset.action;
-            const mascot = document.getElementById('trade-mascot');
+            if (isTransactionInProgress) return;
 
-            if (action === "connect") {
+            const action = actionBtn.dataset.action;
+            const boostBips = Number(actionBtn.dataset.boost);
+
+            if (!State.isConnected) {
                 window.openConnectModal();
                 return;
             }
 
-            const tier = boosterTiers.find(t => t.boostBips === TradeState.selectedPoolBoostBips);
+            const tier = boosterTiers.find(t => t.boostBips === boostBips);
             if (!tier) return;
 
-            const poolKey = `pool_${tier.name.toLowerCase()}`;
-            const poolAddress = addresses[poolKey] || poolAddressCache.get(tier.boostBips);
-            
+            const data = poolDataMap.get(boostBips);
+            if (!data || data.unavailable) return;
+
+            const poolAddress = data.poolAddress;
             if (!poolAddress) {
                 showToast("Pool address not found", "error");
                 return;
             }
 
             isTransactionInProgress = true;
-            // V12.2: Don't manually set button state — txEngine handles it via setPhase()
-
-            // Animate mascot
-            if (mascot) mascot.className = 'w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden trade-spin';
 
             try {
-                if (TradeState.tradeDirection === 'buy') {
-                    // V12: Buy NFT with cache invalidation
+                if (action === 'buy') {
                     await NftTx.buyFromPool({
-                        poolAddress: poolAddress,
-                        button: executeBtn,
-                        
-                        onSuccess: async (receipt) => {
-                            if (mascot) mascot.className = 'w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden trade-success';
-                            showToast("🟢 NFT Purchased!", "success");
-                            
-                            // Invalidate cache and reload
-                            invalidatePoolCache(TradeState.selectedPoolBoostBips);
-                            await Promise.all([
-                                loadMyBoostersFromAPI(true),
-                                loadDataForSelectedPool(true)
-                            ]);
+                        poolAddress,
+                        button: actionBtn,
+                        onSuccess: async () => {
+                            showToast(`${tier.name} NFT purchased!`, "success");
+                            invalidateAllPoolCaches();
+                            await Promise.all([loadMyBoostersFromAPI(true), loadAllPoolsData()]);
+                            renderTierCards();
+                            renderInventory();
+                            renderImpactPreview();
                             loadTradeHistory();
                         },
-                        
                         onError: (error) => {
                             if (!error.cancelled && error.type !== 'user_rejected') {
-                                const msg = error.message || error.reason || 'Transaction failed';
-                                showToast("Buy failed: " + msg, "error");
+                                showToast("Buy failed: " + (error.message || error.reason || 'Unknown'), "error");
                             }
                         }
                     });
                 } else {
-                    // V12: Validate we have a token to sell
-                    if (!TradeState.firstAvailableTokenId) {
-                        showToast("No NFT selected for sale", "error");
+                    // Sell
+                    const tokenId = data.firstSellableTokenId;
+                    if (!tokenId) {
+                        showToast("No NFT available to sell", "error");
                         isTransactionInProgress = false;
                         return;
                     }
-                    
-                    // V12: Sell NFT with cache invalidation
+
                     await NftTx.sellToPool({
-                        poolAddress: poolAddress,
-                        tokenId: TradeState.firstAvailableTokenId,
-                        button: executeBtn,
-                        
-                        onSuccess: async (receipt) => {
-                            if (mascot) mascot.className = 'w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden trade-success';
-                            showToast("🔴 NFT Sold!", "success");
-                            
-                            // Invalidate cache and reload
-                            invalidatePoolCache(TradeState.selectedPoolBoostBips);
-                            await Promise.all([
-                                loadMyBoostersFromAPI(true),
-                                loadDataForSelectedPool(true)
-                            ]);
+                        poolAddress,
+                        tokenId,
+                        button: actionBtn,
+                        onSuccess: async () => {
+                            showToast(`${tier.name} NFT sold!`, "success");
+                            invalidateAllPoolCaches();
+                            await Promise.all([loadMyBoostersFromAPI(true), loadAllPoolsData()]);
+                            renderTierCards();
+                            renderInventory();
+                            renderImpactPreview();
                             loadTradeHistory();
                         },
-                        
                         onError: (error) => {
                             if (!error.cancelled && error.type !== 'user_rejected') {
-                                const msg = error.message || error.reason || 'Transaction failed';
-                                showToast("Sell failed: " + msg, "error");
+                                showToast("Sell failed: " + (error.message || error.reason || 'Unknown'), "error");
                             }
                         }
                     });
                 }
             } finally {
                 isTransactionInProgress = false;
-
-                // V12.1: Always refresh data after transaction attempt
-                // This ensures UI is updated even if callback failed
+                // Delayed refresh as safety net
                 setTimeout(async () => {
                     try {
-                        await Promise.all([
-                            loadMyBoostersFromAPI(true),
-                            loadDataForSelectedPool(true)
-                        ]);
+                        invalidateAllPoolCaches();
+                        await Promise.all([loadMyBoostersFromAPI(true), loadAllPoolsData()]);
+                        renderTierCards();
+                        renderInventory();
+                        renderImpactPreview();
                         loadTradeHistory();
-                    } catch (e) {
-                        console.warn('[Store] Post-transaction refresh failed:', e.message);
+                    } catch (err) {
+                        console.warn('[NFT Market] Post-tx refresh failed:', err.message);
                     }
                 }, 2000);
-                
-                // Reset mascot animation
-                if (mascot) {
-                    setTimeout(() => {
-                        const isBuy = TradeState.tradeDirection === 'buy';
-                        mascot.className = `w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden ${isBuy ? 'trade-buy' : 'trade-sell'}`;
-                    }, 800);
-                }
             }
         }
     });
