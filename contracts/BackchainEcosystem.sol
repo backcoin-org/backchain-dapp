@@ -12,15 +12,15 @@ import "./IBackchain.sol";
 //
 // Responsibilities:
 //   - Fee calculation (gas-based or value-based, per action)
-//   - ETH distribution: referrer → custom recipient → operator → treasury → buyback
+//   - ETH distribution: tutor → custom recipient → operator → treasury → buyback
 //   - BKC distribution for Tier 2 modules: burn → stakers → treasury
-//   - Global referral registry (one-time, permanent, ecosystem-wide)
+//   - Global tutor registry (mutable — can change tutor with higher fee)
 //   - Module registry (authorize/deauthorize contracts)
 //   - ETH accumulation for the buyback mechanism
 //   - Withdrawal system for operators and treasury
 //
 // Owner can change:  fees, splits, addresses, BKC distribution params.
-// Owner CANNOT change: distribution logic, referral logic, fee math.
+// Owner CANNOT change: distribution logic, tutor logic, fee math.
 //
 // Security:
 //   - Two-step ownership transfer (prevents accidental loss)
@@ -29,6 +29,12 @@ import "./IBackchain.sol";
 //   - Rounding dust → goes to buyback (nothing lost)
 //   - Fee config validation with safe bounds
 //   - Emergency ERC20 recovery (not BKC, which has its own flows)
+//
+// Tutor system:
+//   - Users can set a "tutor" (mentor) who earns 5% of their staking claims
+//   - First time: small ETH fee (tutorFee). Changing tutor: higher fee (changeTutorFee)
+//   - Tutor also earns tutorBps% of ALL ETH fees across the ecosystem
+//   - Self-tutoring is forbidden
 //
 // ============================================================================
 
@@ -62,29 +68,32 @@ contract BackchainEcosystem is IBackchainEcosystem {
     address public stakingPool;
 
     // ════════════════════════════════════════════════════════════════════════
-    // REFERRAL REGISTRY (global, permanent, one-time per user)
+    // TUTOR REGISTRY (global, mutable — can change tutor with higher fee)
     // ════════════════════════════════════════════════════════════════════════
 
-    mapping(address => address) public override referredBy;
-    mapping(address => uint256) public override referralCount;
-    address public referralRelayer;
-    uint16  public override referralBps;  // global referral share (e.g., 1000 = 10% of ETH fees)
+    mapping(address => address) public override tutorOf;
+    mapping(address => uint256) public override tutorCount;
+    address public override tutorRelayer;
+    uint16  public override tutorBps;  // global tutor share (e.g., 500 = 5% of ETH fees)
 
     // ════════════════════════════════════════════════════════════════════════
-    // REFERRAL BKC BONUS (welcome gift for new users)
+    // TUTOR BKC BONUS (welcome gift for new users)
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice BKC bonus for the referred user (default 0.1 BKC)
-    uint256 public referralBonusAmount = 0.1e18;
+    /// @notice BKC bonus for the tutored user (default 0.1 BKC)
+    uint256 public tutorBonusAmount = 0.1e18;
 
-    /// @notice BKC reserved for referral bonuses (funded by owner/anyone)
-    uint256 public referralBonusPool;
+    /// @notice BKC reserved for tutor bonuses (funded by owner/anyone)
+    uint256 public tutorBonusPool;
 
     /// @notice Total bonuses paid out
-    uint256 public referralBonusesPaid;
+    uint256 public tutorBonusesPaid;
 
-    /// @notice ETH fee to set a referrer (~$0.05 anti-spam). Goes to buyback.
-    uint256 public referralFee = 0.00002 ether;
+    /// @notice ETH fee to set tutor first time (~$0.05 anti-spam). Goes to buyback.
+    uint256 public tutorFee = 0.00002 ether;
+
+    /// @notice ETH fee to CHANGE tutor (5x higher than first-time fee)
+    uint256 public changeTutorFee = 0.0001 ether;
 
     // ════════════════════════════════════════════════════════════════════════
     // MODULE REGISTRY
@@ -171,14 +180,16 @@ contract BackchainEcosystem is IBackchainEcosystem {
     event EthWithdrawn(address indexed recipient, uint256 amount);
     event BuybackETHWithdrawn(address indexed buyback, uint256 amount);
 
-    // ── Referral ──
-    event ReferrerSet(address indexed user, address indexed referrer);
-    event ReferralRelayerUpdated(address indexed oldRelayer, address indexed newRelayer);
-    event ReferralBpsUpdated(uint16 newBps);
-    event ReferralBonusPaid(address indexed user, uint256 amount);
-    event ReferralBonusFunded(address indexed funder, uint256 amount, uint256 newPool);
-    event ReferralBonusAmountUpdated(uint256 oldAmount, uint256 newAmount);
-    event ReferralFeeUpdated(uint256 oldFee, uint256 newFee);
+    // ── Tutor ──
+    event TutorSet(address indexed user, address indexed tutor);
+    event TutorChanged(address indexed user, address indexed oldTutor, address indexed newTutor);
+    event TutorRelayerUpdated(address indexed oldRelayer, address indexed newRelayer);
+    event TutorBpsUpdated(uint16 newBps);
+    event TutorBonusPaid(address indexed user, uint256 amount);
+    event TutorBonusFunded(address indexed funder, uint256 amount, uint256 newPool);
+    event TutorBonusAmountUpdated(uint256 oldAmount, uint256 newAmount);
+    event TutorFeeUpdated(uint256 oldFee, uint256 newFee);
+    event ChangeTutorFeeUpdated(uint256 oldFee, uint256 newFee);
 
     // ── Module management ──
     event ModuleRegistered(bytes32 indexed moduleId, address indexed contractAddr);
@@ -216,16 +227,15 @@ contract BackchainEcosystem is IBackchainEcosystem {
     error InvalidSplit();
     error InvalidBkcSplit();
     error InvalidAddress();
-    error ReferrerAlreadySet();
-    error CannotReferSelf();
+    error CannotTutorSelf();
     error NothingToWithdraw();
     error TransferFailed();
     error ZeroAddress();
     error ArrayLengthMismatch();
     error InvalidFeeBps();
     error CannotRecoverBKC();
-    error NotReferralRelayer();
-    error InsufficientReferralFee();
+    error NotTutorRelayer();
+    error InsufficientTutorFee();
 
     // ════════════════════════════════════════════════════════════════════════
     // MODIFIERS
@@ -342,7 +352,7 @@ contract BackchainEcosystem is IBackchainEcosystem {
     // INTERNAL: ETH DISTRIBUTION
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @dev Split ETH: referral off-the-top, then module config split on remaining.
+    /// @dev Split ETH: tutor off-the-top, then module config split on remaining.
     ///      Uses CEI pattern: all storage writes BEFORE external calls.
     ///
     ///      When an address is missing (address(0)), their share flows to buyback.
@@ -356,17 +366,17 @@ contract BackchainEcosystem is IBackchainEcosystem {
     ) internal {
         uint256 distributed;
 
-        // ── REFERRAL CUT (off-the-top, before module split) ──
-        uint256 referralAmt;
-        address ref = referredBy[user];
-        if (ref != address(0) && referralBps > 0) {
-            referralAmt = amount * referralBps / BPS;
-            pendingEth[ref] += referralAmt;
-            distributed += referralAmt;
+        // ── TUTOR CUT (off-the-top, before module split) ──
+        uint256 tutorAmt;
+        address tut = tutorOf[user];
+        if (tut != address(0) && tutorBps > 0) {
+            tutorAmt = amount * tutorBps / BPS;
+            pendingEth[tut] += tutorAmt;
+            distributed += tutorAmt;
         }
 
         // ── Module split operates on remaining amount ──
-        uint256 remaining = amount - referralAmt;
+        uint256 remaining = amount - tutorAmt;
 
         uint256 customAmt   = remaining * cfg.customBps / BPS;
         uint256 operatorAmt = remaining * cfg.operatorBps / BPS;
@@ -408,7 +418,7 @@ contract BackchainEcosystem is IBackchainEcosystem {
             _sendEth(customRecipient, customAmt);
         }
 
-        emit EthDistributed(referralAmt, customAmt, operatorAmt, treasuryAmt, toBuyback);
+        emit EthDistributed(tutorAmt, customAmt, operatorAmt, treasuryAmt, toBuyback);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -458,104 +468,123 @@ contract BackchainEcosystem is IBackchainEcosystem {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // REFERRAL (global, permanent, one-time)
+    // TUTOR SYSTEM (global, mutable — can change tutor with higher fee)
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Set your referrer. Can only be set once per user, permanently.
-    ///         Requires a small ETH fee (anti-spam, goes to buyback).
-    ///         The referred user receives a BKC welcome bonus (if pool has funds).
-    ///         The referrer earns: (1) referralBps% of ALL ETH fees across the ecosystem,
+    /// @notice Set or change your tutor (mentor).
+    ///         First time: tutorFee (cheap). Changing: changeTutorFee (5x more).
+    ///         The tutored user receives a BKC welcome bonus on first set (if pool has funds).
+    ///         The tutor earns: (1) tutorBps% of ALL ETH fees across the ecosystem,
     ///         and (2) 5% of the user's staking reward claims (in BKC via StakingPool).
-    function setReferrer(address _referrer) external payable override {
-        if (msg.value < referralFee) revert InsufficientReferralFee();
-        if (_referrer == address(0)) revert InvalidAddress();
-        if (_referrer == msg.sender) revert CannotReferSelf();
-        if (referredBy[msg.sender] != address(0)) revert ReferrerAlreadySet();
+    function setTutor(address _tutor) external payable override {
+        if (_tutor == address(0)) revert InvalidAddress();
+        if (_tutor == msg.sender) revert CannotTutorSelf();
 
-        referredBy[msg.sender] = _referrer;
-        referralCount[_referrer]++;
+        address oldTutor = tutorOf[msg.sender];
+        bool isFirstTime = (oldTutor == address(0));
+
+        // Fee: cheaper first time, more expensive to change
+        uint256 requiredFee = isFirstTime ? tutorFee : changeTutorFee;
+        if (msg.value < requiredFee) revert InsufficientTutorFee();
+
+        // Update tutor
+        if (!isFirstTime) {
+            tutorCount[oldTutor]--;
+        }
+        tutorOf[msg.sender] = _tutor;
+        tutorCount[_tutor]++;
 
         // ETH fee → buyback (feeds the ecosystem)
         if (msg.value > 0) {
             buybackAccumulated += msg.value;
         }
 
-        _payReferralBonus(msg.sender);
-
-        emit ReferrerSet(msg.sender, _referrer);
+        // BKC bonus only on first tutor set
+        if (isFirstTime) {
+            _payTutorBonus(msg.sender);
+            emit TutorSet(msg.sender, _tutor);
+        } else {
+            emit TutorChanged(msg.sender, oldTutor, _tutor);
+        }
     }
 
-    /// @notice Owner sets the authorized relayer for gasless referral onboarding.
-    function setReferralRelayer(address _relayer) external onlyOwner {
+    /// @notice Owner sets the authorized relayer for gasless tutor onboarding.
+    function setTutorRelayer(address _relayer) external onlyOwner {
         if (_relayer == address(0)) revert ZeroAddress();
-        emit ReferralRelayerUpdated(referralRelayer, _relayer);
-        referralRelayer = _relayer;
+        emit TutorRelayerUpdated(tutorRelayer, _relayer);
+        tutorRelayer = _relayer;
     }
 
-    /// @notice Owner sets the global referral share (% of ETH fees to referrers).
-    ///         Max 3000 (30%). Set to 0 to disable referral rewards.
-    function setReferralBps(uint16 _bps) external onlyOwner {
+    /// @notice Owner sets the global tutor share (% of ETH fees to tutors).
+    ///         Max 3000 (30%). Set to 0 to disable tutor ETH rewards.
+    function setTutorBps(uint16 _bps) external onlyOwner {
         if (_bps > 3000) revert InvalidFeeBps();
-        referralBps = _bps;
-        emit ReferralBpsUpdated(_bps);
+        tutorBps = _bps;
+        emit TutorBpsUpdated(_bps);
     }
 
-    /// @notice Relayer sets a referrer on behalf of a user (gasless onboarding).
+    /// @notice Relayer sets a tutor on behalf of a user (gasless onboarding).
     ///         No ETH fee (relayer already pays gas). User still gets BKC bonus.
-    function setReferrerFor(address _user, address _referrer) external {
-        if (msg.sender != referralRelayer) revert NotReferralRelayer();
-        if (_user == address(0) || _referrer == address(0)) revert InvalidAddress();
-        if (_referrer == _user) revert CannotReferSelf();
-        if (referredBy[_user] != address(0)) revert ReferrerAlreadySet();
+    ///         Only for first-time tutor set (relayer cannot change existing tutor).
+    function setTutorFor(address _user, address _tutor) external {
+        if (msg.sender != tutorRelayer) revert NotTutorRelayer();
+        if (_user == address(0) || _tutor == address(0)) revert InvalidAddress();
+        if (_tutor == _user) revert CannotTutorSelf();
+        if (tutorOf[_user] != address(0)) revert InsufficientTutorFee(); // relayer can only set first time
 
-        referredBy[_user] = _referrer;
-        referralCount[_referrer]++;
+        tutorOf[_user] = _tutor;
+        tutorCount[_tutor]++;
 
-        _payReferralBonus(_user);
+        _payTutorBonus(_user);
 
-        emit ReferrerSet(_user, _referrer);
+        emit TutorSet(_user, _tutor);
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // REFERRAL BONUS MANAGEMENT
+    // TUTOR BONUS MANAGEMENT
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Fund the referral bonus pool. Anyone can deposit BKC.
+    /// @notice Fund the tutor bonus pool. Anyone can deposit BKC.
     ///         Must have approved this contract for the amount.
-    function fundReferralBonus(uint256 amount) external {
+    function fundTutorBonus(uint256 amount) external {
         if (amount == 0) revert ZeroAmount();
         bkcToken.transferFrom(msg.sender, address(this), amount);
-        referralBonusPool += amount;
-        emit ReferralBonusFunded(msg.sender, amount, referralBonusPool);
+        tutorBonusPool += amount;
+        emit TutorBonusFunded(msg.sender, amount, tutorBonusPool);
     }
 
     /// @notice Owner adjusts the BKC bonus for new users.
-    ///         Set to 0 to disable BKC bonuses (referral still works).
-    function setReferralBonusAmount(uint256 _amount) external onlyOwner {
-        emit ReferralBonusAmountUpdated(referralBonusAmount, _amount);
-        referralBonusAmount = _amount;
+    ///         Set to 0 to disable BKC bonuses (tutor system still works).
+    function setTutorBonusAmount(uint256 _amount) external onlyOwner {
+        emit TutorBonusAmountUpdated(tutorBonusAmount, _amount);
+        tutorBonusAmount = _amount;
     }
 
-    /// @notice Owner adjusts the ETH fee for setReferrer().
-    ///         Set to 0 to make it free.
-    function setReferralFee(uint256 _fee) external onlyOwner {
-        emit ReferralFeeUpdated(referralFee, _fee);
-        referralFee = _fee;
+    /// @notice Owner adjusts the ETH fee for first-time setTutor().
+    function setTutorFee(uint256 _fee) external onlyOwner {
+        emit TutorFeeUpdated(tutorFee, _fee);
+        tutorFee = _fee;
     }
 
-    /// @dev Pay BKC welcome bonus to the referred user only.
+    /// @notice Owner adjusts the ETH fee for changing tutor.
+    function setChangeTutorFee(uint256 _fee) external onlyOwner {
+        emit ChangeTutorFeeUpdated(changeTutorFee, _fee);
+        changeTutorFee = _fee;
+    }
+
+    /// @dev Pay BKC welcome bonus to the tutored user only.
     ///      Graceful: if pool is empty or insufficient, no bonus is paid.
-    function _payReferralBonus(address user) internal {
-        uint256 bonus = referralBonusAmount;
+    function _payTutorBonus(address user) internal {
+        uint256 bonus = tutorBonusAmount;
         if (bonus == 0) return;
-        if (referralBonusPool < bonus) return;
+        if (tutorBonusPool < bonus) return;
 
-        referralBonusPool -= bonus;
-        referralBonusesPaid += bonus;
+        tutorBonusPool -= bonus;
+        tutorBonusesPaid += bonus;
 
         bkcToken.transfer(user, bonus);
 
-        emit ReferralBonusPaid(user, bonus);
+        emit TutorBonusPaid(user, bonus);
     }
 
     // ════════════════════════════════════════════════════════════════════════

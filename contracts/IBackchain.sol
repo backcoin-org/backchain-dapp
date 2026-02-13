@@ -54,17 +54,17 @@ interface IBackchainEcosystem {
         uint256 txValue
     ) external view returns (uint256 fee);
 
-    /// @notice Set referrer (once, global, permanent). Requires ETH fee.
-    function setReferrer(address _referrer) external payable;
+    /// @notice Set tutor (mentor). First time: tutorFee. Change: changeTutorFee.
+    function setTutor(address _tutor) external payable;
 
-    /// @notice Relayer sets referrer on behalf of user (gasless)
-    function setReferrerFor(address _user, address _referrer) external;
+    /// @notice Relayer sets tutor on behalf of user (gasless)
+    function setTutorFor(address _user, address _tutor) external;
 
-    /// @notice Get the referral relayer address
-    function referralRelayer() external view returns (address);
+    /// @notice Get the tutor relayer address
+    function tutorRelayer() external view returns (address);
 
-    /// @notice Get a user's referrer
-    function referredBy(address user) external view returns (address);
+    /// @notice Get a user's tutor
+    function tutorOf(address user) external view returns (address);
 
     /// @notice Get the treasury address
     function treasury() external view returns (address);
@@ -81,11 +81,11 @@ interface IBackchainEcosystem {
     /// @notice Pending ETH for a given address (operator or treasury)
     function pendingEth(address account) external view returns (uint256);
 
-    /// @notice Referral count for a given address
-    function referralCount(address referrer) external view returns (uint256);
+    /// @notice Tutor count for a given address
+    function tutorCount(address tutor) external view returns (uint256);
 
-    /// @notice Global referral share in basis points (e.g., 1000 = 10%)
-    function referralBps() external view returns (uint16);
+    /// @notice Global tutor share in basis points (e.g., 500 = 5%)
+    function tutorBps() external view returns (uint16);
 }
 
 // ─── Staking Pool ──────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
 // BACKCHAIN V10 — COMPREHENSIVE INTEGRATION TESTS
 // =============================================================================
 // Tests cross-contract flows for all 15 V10 smart contracts.
-// V10: ecosystem-wide referral rewards (10% ETH off-the-top), uint32 multiplier,
+// V10: ecosystem-wide tutor rewards (10% ETH off-the-top), uint32 multiplier,
 //      no buyback minimum, 5% caller reward, configurable swap target.
 // Uses ethers v6 + Hardhat + loadFixture for test isolation.
 // =============================================================================
@@ -168,7 +168,7 @@ async function deployAllFixture() {
   await ecosystem.setBuybackMiner(buybackAddr);
   await ecosystem.setStakingPool(stakingAddr);
 
-  // V10 module configs — referral 10% off-the-top, remaining 90% split per module
+  // V10 module configs — tutor 10% off-the-top, remaining 90% split per module
   // No-custom modules: operator 15%, treasury 25%, buyback 50% (of remaining 90%)
   const defaultCfg = {
     active: true,
@@ -187,7 +187,7 @@ async function deployAllFixture() {
     buybackBps: 2778,
   };
 
-  // CHARITY & RENTAL: creator/owner earns 70% custom recipient
+  // CHARITY: creator earns 70% custom recipient
   const charityCfg = {
     active: true,
     customBps: 7000,
@@ -204,14 +204,14 @@ async function deployAllFixture() {
     await ecosystem.registerModule(poolAddr, MOD_NFT_POOL, defaultCfg);
   }
 
-  await ecosystem.registerModule(rentalAddr, MOD_RENTAL, charityCfg);
+  await ecosystem.registerModule(rentalAddr, MOD_RENTAL, defaultCfg);
   await ecosystem.registerModule(agoraAddr, MOD_AGORA, agoraCfg);
   await ecosystem.registerModule(fortuneAddr, MOD_FORTUNE, defaultCfg);
   await ecosystem.registerModule(notaryAddr, MOD_NOTARY, defaultCfg);
   await ecosystem.registerModule(charityAddr, MOD_CHARITY, charityCfg);
 
-  // V10: Enable ecosystem-wide referral rewards (10% ETH off-the-top)
-  await ecosystem.setReferralBps(1000);
+  // V10: Enable ecosystem-wide tutor rewards (10% ETH off-the-top)
+  await ecosystem.setTutorBps(1000);
 
   // StakingPool: set reward notifiers (BuybackMiner + Ecosystem)
   await stakingPool.setRewardNotifier(buybackAddr, true);
@@ -578,73 +578,85 @@ describe("Backchain V10 — Integration Tests", function () {
       expect(await f.ecosystem.pendingEth(f.treasury.address)).to.equal(0);
     });
 
-    it("referral system: setReferrer and referral split", async function () {
+    it("tutor system: setTutor and tutor split", async function () {
       const f = await loadFixture(deployAllFixture);
 
-      // Alice sets Bob as referrer
-      await f.ecosystem.connect(f.alice).setReferrer(f.bob.address, { value: ethers.parseEther("0.00002") });
-      expect(await f.ecosystem.referredBy(f.alice.address)).to.equal(f.bob.address);
-      expect(await f.ecosystem.referralCount(f.bob.address)).to.equal(1);
+      // Alice sets Bob as tutor
+      await f.ecosystem.connect(f.alice).setTutor(f.bob.address, { value: ethers.parseEther("0.00002") });
+      expect(await f.ecosystem.tutorOf(f.alice.address)).to.equal(f.bob.address);
+      expect(await f.ecosystem.tutorCount(f.bob.address)).to.equal(1);
     });
 
-    it("referrer cannot be self", async function () {
+    it("tutor cannot be self", async function () {
       const f = await loadFixture(deployAllFixture);
       await expect(
-        f.ecosystem.connect(f.alice).setReferrer(f.alice.address, { value: ethers.parseEther("0.00002") })
-      ).to.be.revertedWithCustomError(f.ecosystem, "CannotReferSelf");
+        f.ecosystem.connect(f.alice).setTutor(f.alice.address, { value: ethers.parseEther("0.00002") })
+      ).to.be.revertedWithCustomError(f.ecosystem, "CannotTutorSelf");
     });
 
-    it("referrer can only be set once", async function () {
+    it("tutor can be changed with higher fee", async function () {
       const f = await loadFixture(deployAllFixture);
-      await f.ecosystem.connect(f.alice).setReferrer(f.bob.address, { value: ethers.parseEther("0.00002") });
+      // First set: 0.00002 ETH
+      await f.ecosystem.connect(f.alice).setTutor(f.bob.address, { value: ethers.parseEther("0.00002") });
+      expect(await f.ecosystem.tutorOf(f.alice.address)).to.equal(f.bob.address);
+
+      // Change with same fee reverts (need 0.0001 ETH to change)
       await expect(
-        f.ecosystem.connect(f.alice).setReferrer(f.charlie.address, { value: ethers.parseEther("0.00002") })
-      ).to.be.revertedWithCustomError(f.ecosystem, "ReferrerAlreadySet");
+        f.ecosystem.connect(f.alice).setTutor(f.charlie.address, { value: ethers.parseEther("0.00002") })
+      ).to.be.revertedWithCustomError(f.ecosystem, "InsufficientTutorFee");
+
+      // Change with correct higher fee succeeds
+      await f.ecosystem.connect(f.alice).setTutor(f.charlie.address, { value: ethers.parseEther("0.0001") });
+      expect(await f.ecosystem.tutorOf(f.alice.address)).to.equal(f.charlie.address);
+
+      // Old tutor count decremented, new tutor count incremented
+      expect(await f.ecosystem.tutorCount(f.bob.address)).to.equal(0);
+      expect(await f.ecosystem.tutorCount(f.charlie.address)).to.equal(1);
     });
 
-    // ── setReferrerFor (relayer-based gasless onboarding) ──
+    // ── setTutorFor (relayer-based gasless onboarding) ──
 
-    it("setReferrerFor: relayer sets referrer on behalf of user", async function () {
+    it("setTutorFor: relayer sets tutor on behalf of user", async function () {
       const f = await loadFixture(deployAllFixture);
       // deployer is owner, set deployer as relayer
-      await f.ecosystem.setReferralRelayer(f.deployer.address);
-      expect(await f.ecosystem.referralRelayer()).to.equal(f.deployer.address);
+      await f.ecosystem.setTutorRelayer(f.deployer.address);
+      expect(await f.ecosystem.tutorRelayer()).to.equal(f.deployer.address);
 
-      // deployer (relayer) sets Bob as Alice's referrer
-      await f.ecosystem.setReferrerFor(f.alice.address, f.bob.address);
-      expect(await f.ecosystem.referredBy(f.alice.address)).to.equal(f.bob.address);
-      expect(await f.ecosystem.referralCount(f.bob.address)).to.equal(1);
+      // deployer (relayer) sets Bob as Alice's tutor
+      await f.ecosystem.setTutorFor(f.alice.address, f.bob.address);
+      expect(await f.ecosystem.tutorOf(f.alice.address)).to.equal(f.bob.address);
+      expect(await f.ecosystem.tutorCount(f.bob.address)).to.equal(1);
     });
 
-    it("setReferrerFor: reverts if not relayer", async function () {
+    it("setTutorFor: reverts if not relayer", async function () {
       const f = await loadFixture(deployAllFixture);
-      await f.ecosystem.setReferralRelayer(f.deployer.address);
+      await f.ecosystem.setTutorRelayer(f.deployer.address);
       await expect(
-        f.ecosystem.connect(f.alice).setReferrerFor(f.bob.address, f.charlie.address)
-      ).to.be.revertedWithCustomError(f.ecosystem, "NotReferralRelayer");
+        f.ecosystem.connect(f.alice).setTutorFor(f.bob.address, f.charlie.address)
+      ).to.be.revertedWithCustomError(f.ecosystem, "NotTutorRelayer");
     });
 
-    it("setReferrerFor: reverts if already set", async function () {
+    it("setTutorFor: reverts if tutor already set (relayer can only set first time)", async function () {
       const f = await loadFixture(deployAllFixture);
-      await f.ecosystem.setReferralRelayer(f.deployer.address);
-      await f.ecosystem.setReferrerFor(f.alice.address, f.bob.address);
+      await f.ecosystem.setTutorRelayer(f.deployer.address);
+      await f.ecosystem.setTutorFor(f.alice.address, f.bob.address);
       await expect(
-        f.ecosystem.setReferrerFor(f.alice.address, f.charlie.address)
-      ).to.be.revertedWithCustomError(f.ecosystem, "ReferrerAlreadySet");
+        f.ecosystem.setTutorFor(f.alice.address, f.charlie.address)
+      ).to.be.revertedWithCustomError(f.ecosystem, "InsufficientTutorFee");
     });
 
-    it("setReferrerFor: reverts if user == referrer", async function () {
+    it("setTutorFor: reverts if user == tutor", async function () {
       const f = await loadFixture(deployAllFixture);
-      await f.ecosystem.setReferralRelayer(f.deployer.address);
+      await f.ecosystem.setTutorRelayer(f.deployer.address);
       await expect(
-        f.ecosystem.setReferrerFor(f.alice.address, f.alice.address)
-      ).to.be.revertedWithCustomError(f.ecosystem, "CannotReferSelf");
+        f.ecosystem.setTutorFor(f.alice.address, f.alice.address)
+      ).to.be.revertedWithCustomError(f.ecosystem, "CannotTutorSelf");
     });
 
-    it("setReferralRelayer: only owner can call", async function () {
+    it("setTutorRelayer: only owner can call", async function () {
       const f = await loadFixture(deployAllFixture);
       await expect(
-        f.ecosystem.connect(f.alice).setReferralRelayer(f.alice.address)
+        f.ecosystem.connect(f.alice).setTutorRelayer(f.alice.address)
       ).to.be.revertedWithCustomError(f.ecosystem, "NotOwner");
     });
 
@@ -873,7 +885,7 @@ describe("Backchain V10 — Integration Tests", function () {
       expect(await f.stakingPool.delegationCount(f.alice.address)).to.equal(0);
     });
 
-    it("force unstake with penalty burns BKC", async function () {
+    it("force unstake with penalty burns BKC (default 10%)", async function () {
       const f = await loadFixture(deployAllFixture);
       const stakeAmt = ethers.parseEther("1000");
 
@@ -888,7 +900,7 @@ describe("Backchain V10 — Integration Tests", function () {
       const balAfter = await f.bkcToken.balanceOf(f.alice.address);
       const burnAfter = await f.bkcToken.totalBurned();
 
-      // Penalty should be 10% (default 1000 bps)
+      // Penalty should be 10% (default 1000 bps, no Diamond NFT)
       const expectedPenalty = stakeAmt * 1000n / 10000n; // 100 BKC
       expect(burnAfter - burnBefore).to.equal(expectedPenalty);
 
@@ -896,7 +908,38 @@ describe("Backchain V10 — Integration Tests", function () {
       expect(balAfter - balBefore).to.equal(stakeAmt - expectedPenalty);
     });
 
-    it("claim with NFT boost reduces burn rate", async function () {
+    it("force unstake with Diamond NFT: only 5% penalty", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      // Alice buys a Diamond NFT (tier 3)
+      const pool3 = f.nftPools[3];
+      const buyPrice = await pool3.getBuyPrice();
+      await f.bkcToken.connect(f.alice).approve(f.nftPoolAddrs[3], buyPrice);
+      await pool3.connect(f.alice).buyNFT(0, ethers.ZeroAddress);
+
+      // Verify Diamond boost
+      const boost = await f.rewardBooster.getUserBestBoost(f.alice.address);
+      expect(boost).to.equal(5000); // BOOST_DIAMOND
+
+      const stakeAmt = ethers.parseEther("1000");
+      await f.bkcToken.connect(f.alice).approve(f.stakingAddr, stakeAmt);
+      await f.stakingPool.connect(f.alice).delegate(stakeAmt, 365, ethers.ZeroAddress);
+
+      const burnBefore = await f.bkcToken.totalBurned();
+      const balBefore = await f.bkcToken.balanceOf(f.alice.address);
+
+      await f.stakingPool.connect(f.alice).forceUnstake(0, ethers.ZeroAddress);
+
+      const balAfter = await f.bkcToken.balanceOf(f.alice.address);
+      const burnAfter = await f.bkcToken.totalBurned();
+
+      // Diamond holders get 5% penalty (500 bps) instead of 10%
+      const expectedPenalty = stakeAmt * 500n / 10000n; // 50 BKC
+      expect(burnAfter - burnBefore).to.equal(expectedPenalty);
+      expect(balAfter - balBefore).to.equal(stakeAmt - expectedPenalty);
+    });
+
+    it("claim with Diamond NFT: 0% recycle, 10% burn (no tutor)", async function () {
       const f = await loadFixture(deployAllFixture);
 
       // Alice buys a Diamond NFT from NFTPool (tier 3)
@@ -923,16 +966,19 @@ describe("Backchain V10 — Integration Tests", function () {
       await f.stakingPool.connect(buybackSigner).notifyReward(rewardAmt);
       await ethers.provider.send("hardhat_stopImpersonatingAccount", [f.buybackAddr]);
 
-      // Preview claim with Diamond boost (10% burn — lowest tier)
+      // Preview claim: Diamond = 0% recycle, no tutor = 10% burn
       const preview = await f.stakingPool.previewClaim(f.alice.address);
-      expect(preview.burnRateBps).to.equal(1000); // Diamond = 10% burn
+      expect(preview.recycleRateBps).to.equal(0); // Diamond = 0% recycle
+      expect(preview.nftBoost).to.equal(5000);
+      expect(preview.recycleAmount).to.equal(0n);
+      expect(preview.burnAmount).to.equal(preview.totalRewards * 1000n / 10000n); // 10% burn (no tutor)
     });
 
-    it("referrer receives cut on claim", async function () {
+    it("tutor receives 5% BKC cut on claim", async function () {
       const f = await loadFixture(deployAllFixture);
 
-      // Set Bob as Alice's referrer
-      await f.ecosystem.connect(f.alice).setReferrer(f.bob.address, { value: ethers.parseEther("0.00002") });
+      // Set Bob as Alice's tutor
+      await f.ecosystem.connect(f.alice).setTutor(f.bob.address, { value: ethers.parseEther("0.00002") });
 
       // Stake
       const stakeAmt = ethers.parseEther("1000");
@@ -948,12 +994,12 @@ describe("Backchain V10 — Integration Tests", function () {
       await f.stakingPool.connect(buybackSigner).notifyReward(rewardAmt);
       await ethers.provider.send("hardhat_stopImpersonatingAccount", [f.buybackAddr]);
 
-      // Claim
+      // Claim — Bob (tutor) should earn 5% of total rewards
       const bobBefore = await f.bkcToken.balanceOf(f.bob.address);
       await f.stakingPool.connect(f.alice).claimRewards();
       const bobAfter = await f.bkcToken.balanceOf(f.bob.address);
 
-      // Bob should have received 5% referral cut
+      // Bob should have received 5% tutor cut
       expect(bobAfter).to.be.gt(bobBefore);
     });
   });
@@ -1832,7 +1878,7 @@ describe("Backchain V10 — Integration Tests", function () {
       }
     });
 
-    it("NFT buy -> stake with boost -> claim with reduced burn", async function () {
+    it("NFT buy -> stake with boost -> claim with recycle model", async function () {
       const f = await loadFixture(deployAllFixture);
 
       // 1. Alice buys a Gold NFT (tier 2)
@@ -1859,9 +1905,9 @@ describe("Backchain V10 — Integration Tests", function () {
       await f.stakingPool.connect(buybackSigner).notifyReward(rewardAmt);
       await ethers.provider.send("hardhat_stopImpersonatingAccount", [f.buybackAddr]);
 
-      // 4. Preview claim — Gold gives 12% burn (vs 20% without NFT)
+      // 4. Preview claim — Gold = 20% recycle, no tutor = 10% burn
       const preview = await f.stakingPool.previewClaim(f.alice.address);
-      expect(preview.burnRateBps).to.equal(1200); // 12% burn
+      expect(preview.recycleRateBps).to.equal(2000); // Gold = 20% recycle
       expect(preview.nftBoost).to.equal(4000); // Gold
 
       // 5. Claim
@@ -1869,17 +1915,17 @@ describe("Backchain V10 — Integration Tests", function () {
       await f.stakingPool.connect(f.alice).claimRewards();
       const burnAfter = await f.bkcToken.totalBurned();
 
-      // With Gold NFT, only 12% burned (not 20%)
+      // No tutor: 10% of total burned, 20% recycled to stakers
       const totalReward = preview.totalRewards;
-      const expectedBurn = totalReward * 1200n / 10000n;
+      const expectedBurn = totalReward * 1000n / 10000n; // 10% burn (no tutor)
       expect(burnAfter - burnBefore).to.equal(expectedBurn);
     });
 
-    it("referral system integration: referrer earns on staking claim", async function () {
+    it("tutor system integration: tutor earns BKC on staking claim", async function () {
       const f = await loadFixture(deployAllFixture);
 
-      // 1. Set referrer
-      await f.ecosystem.connect(f.alice).setReferrer(f.charlie.address, { value: ethers.parseEther("0.00002") });
+      // 1. Set tutor
+      await f.ecosystem.connect(f.alice).setTutor(f.charlie.address, { value: ethers.parseEther("0.00002") });
 
       // 2. Stake
       const stakeAmt = ethers.parseEther("2000");
@@ -1895,12 +1941,15 @@ describe("Backchain V10 — Integration Tests", function () {
       await f.stakingPool.connect(buybackSigner).notifyReward(rewardAmt);
       await ethers.provider.send("hardhat_stopImpersonatingAccount", [f.buybackAddr]);
 
-      // 4. Claim — Charlie (referrer) should earn 5% of after-burn amount
+      // 4. Claim — Charlie (tutor) earns 5% of total, no burn (tutor replaces burn)
       const charlieBefore = await f.bkcToken.balanceOf(f.charlie.address);
+      const burnBefore = await f.bkcToken.totalBurned();
       await f.stakingPool.connect(f.alice).claimRewards();
       const charlieAfter = await f.bkcToken.balanceOf(f.charlie.address);
+      const burnAfter = await f.bkcToken.totalBurned();
 
-      expect(charlieAfter).to.be.gt(charlieBefore); // Charlie earned referral cut
+      expect(charlieAfter).to.be.gt(charlieBefore); // Charlie earned tutor cut
+      expect(burnAfter).to.equal(burnBefore); // No burn when tutor is set
     });
 
     it("ecosystem module deauthorization blocks fee collection", async function () {
@@ -1971,38 +2020,38 @@ describe("Backchain V10 — Integration Tests", function () {
   });
 
   // ══════════════════════════════════════════════════════════════════════════
-  // 13. V10: REFERRAL ETH DISTRIBUTION
+  // 13. V10: TUTOR ETH DISTRIBUTION
   // ══════════════════════════════════════════════════════════════════════════
 
-  describe("13. V10 Referral ETH Distribution", function () {
-    it("referrer earns 10% ETH on any ecosystem fee action", async function () {
+  describe("13. V10 Tutor ETH Distribution", function () {
+    it("tutor earns 10% ETH on any ecosystem fee action", async function () {
       const f = await loadFixture(deployAllFixture);
 
-      // Set Charlie as Alice's referrer
-      await f.ecosystem.connect(f.alice).setReferrer(f.charlie.address, { value: ethers.parseEther("0.00002") });
+      // Set Charlie as Alice's tutor
+      await f.ecosystem.connect(f.alice).setTutor(f.charlie.address, { value: ethers.parseEther("0.00002") });
 
       const charliePendingBefore = await f.ecosystem.pendingEth(f.charlie.address);
 
-      // Alice creates a post (triggers collectFee → referral distribution)
+      // Alice creates a post (triggers collectFee → tutor distribution)
       const feeAmount = ethers.parseEther("1");
       await f.agora
         .connect(f.alice)
-        .createPost("QmReferralTest", 0, 0, f.operator.address, {
+        .createPost("QmTutorTest", 0, 0, f.operator.address, {
           value: feeAmount,
         });
 
       const charliePendingAfter = await f.ecosystem.pendingEth(f.charlie.address);
-      const referralEarned = charliePendingAfter - charliePendingBefore;
+      const tutorEarned = charliePendingAfter - charliePendingBefore;
 
-      // Referrer should earn 10% of the fee
-      const expectedReferral = feeAmount * 1000n / BPS; // 10%
-      expect(referralEarned).to.equal(expectedReferral);
+      // Tutor should earn 10% of the fee
+      const expectedTutorETH = feeAmount * 1000n / BPS; // 10%
+      expect(tutorEarned).to.equal(expectedTutorETH);
     });
 
-    it("no referral payment when user has no referrer", async function () {
+    it("no tutor payment when user has no tutor", async function () {
       const f = await loadFixture(deployAllFixture);
 
-      // Alice has NO referrer set
+      // Alice has NO tutor set
       const feeAmount = ethers.parseEther("0.5");
 
       const treasuryBefore = await f.ecosystem.pendingEth(f.treasury.address);
@@ -2010,28 +2059,28 @@ describe("Backchain V10 — Integration Tests", function () {
 
       await f.agora
         .connect(f.alice)
-        .createPost("QmNoReferrer", 0, 0, f.operator.address, {
+        .createPost("QmNoTutor", 0, 0, f.operator.address, {
           value: feeAmount,
         });
 
-      // Full amount should be distributed to operator/treasury/buyback (no referral cut)
+      // Full amount should be distributed to operator/treasury/buyback (no tutor cut)
       const treasuryAfter = await f.ecosystem.pendingEth(f.treasury.address);
       const buybackAfter = await f.ecosystem.buybackAccumulated();
       const operatorPending = await f.ecosystem.pendingEth(f.operator.address);
 
-      // Sum should equal feeAmount (nothing lost to referral)
+      // Sum should equal feeAmount (nothing lost to tutor)
       const totalDistributed = (treasuryAfter - treasuryBefore) + (buybackAfter - buybackBefore) + operatorPending;
       expect(totalDistributed).to.equal(feeAmount);
     });
 
-    it("referrer earns on Notary certification", async function () {
+    it("tutor earns on Notary certification", async function () {
       const f = await loadFixture(deployAllFixture);
 
-      await f.ecosystem.connect(f.alice).setReferrer(f.bob.address, { value: ethers.parseEther("0.00002") });
+      await f.ecosystem.connect(f.alice).setTutor(f.bob.address, { value: ethers.parseEther("0.00002") });
 
       const bobPendingBefore = await f.ecosystem.pendingEth(f.bob.address);
 
-      const docHash = ethers.keccak256(ethers.toUtf8Bytes("referral_doc"));
+      const docHash = ethers.keccak256(ethers.toUtf8Bytes("tutor_doc"));
       const fee = ethers.parseEther("0.1");
       await f.notary.connect(f.alice).certify(docHash, "QmMeta", 0, f.operator.address, {
         value: fee,
@@ -2041,38 +2090,38 @@ describe("Backchain V10 — Integration Tests", function () {
       expect(bobPendingAfter - bobPendingBefore).to.equal(fee * 1000n / BPS);
     });
 
-    it("setReferralBps: owner can update referral rate", async function () {
+    it("setTutorBps: owner can update tutor rate", async function () {
       const f = await loadFixture(deployAllFixture);
 
       // Current rate should be 1000 (10%)
-      expect(await f.ecosystem.referralBps()).to.equal(1000);
+      expect(await f.ecosystem.tutorBps()).to.equal(1000);
 
       // Owner can set to 500 (5%)
-      await f.ecosystem.setReferralBps(500);
-      expect(await f.ecosystem.referralBps()).to.equal(500);
+      await f.ecosystem.setTutorBps(500);
+      expect(await f.ecosystem.tutorBps()).to.equal(500);
     });
 
-    it("setReferralBps: non-owner cannot call", async function () {
+    it("setTutorBps: non-owner cannot call", async function () {
       const f = await loadFixture(deployAllFixture);
       await expect(
-        f.ecosystem.connect(f.alice).setReferralBps(2000)
+        f.ecosystem.connect(f.alice).setTutorBps(2000)
       ).to.be.revertedWithCustomError(f.ecosystem, "NotOwner");
     });
 
-    it("setReferralBps: cannot exceed 30%", async function () {
+    it("setTutorBps: cannot exceed 30%", async function () {
       const f = await loadFixture(deployAllFixture);
       await expect(
-        f.ecosystem.setReferralBps(3001) // > 3000
+        f.ecosystem.setTutorBps(3001) // > 3000
       ).to.be.revertedWithCustomError(f.ecosystem, "InvalidFeeBps");
     });
 
-    it("dual earning: ETH referral + BKC staking referral", async function () {
+    it("dual earning: ETH tutor + BKC staking tutor", async function () {
       const f = await loadFixture(deployAllFixture);
 
-      // Charlie is Alice's referrer
-      await f.ecosystem.connect(f.alice).setReferrer(f.charlie.address, { value: ethers.parseEther("0.00002") });
+      // Charlie is Alice's tutor
+      await f.ecosystem.connect(f.alice).setTutor(f.charlie.address, { value: ethers.parseEther("0.00002") });
 
-      // 1. Alice creates Agora post → Charlie earns ETH referral
+      // 1. Alice creates Agora post → Charlie earns ETH tutor cut
       const charlieEthBefore = await f.ecosystem.pendingEth(f.charlie.address);
       await f.agora
         .connect(f.alice)
@@ -2082,7 +2131,7 @@ describe("Backchain V10 — Integration Tests", function () {
       const charlieEthAfter = await f.ecosystem.pendingEth(f.charlie.address);
       expect(charlieEthAfter).to.be.gt(charlieEthBefore); // ETH earned
 
-      // 2. Alice stakes and claims → Charlie earns BKC referral
+      // 2. Alice stakes and claims → Charlie earns BKC tutor cut
       const stakeAmt = ethers.parseEther("1000");
       await f.bkcToken.connect(f.alice).approve(f.stakingAddr, stakeAmt);
       await f.stakingPool.connect(f.alice).delegate(stakeAmt, 30, ethers.ZeroAddress);

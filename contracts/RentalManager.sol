@@ -330,11 +330,13 @@ contract RentalManager is IRewardBooster {
     /// @notice Boost a listing's visibility for X days. Pays ETH fee.
     ///         Similar to Agora profile boost. Stacks with existing boost.
     ///
-    /// @param tokenId NFT listing to boost
-    /// @param days_   Number of days to boost
+    /// @param tokenId  NFT listing to boost
+    /// @param days_    Number of days to boost
+    /// @param operator Frontend operator earning commission
     function boostListing(
         uint256 tokenId,
-        uint256 days_
+        uint256 days_,
+        address operator
     ) external payable nonReentrant {
         Listing storage l = listings[tokenId];
         if (l.owner != msg.sender) revert NotListingOwner();
@@ -357,7 +359,7 @@ contract RentalManager is IRewardBooster {
 
         // ETH fee to ecosystem
         ecosystem.collectFee{value: msg.value}(
-            msg.sender, address(0), address(0), MODULE_ID, 0
+            msg.sender, operator, address(0), MODULE_ID, 0
         );
 
         emit ListingBoosted(tokenId, msg.sender, days_, msg.value, newExpiry);

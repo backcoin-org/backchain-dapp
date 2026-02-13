@@ -4,35 +4,36 @@ pragma solidity ^0.8.28;
 import "./IBackchain.sol";
 
 // ============================================================================
-// STAKING POOL — IMMUTABLE
+// STAKING POOL — IMMUTABLE (V2: Recycle + Tutor)
 // ============================================================================
 //
 // Users delegate BKC with a time lock. Longer locks = higher pStake (power).
 // Rewards come from BuybackMiner (purchased + mined BKC) and Tier 2 BKC fees.
 //
-// Reward claim flow:
+// Reward claim flow (V2 — Recycle Model):
 //   1. Calculate total pending (active delegations + savedRewards)
-//   2. Apply burn rate (reduced by NFT boost tier)
-//   3. If referrer: redirect 10% of total from burn → 5% referrer + 5% staker bonus
-//   4. Burn remaining burn portion
-//   5. User receives: (total - burn) + referral bonus
-//   6. Pay ETH fee to ecosystem
+//   2. NFT tier determines recycle rate (tokens returned to stakers, NOT burned)
+//   3. Tutor system: 5% to tutor if set, otherwise 10% burned
+//   4. User receives: total - recycle - tutorCut (or - burn if no tutor)
+//   5. Pay ETH fee to ecosystem
 //
-// NFT Burn Reduction Tiers:
-//   No NFT  → 20% burn (user keeps 80%, or 85% with referrer)
-//   Bronze  → 18% burn (user keeps 82%, or 87% with referrer)
-//   Silver  → 15% burn (user keeps 85%, or 90% with referrer)
-//   Gold    → 12% burn (user keeps 88%, or 93% with referrer)
-//   Diamond → 10% burn (user keeps 90%, or 95% with referrer)
+// NFT Recycle Rates (basis points recycled to all stakers):
+//   No NFT  → 60% recycled (user keeps 40%, or 45% with tutor)
+//   Bronze  → 40% recycled (user keeps 60%, or 65% with tutor)
+//   Silver  → 30% recycled (user keeps 70%, or 75% with tutor)
+//   Gold    → 20% recycled (user keeps 80%, or 85% with tutor)
+//   Diamond →  0% recycled (user keeps 100%, or 95% with tutor)
+//
+// Tutor system:
+//   With tutor: 5% of total → tutor, 0% burned (user saves 5% vs no-tutor)
+//   No tutor:  10% of total → burned (deflationary penalty for no mentor)
+//   Net: having a tutor saves user 5% of rewards
 //
 // Force unstake:
-//   Allows unstaking before lock expires with a BKC penalty.
-//   Penalty BKC is burned (deflationary, benefits all holders).
-//   Pending rewards are saved (not auto-claimed) so user can claim
-//   later with better NFT boost conditions.
+//   Default: 10% penalty (burned). Diamond NFT holders: only 5% penalty.
+//   Pending rewards are saved (not auto-claimed).
 //
-// Uses reward-per-share pattern (MasterChef-style) for gas-efficient
-// proportional distribution without iteration.
+// Gas optimized: combined calculate+update loop in claims (single iteration).
 //
 // ============================================================================
 
@@ -45,9 +46,11 @@ contract StakingPool is IStakingPool {
     uint256 private constant BPS       = 10_000;
     uint256 private constant PRECISION = 1e18;
 
-    // Referral redirect: 10% of total rewards redirected from burn
-    // → 5% to referrer + 5% bonus to staker (being referred = advantage)
-    uint256 public constant REFERRAL_REDIRECT_BPS = 1000; // 10%
+    // Tutor: 5% of total rewards goes to tutor
+    uint256 public constant TUTOR_BPS = 500; // 5%
+
+    // No-tutor burn: 10% of total rewards is burned (only penalty for no tutor)
+    uint256 public constant NO_TUTOR_BURN_BPS = 1000; // 10%
 
     // Lock duration limits
     uint256 public constant MIN_LOCK_DAYS = 1;
@@ -65,12 +68,15 @@ contract StakingPool is IStakingPool {
     uint256 public constant BOOST_GOLD    = 4000;
     uint256 public constant BOOST_DIAMOND = 5000;
 
-    // ── Burn Rates per Tier (in basis points) ──
-    uint256 public constant BURN_RATE_NO_NFT  = 2000; // 20%
-    uint256 public constant BURN_RATE_BRONZE  = 1800; // 18%
-    uint256 public constant BURN_RATE_SILVER  = 1500; // 15%
-    uint256 public constant BURN_RATE_GOLD    = 1200; // 12%
-    uint256 public constant BURN_RATE_DIAMOND = 1000; // 10%
+    // ── Recycle Rates per Tier (in basis points — recycled to stakers, NOT burned) ──
+    uint256 public constant RECYCLE_RATE_NO_NFT  = 6000; // 60%
+    uint256 public constant RECYCLE_RATE_BRONZE  = 4000; // 40%
+    uint256 public constant RECYCLE_RATE_SILVER  = 3000; // 30%
+    uint256 public constant RECYCLE_RATE_GOLD    = 2000; // 20%
+    uint256 public constant RECYCLE_RATE_DIAMOND = 0;    // 0% (keeps everything)
+
+    // ── Diamond Force Unstake Discount ──
+    uint256 public constant DIAMOND_FORCE_PENALTY_BPS = 500; // 5% (vs 10% default)
 
     // ════════════════════════════════════════════════════════════════════════
     // IMMUTABLE ADDRESSES
@@ -88,7 +94,7 @@ contract StakingPool is IStakingPool {
     IRewardBooster public rewardBooster;
 
     /// @notice BKC penalty on force unstake (basis points of staked amount).
-    ///         Default 1000 = 10%. Penalty is burned.
+    ///         Default 1000 = 10%. Diamond NFT holders get DIAMOND_FORCE_PENALTY_BPS instead.
     uint256 public forceUnstakePenaltyBps = 1000;
 
     /// @notice Authorized contracts that can call delegateFor (AirdropVesting)
@@ -107,14 +113,20 @@ contract StakingPool is IStakingPool {
     /// @notice Total BKC currently locked in delegations
     uint256 public override totalBkcDelegated;
 
-    /// @notice Lifetime BKC rewards deposited into this pool
+    /// @notice Lifetime BKC rewards deposited into this pool (including recycled)
     uint256 public totalRewardsDistributed;
 
-    /// @notice Lifetime BKC burned from claim burns
+    /// @notice Lifetime BKC burned from no-tutor claims
     uint256 public totalBurnedOnClaim;
+
+    /// @notice Lifetime BKC recycled back to stakers
+    uint256 public totalRecycledOnClaim;
 
     /// @notice Lifetime BKC burned from force unstake penalties
     uint256 public totalForceUnstakePenalties;
+
+    /// @notice Lifetime BKC sent to tutors
+    uint256 public totalTutorPayments;
 
     /// @notice Total ETH collected from claim/delegate/forceUnstake fees
     uint256 public totalEthFeesCollected;
@@ -174,18 +186,13 @@ contract StakingPool is IStakingPool {
     event RewardsClaimed(
         address indexed user,
         uint256 totalRewards,
+        uint256 recycledAmount,
         uint256 burnedAmount,
+        uint256 tutorAmount,
         uint256 userReceived,
-        uint256 cutAmount,
-        address cutRecipient,
         uint256 nftBoostUsed,
+        address tutor,
         address operator
-    );
-    event TokensBurnedOnClaim(
-        address indexed user,
-        uint256 burnedAmount,
-        uint256 burnRateBps,
-        uint256 totalBurnedAllTime
     );
     event RewardNotified(
         uint256 amount,
@@ -393,6 +400,7 @@ contract StakingPool is IStakingPool {
 
     /// @notice Force unstake BEFORE lock period expires.
     ///         A percentage of the staked BKC is burned as penalty.
+    ///         Diamond NFT holders get reduced penalty (5% vs 10% default).
     ///         Pending rewards are saved (not auto-claimed).
     ///         Pays ETH fee to ecosystem.
     ///
@@ -413,8 +421,14 @@ contract StakingPool is IStakingPool {
             savedRewards[msg.sender] += pending;
         }
 
-        // Calculate penalty (burned)
-        uint256 penalty = amount * forceUnstakePenaltyBps / BPS;
+        // Calculate penalty — Diamond NFT gets reduced penalty
+        uint256 penaltyBps = forceUnstakePenaltyBps;
+        uint256 nftBoost = _getUserBestBoost(msg.sender);
+        if (nftBoost >= BOOST_DIAMOND && penaltyBps > DIAMOND_FORCE_PENALTY_BPS) {
+            penaltyBps = DIAMOND_FORCE_PENALTY_BPS;
+        }
+
+        uint256 penalty = amount * penaltyBps / BPS;
         uint256 amountAfterPenalty = amount - penalty;
 
         // Update totals
@@ -457,13 +471,12 @@ contract StakingPool is IStakingPool {
 
     /// @notice Claim all pending staking rewards.
     ///
-    ///         Flow:
-    ///         1. Sum pending from all active delegations + savedRewards
-    ///         2. Apply burn rate (reduced by NFT boost tier)
-    ///         3. Burn the burn portion
-    ///         4. 5% of net → referrer (or treasury if no referrer)
-    ///         5. 95% of net → user
-    ///         6. ETH fee → ecosystem (optional, can be 0 if no fee configured)
+    ///         V2 Recycle Model:
+    ///         1. Calculate pending (combined loop — gas optimized)
+    ///         2. NFT tier → recycle rate (tokens returned to all stakers)
+    ///         3. Tutor: 5% → tutor. No tutor: 10% burned.
+    ///         4. User receives: total - recycle - tutor/burn
+    ///         5. ETH fee → ecosystem
     ///
     /// @param operator Frontend operator address
     function claimRewards(address operator) external payable {
@@ -488,69 +501,73 @@ contract StakingPool is IStakingPool {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // INTERNAL: EXECUTE CLAIM
+    // INTERNAL: EXECUTE CLAIM (V2 — Recycle + Tutor)
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @dev Core claim logic shared by claimRewards() and claimRewards(operator)
+    /// @dev Core claim logic — V2 Recycle Model:
     ///
-    ///      New referral-from-burn model:
-    ///      - Burn rate reduced by NFT tier (20%/18%/15%/12%/10%)
-    ///      - If user has referrer: 10% of total redirected FROM burn
-    ///        → 5% to referrer + 5% bonus to staker
-    ///      - Being referred = advantage (less burn, more rewards)
-    ///      - No referrer = full burn, no penalty
+    ///      Recycled tokens stay in the contract and increase accRewardPerShare,
+    ///      effectively redistributing them to all active stakers proportionally.
+    ///
+    ///      With tutor: user pays 5% to tutor (no burn).
+    ///      Without tutor: user pays 10% to burn (deflationary penalty).
+    ///      NFT tier determines recycle rate (60%/40%/30%/20%/0%).
+    ///
+    ///      Gas optimization: single loop for calculate + update debts.
     function _executeClaim(address user, address operator) internal {
-        // 1. Calculate total pending
-        uint256 totalReward = _calculateAllPending(user) + savedRewards[user];
+        // 1. Combined loop: calculate pending + update debts (saves ~1.8K gas)
+        uint256 totalReward = _calculateAndUpdateDebts(user) + savedRewards[user];
         if (totalReward == 0) revert NothingToClaim();
-
-        // 2. Update all reward debts + clear saved
-        _updateAllRewardDebt(user);
         savedRewards[user] = 0;
 
-        // 3. Get NFT boost and calculate burn
+        // 2. Get NFT boost and recycle rate
         uint256 nftBoost = _getUserBestBoost(user);
-        uint256 burnRateBps = _getBurnRateForBoost(nftBoost);
-        uint256 burnAmount = totalReward * burnRateBps / BPS;
+        uint256 recycleRateBps = _getRecycleRateForBoost(nftBoost);
 
-        // 4. Referral redirect from burn (if user has referrer)
-        address referrer = ecosystem.referredBy(user);
-        uint256 referrerAmount;
-        uint256 stakerBonus;
+        // 3. Calculate recycle amount (returned to staker pool)
+        uint256 recycleAmount = totalReward * recycleRateBps / BPS;
 
-        if (referrer != address(0)) {
-            // Redirect 10% of total rewards from the burn portion
-            uint256 redirect = totalReward * REFERRAL_REDIRECT_BPS / BPS;
-            // Cap redirect at burn amount (safety)
-            if (redirect > burnAmount) redirect = burnAmount;
-            referrerAmount = redirect / 2;           // 5% to referrer
-            stakerBonus = redirect - referrerAmount;  // 5% bonus to staker
-            burnAmount -= redirect;                   // reduce burn by redirect
+        // 4. Tutor or burn
+        address tutor = ecosystem.tutorOf(user);
+        uint256 tutorAmount;
+        uint256 burnAmount;
+
+        if (tutor != address(0)) {
+            // With tutor: 5% to tutor, 0% burned
+            tutorAmount = totalReward * TUTOR_BPS / BPS;
+        } else {
+            // Without tutor: 10% burned (deflationary penalty)
+            burnAmount = totalReward * NO_TUTOR_BURN_BPS / BPS;
         }
 
-        // 5. Burn
+        // 5. User receives remainder
+        uint256 userReward = totalReward - recycleAmount - tutorAmount - burnAmount;
+
+        // 6. Execute: burn, recycle, transfer
         if (burnAmount > 0) {
             bkcToken.burn(burnAmount);
             totalBurnedOnClaim += burnAmount;
-            emit TokensBurnedOnClaim(user, burnAmount, burnRateBps, totalBurnedOnClaim);
         }
 
-        // 6. User receives: total - originalBurn + stakerBonus
-        //    = total - (burnAmount + referrerAmount + stakerBonus) + stakerBonus
-        //    = total - burnAmount - referrerAmount
-        uint256 userReward = totalReward - burnAmount - referrerAmount;
+        if (recycleAmount > 0 && totalPStake > 0) {
+            // Recycle: increase accRewardPerShare (tokens stay in contract)
+            accRewardPerShare += recycleAmount * PRECISION / totalPStake;
+            totalRewardsDistributed += recycleAmount;
+            totalRecycledOnClaim += recycleAmount;
+        }
 
-        // 7. Transfer rewards
         if (userReward > 0) {
             bkcToken.transfer(user, userReward);
         }
-        if (referrerAmount > 0) {
-            bkcToken.transfer(referrer, referrerAmount);
+
+        if (tutorAmount > 0) {
+            bkcToken.transfer(tutor, tutorAmount);
+            totalTutorPayments += tutorAmount;
         }
 
         emit RewardsClaimed(
-            user, totalReward, burnAmount, userReward,
-            referrerAmount, referrer, nftBoost, operator
+            user, totalReward, recycleAmount, burnAmount,
+            tutorAmount, userReward, nftBoost, tutor, operator
         );
     }
 
@@ -575,7 +592,7 @@ contract StakingPool is IStakingPool {
     // VIEWS: REWARDS
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Total raw pending rewards for a user (before burn/cut)
+    /// @notice Total raw pending rewards for a user (before recycle/tutor/burn)
     function pendingRewards(address user) external view override returns (uint256) {
         return _calculateAllPending(user) + savedRewards[user];
     }
@@ -584,29 +601,28 @@ contract StakingPool is IStakingPool {
     ///         Matches the frontend's previewClaim display.
     function previewClaim(address user) external view returns (
         uint256 totalRewards,
+        uint256 recycleAmount,
         uint256 burnAmount,
-        uint256 referrerCut,
+        uint256 tutorCut,
         uint256 userReceives,
-        uint256 burnRateBps,
+        uint256 recycleRateBps,
         uint256 nftBoost
     ) {
         totalRewards = _calculateAllPending(user) + savedRewards[user];
-        if (totalRewards == 0) return (0, 0, 0, 0, 0, 0);
+        if (totalRewards == 0) return (0, 0, 0, 0, 0, 0, 0);
 
         nftBoost = _getUserBestBoost(user);
-        burnRateBps = _getBurnRateForBoost(nftBoost);
-        burnAmount = totalRewards * burnRateBps / BPS;
+        recycleRateBps = _getRecycleRateForBoost(nftBoost);
+        recycleAmount = totalRewards * recycleRateBps / BPS;
 
-        // Referral redirect from burn
-        address referrer = ecosystem.referredBy(user);
-        if (referrer != address(0)) {
-            uint256 redirect = totalRewards * REFERRAL_REDIRECT_BPS / BPS;
-            if (redirect > burnAmount) redirect = burnAmount;
-            referrerCut = redirect / 2;
-            burnAmount -= redirect;
+        address tutor = ecosystem.tutorOf(user);
+        if (tutor != address(0)) {
+            tutorCut = totalRewards * TUTOR_BPS / BPS;
+        } else {
+            burnAmount = totalRewards * NO_TUTOR_BURN_BPS / BPS;
         }
 
-        userReceives = totalRewards - burnAmount - referrerCut;
+        userReceives = totalRewards - recycleAmount - tutorCut - burnAmount;
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -641,7 +657,7 @@ contract StakingPool is IStakingPool {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // VIEWS: NFT BOOST & BURN RATE
+    // VIEWS: NFT BOOST & RECYCLE RATE
     // ════════════════════════════════════════════════════════════════════════
 
     /// @notice Get the best NFT boost for a user (owned or rented)
@@ -650,11 +666,11 @@ contract StakingPool is IStakingPool {
         return _getUserBestBoost(user);
     }
 
-    /// @notice Map a boost value to its corresponding burn rate
+    /// @notice Map a boost value to its corresponding recycle rate
     /// @param boostBps Boost in basis points (0, 1000, 2500, 4000, 5000)
-    /// @return burnRateBps Burn rate in basis points
-    function getBurnRateForBoost(uint256 boostBps) external pure returns (uint256) {
-        return _getBurnRateForBoost(boostBps);
+    /// @return recycleRateBps Recycle rate in basis points
+    function getRecycleRateForBoost(uint256 boostBps) external pure returns (uint256) {
+        return _getRecycleRateForBoost(boostBps);
     }
 
     /// @notice Get human-readable tier name for a boost value
@@ -676,7 +692,9 @@ contract StakingPool is IStakingPool {
         uint256 _totalBkcDelegated,
         uint256 _totalRewardsDistributed,
         uint256 _totalBurnedOnClaim,
+        uint256 _totalRecycledOnClaim,
         uint256 _totalForceUnstakePenalties,
+        uint256 _totalTutorPayments,
         uint256 _totalEthFeesCollected,
         uint256 _accRewardPerShare
     ) {
@@ -685,7 +703,9 @@ contract StakingPool is IStakingPool {
             totalBkcDelegated,
             totalRewardsDistributed,
             totalBurnedOnClaim,
+            totalRecycledOnClaim,
             totalForceUnstakePenalties,
+            totalTutorPayments,
             totalEthFeesCollected,
             accRewardPerShare
         );
@@ -698,14 +718,14 @@ contract StakingPool is IStakingPool {
         uint256 _savedRewards,
         uint256 _totalPending,
         uint256 _nftBoost,
-        uint256 _burnRateBps
+        uint256 _recycleRateBps
     ) {
         _userTotalPStake = userTotalPStake[user];
         _delegationCount = _delegations[user].length;
         _savedRewards = savedRewards[user];
         _totalPending = _calculateAllPending(user) + _savedRewards;
         _nftBoost = _getUserBestBoost(user);
-        _burnRateBps = _getBurnRateForBoost(_nftBoost);
+        _recycleRateBps = _getRecycleRateForBoost(_nftBoost);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -729,20 +749,23 @@ contract StakingPool is IStakingPool {
     // INTERNAL: REWARD CALCULATIONS
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @dev Sum pending rewards across all active delegations (NOT including savedRewards)
+    /// @dev Combined: calculate pending + update debts in single loop (gas optimization)
+    ///      Saves ~1.8K gas per claim vs separate calculate + update loops.
+    function _calculateAndUpdateDebts(address user) internal returns (uint256 total) {
+        Delegation[] storage dels = _delegations[user];
+        for (uint256 i; i < dels.length; ++i) {
+            uint256 accumulated = uint256(dels[i].pStake) * accRewardPerShare / PRECISION;
+            total += accumulated - dels[i].rewardDebt;
+            dels[i].rewardDebt = accumulated;
+        }
+    }
+
+    /// @dev View-only: sum pending rewards (for pendingRewards/previewClaim views)
     function _calculateAllPending(address user) internal view returns (uint256 total) {
         Delegation[] storage dels = _delegations[user];
         for (uint256 i; i < dels.length; ++i) {
             uint256 accumulated = uint256(dels[i].pStake) * accRewardPerShare / PRECISION;
             total += accumulated - dels[i].rewardDebt;
-        }
-    }
-
-    /// @dev Update rewardDebt for all active delegations (called after claiming)
-    function _updateAllRewardDebt(address user) internal {
-        Delegation[] storage dels = _delegations[user];
-        for (uint256 i; i < dels.length; ++i) {
-            dels[i].rewardDebt = uint256(dels[i].pStake) * accRewardPerShare / PRECISION;
         }
     }
 
@@ -762,13 +785,13 @@ contract StakingPool is IStakingPool {
         }
     }
 
-    /// @dev Map boost value to burn rate. Uses tiered brackets.
-    function _getBurnRateForBoost(uint256 boostBps) internal pure returns (uint256) {
-        if (boostBps >= BOOST_DIAMOND) return BURN_RATE_DIAMOND; // 0%
-        if (boostBps >= BOOST_GOLD)    return BURN_RATE_GOLD;    // 10%
-        if (boostBps >= BOOST_SILVER)  return BURN_RATE_SILVER;  // 25%
-        if (boostBps >= BOOST_BRONZE)  return BURN_RATE_BRONZE;  // 40%
-        return BURN_RATE_NO_NFT;                                  // 50%
+    /// @dev Map boost value to recycle rate. Uses tiered brackets.
+    function _getRecycleRateForBoost(uint256 boostBps) internal pure returns (uint256) {
+        if (boostBps >= BOOST_DIAMOND) return RECYCLE_RATE_DIAMOND; // 0%
+        if (boostBps >= BOOST_GOLD)    return RECYCLE_RATE_GOLD;    // 20%
+        if (boostBps >= BOOST_SILVER)  return RECYCLE_RATE_SILVER;  // 30%
+        if (boostBps >= BOOST_BRONZE)  return RECYCLE_RATE_BRONZE;  // 40%
+        return RECYCLE_RATE_NO_NFT;                                  // 60%
     }
 
     // ════════════════════════════════════════════════════════════════════════

@@ -232,17 +232,18 @@ const FAUCET_CONFIG = {
 //      Effective split: Referrer 10% | Operator 15% | Treasury 25% | Buyback 50%
 
 // V10 standard splits:
-//   Referral: 5% ETH off-the-top (ecosystem-wide)
+//   Tutor: 5% ETH off-the-top (ecosystem-wide)
 //   Standard modules (no custom): 15% operator / 30% treasury / 55% buyback
 //   Custom modules: custom% first, then 15/30/55 ratio on remainder
 const MODULE_CONFIGS = {
-    // Standard (staking, nft_pool, fortune, notary, nft_fusion): no custom recipient
+    // Standard (staking, nft_pool, fortune, notary, nft_fusion, rental): no custom recipient
     STANDARD:    { active: true, customBps: 0,    operatorBps: 1500, treasuryBps: 3000, buybackBps: 5500 },
     // Agora (50% to content creator, 15/30/55 on remaining 50%)
     AGORA:       { active: true, customBps: 5000, operatorBps: 750,  treasuryBps: 1500, buybackBps: 2750 },
-    // Charity/Rental (70% to campaign/lister, 15/30/55 on remaining 30%)
+    // Charity (70% to campaign, 15/30/55 on remaining 30%)
     CHARITY:     { active: true, customBps: 7000, operatorBps: 450,  treasuryBps: 900,  buybackBps: 1650 },
-    RENTAL:      { active: true, customBps: 7000, operatorBps: 450,  treasuryBps: 900,  buybackBps: 1650 },
+    // RENTAL: 20% ecosystem fee (owner gets rentalCost directly, fee goes to standard split)
+    // Note: owner already gets rentalCost via pendingEarnings — the fee is 100% ecosystem
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -304,6 +305,7 @@ const ACTION_FEE_CONFIGS: Record<string, { feeType: number; bps: number; multipl
     "CHARITY_CREATE":         GAS_FEE_FINANCIAL,
     "CHARITY_BOOST":          GAS_FEE_CONTENT,
     // RentalManager
+    "RENTAL_BOOST":           GAS_FEE_PREMIUM,
     // (RENTAL_RENT e CHARITY_DONATE são value-based, definidos separadamente)
     // NFTFusion (fuse 2→1 up, split 1→2 down)
     "FUSION_BRONZE":          GAS_FEE_FINANCIAL,
@@ -316,8 +318,8 @@ const ACTION_FEE_CONFIGS: Record<string, { feeType: number; bps: number; multipl
 
 // Ações value-based
 const VALUE_FEE_CONFIGS: Record<string, { bps: number }> = {
-    "CHARITY_DONATE": { bps: 500 },   // 5% da doação
-    "RENTAL_RENT":    { bps: 1000 },   // 10% do custo de aluguel
+    "CHARITY_DONATE": { bps: 500 },    // 5% da doação
+    "RENTAL_RENT":    { bps: 2000 },   // 20% do custo de aluguel → ecossistema
 };
 
 // NFTPool actions (usam abi.encode, não keccak256 de string simples)
@@ -331,7 +333,7 @@ const NFT_FEE_CONFIG = {
 //                    🔥 BKC DISTRIBUTION (burn / operator / stakers / treasury)
 // ════════════════════════════════════════════════════════════════════════════
 // burn + operator + staker + treasury = 10000
-// Deflation via StakingPool claims (20% base burn, reduced by NFT tier)
+// Deflation via StakingPool claims (10% burn if no tutor, recycle if NFT penalty)
 
 const BKC_DISTRIBUTION = {
     burnBps: 0,         // 0% burn in ecosystem (burn happens on StakingPool claims)
@@ -870,16 +872,16 @@ async function main() {
             "Ecosystem.setStakingPool()"
         );
 
-        // 9a-bis. Set referral relayer (deployer = relayer, same key as FAUCET_RELAYER_KEY on Vercel)
+        // 9a-bis. Set tutor relayer (deployer = relayer, same key as FAUCET_RELAYER_KEY on Vercel)
         await sendTxWithRetry(
-            async () => await eco.setReferralRelayer(deployerAddr),
-            "Ecosystem.setReferralRelayer(deployer)"
+            async () => await eco.setTutorRelayer(deployerAddr),
+            "Ecosystem.setTutorRelayer(deployer)"
         );
 
-        // V10: Enable ecosystem-wide referral rewards (5% ETH off-the-top)
+        // V10: Enable ecosystem-wide tutor rewards (5% ETH off-the-top)
         await sendTxWithRetry(
-            async () => await eco.setReferralBps(500),
-            "Ecosystem.setReferralBps(500 = 5%)"
+            async () => await eco.setTutorBps(500),
+            "Ecosystem.setTutorBps(500 = 5%)"
         );
 
         // 9b. registerModuleBatch — registrar todos os 8 módulos
@@ -893,7 +895,7 @@ async function main() {
         ];
         const moduleConfigs = [
             MODULE_CONFIGS.STANDARD, MODULE_CONFIGS.STANDARD, MODULE_CONFIGS.STANDARD, MODULE_CONFIGS.AGORA,
-            MODULE_CONFIGS.STANDARD, MODULE_CONFIGS.CHARITY, MODULE_CONFIGS.RENTAL, MODULE_CONFIGS.STANDARD,
+            MODULE_CONFIGS.STANDARD, MODULE_CONFIGS.CHARITY, MODULE_CONFIGS.STANDARD, MODULE_CONFIGS.STANDARD,
         ];
 
         // Converter para o formato do struct: [active, customBps, operatorBps, treasuryBps, buybackBps]
@@ -1063,15 +1065,15 @@ async function main() {
             `LiquidityPool: ${ethers.formatEther(lpBkcAmount)} BKC + ${LIQUIDITY_CONFIG.LIQUIDITY_POOL_ETH} ETH`
         );
 
-        // Fund Referral Bonus Pool (100K BKC welcome gifts for referred users)
-        const refBonusBkc = LIQUIDITY_CONFIG.REFERRAL_BONUS_BKC;
+        // Fund Tutor Bonus Pool (100K BKC welcome gifts for tutored users)
+        const tutorBonusBkc = LIQUIDITY_CONFIG.REFERRAL_BONUS_BKC;
         await sendTxWithRetry(
-            async () => await bkc.approve(ecoAddr, refBonusBkc),
-            "Approve BKC para Referral Bonus Pool"
+            async () => await bkc.approve(ecoAddr, tutorBonusBkc),
+            "Approve BKC para Tutor Bonus Pool"
         );
         await sendTxWithRetry(
-            async () => await eco.fundReferralBonus(refBonusBkc),
-            `Ecosystem.fundReferralBonus(${ethers.formatEther(refBonusBkc)} BKC)`
+            async () => await eco.fundTutorBonus(tutorBonusBkc),
+            `Ecosystem.fundTutorBonus(${ethers.formatEther(tutorBonusBkc)} BKC)`
         );
 
         // ══════════════════════════════════════════════════════════════════════
@@ -1206,10 +1208,11 @@ async function main() {
         console.log(`   NFTFusion → authorized in RewardBooster`);
         console.log(`   8 módulos registrados no Ecosystem + 3 NFT pools extras`);
         console.log(`   ${actionIds.length} action fees configuradas (gas-based + value-based + fusion)`);
-        console.log(`   ETH Distribution: 5% referral | 15% operator | 30% treasury | 55% buyback`);
+        console.log(`   ETH Distribution: 5% tutor | 15% operator | 30% treasury | 55% buyback`);
         console.log(`   BKC Distribution: ${BKC_DISTRIBUTION.operatorBps/100}% operator / ${BKC_DISTRIBUTION.stakerBps/100}% stakers / ${BKC_DISTRIBUTION.treasuryBps/100}% treasury`);
-        console.log(`   Staking Burn: 20%→10% (reduced by NFT tier, referral bonus from burn)`);
-        console.log(`   Referral Bonus Pool: ${ethers.formatEther(LIQUIDITY_CONFIG.REFERRAL_BONUS_BKC)} BKC`);
+        console.log(`   Staking: V2 Recycle Model (60/40/30/20/0% per NFT tier, 10% burn if no tutor)`);
+        console.log(`   Rental: 20% ecosystem fee (standard split, owner gets rentalCost directly)`);
+        console.log(`   Tutor Bonus Pool: ${ethers.formatEther(LIQUIDITY_CONFIG.REFERRAL_BONUS_BKC)} BKC`);
 
         printTransactionSummary();
 
