@@ -270,6 +270,79 @@ contract NFTPool {
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    // BUY MULTIPLE NFTs (batch, single tx)
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Buy multiple NFTs in a single transaction.
+    ///         Price increases with each buy (bonding curve), so user pays
+    ///         the sum of sequential buy prices. More gas-efficient than
+    ///         separate transactions.
+    ///
+    /// @param count       Number of NFTs to buy (1-50)
+    /// @param maxTotalBkc Maximum total BKC willing to pay for all NFTs
+    /// @param operator    Frontend operator earning commission
+    /// @return tokenIds   Array of purchased NFT token IDs
+    function buyMultipleNFTs(
+        uint256 count,
+        uint256 maxTotalBkc,
+        address operator
+    ) external payable nonReentrant returns (uint256[] memory tokenIds) {
+        if (!initialized) revert NotInitialized();
+        if (count == 0 || count > 50) revert ZeroAmount();
+
+        tokenIds = new uint256[](count);
+        uint256 totalBkcCost;
+
+        // Calculate total ETH fee (per buy × count)
+        uint256 ethFeePerBuy = ecosystem.calculateFee(ACTION_BUY, 0);
+        uint256 totalEthFee = ethFeePerBuy * count;
+        if (msg.value < totalEthFee) revert InsufficientETHFee();
+
+        for (uint256 i; i < count;) {
+            if (nftCount == 0) revert NoNFTsAvailable();
+            uint256 effectiveCount = nftCount + virtualReserves;
+            if (effectiveCount <= 1) revert NoNFTsAvailable();
+
+            uint256 tokenId = _tokenIds[_tokenIds.length - 1];
+            uint256 price = _buyPrice();
+            if (price == type(uint256).max) revert NoNFTsAvailable();
+
+            totalBkcCost += price;
+
+            // Pull BKC
+            bkcToken.transferFrom(msg.sender, address(this), price);
+
+            // Effects
+            bkcBalance += price;
+            nftCount--;
+            effectiveCount = nftCount + virtualReserves;
+            k = effectiveCount > 0 ? bkcBalance * effectiveCount : 0;
+            _removeToken(tokenId);
+
+            totalVolume += price;
+            totalBuys++;
+
+            // Push NFT to buyer
+            IERC721Pool(rewardBooster).transferFrom(
+                address(this), msg.sender, tokenId
+            );
+
+            tokenIds[i] = tokenId;
+            unchecked { ++i; }
+        }
+
+        // Slippage check on total
+        if (maxTotalBkc > 0 && totalBkcCost > maxTotalBkc) revert SlippageExceeded();
+
+        totalEthFees += msg.value;
+
+        // ETH fee to ecosystem (one call for all)
+        ecosystem.collectFee{value: msg.value}(
+            msg.sender, operator, address(0), MODULE_ID, 0
+        );
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     // SELL NFT
     // ════════════════════════════════════════════════════════════════════════
 
@@ -326,6 +399,76 @@ contract NFTPool {
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    // SELL MULTIPLE NFTs (batch, single tx)
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Sell multiple NFTs in a single transaction.
+    ///         Price decreases with each sell (bonding curve), so user receives
+    ///         the sum of sequential sell prices.
+    ///
+    /// @param tokenIds     NFT token IDs to sell (must match pool tier)
+    /// @param minTotalBkc  Minimum total BKC to receive for all NFTs
+    /// @param operator     Frontend operator earning commission
+    /// @return totalPayout Total BKC received
+    function sellMultipleNFTs(
+        uint256[] calldata tokenIds,
+        uint256 minTotalBkc,
+        address operator
+    ) external payable nonReentrant returns (uint256 totalPayout) {
+        if (!initialized) revert NotInitialized();
+        uint256 count = tokenIds.length;
+        if (count == 0 || count > 50) revert ZeroAmount();
+
+        IERC721Pool nft = IERC721Pool(rewardBooster);
+        IBoosterTier tierCheck = IBoosterTier(rewardBooster);
+
+        // ETH fee (per sell × count)
+        uint256 ethFeePerSell = ecosystem.calculateFee(ACTION_SELL, 0);
+        uint256 totalEthFee = ethFeePerSell * count;
+        if (msg.value < totalEthFee) revert InsufficientETHFee();
+
+        for (uint256 i; i < count;) {
+            uint256 tokenId = tokenIds[i];
+            if (nft.ownerOf(tokenId) != msg.sender) revert NotNFTOwner();
+            if (tierCheck.tokenTier(tokenId) != tier) revert TierMismatch();
+
+            uint256 payout = _sellPrice();
+            if (bkcBalance < payout) revert InsufficientLiquidity();
+
+            // Pull NFT
+            nft.transferFrom(msg.sender, address(this), tokenId);
+            _addToken(tokenId);
+
+            // Effects
+            bkcBalance -= payout;
+            nftCount++;
+            uint256 effectiveCount = nftCount + virtualReserves;
+            k = bkcBalance * effectiveCount;
+
+            totalVolume += payout;
+            totalSells++;
+            totalPayout += payout;
+
+            unchecked { ++i; }
+        }
+
+        // Slippage check
+        if (totalPayout < minTotalBkc) revert SlippageExceeded();
+
+        // Push total BKC to seller
+        if (totalPayout > 0) {
+            bkcToken.transfer(msg.sender, totalPayout);
+        }
+
+        totalEthFees += msg.value;
+
+        // ETH fee to ecosystem (one call for all)
+        ecosystem.collectFee{value: msg.value}(
+            msg.sender, operator, address(0), MODULE_ID, 0
+        );
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     // VIEWS — PRICES
     // ════════════════════════════════════════════════════════════════════════
 
@@ -353,6 +496,73 @@ contract NFTPool {
     ) {
         bkcPayout = _sellPrice();
         ethCost = ecosystem.calculateFee(ACTION_SELL, 0);
+    }
+
+    /// @notice Preview buying N NFTs: total BKC cost + total ETH fee
+    ///         Simulates sequential buys on bonding curve (price rises per buy)
+    function getBuyMultiplePrice(uint256 count) external view returns (
+        uint256 totalBkcCost, uint256 totalEthCost, uint256[] memory individualPrices
+    ) {
+        individualPrices = new uint256[](count);
+        uint256 ethFeePerBuy = ecosystem.calculateFee(ACTION_BUY, 0);
+        totalEthCost = ethFeePerBuy * count;
+
+        // Simulate sequential buys
+        uint256 simNftCount = nftCount;
+        uint256 simBkcBalance = bkcBalance;
+        uint256 simK = k;
+
+        for (uint256 i; i < count;) {
+            uint256 effCount = simNftCount + virtualReserves;
+            if (effCount <= 1 || simNftCount == 0) break;
+
+            uint256 newBal = simK / (effCount - 1);
+            uint256 price = newBal > simBkcBalance ? newBal - simBkcBalance : 0;
+
+            individualPrices[i] = price;
+            totalBkcCost += price;
+
+            // Simulate state after buy
+            simBkcBalance += price;
+            simNftCount--;
+            effCount = simNftCount + virtualReserves;
+            simK = effCount > 0 ? simBkcBalance * effCount : 0;
+
+            unchecked { ++i; }
+        }
+    }
+
+    /// @notice Preview selling N NFTs: total BKC payout + total ETH fee
+    function getSellMultiplePrice(uint256 count) external view returns (
+        uint256 totalBkcPayout, uint256 totalEthCost, uint256[] memory individualPayouts
+    ) {
+        individualPayouts = new uint256[](count);
+        uint256 ethFeePerSell = ecosystem.calculateFee(ACTION_SELL, 0);
+        totalEthCost = ethFeePerSell * count;
+
+        // Simulate sequential sells
+        uint256 simNftCount = nftCount;
+        uint256 simBkcBalance = bkcBalance;
+        uint256 simK = k;
+
+        for (uint256 i; i < count;) {
+            uint256 effCount = simNftCount + virtualReserves;
+            if (effCount == 0) break;
+
+            uint256 newBal = simK / (effCount + 1);
+            uint256 payout = simBkcBalance > newBal ? simBkcBalance - newBal : 0;
+
+            individualPayouts[i] = payout;
+            totalBkcPayout += payout;
+
+            // Simulate state after sell
+            simBkcBalance -= payout;
+            simNftCount++;
+            effCount = simNftCount + virtualReserves;
+            simK = simBkcBalance * effCount;
+
+            unchecked { ++i; }
+        }
     }
 
     /// @notice ETH fees

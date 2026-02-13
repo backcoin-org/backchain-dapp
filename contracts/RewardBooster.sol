@@ -195,13 +195,13 @@ contract RewardBooster is IRewardBoosterV2 {
     // FUSION — MINT & BURN (only fusion contract)
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Mint an NFT via fusion. Only callable by authorized fusion contract.
+    /// @notice Mint an NFT via fusion/split. Only callable by authorized fusion contract.
     /// @param to   Recipient address
-    /// @param tier Tier of the new NFT (1=Silver, 2=Gold, 3=Diamond)
+    /// @param tier Tier of the new NFT (0=Bronze, 1=Silver, 2=Gold, 3=Diamond)
     /// @return tokenId The newly minted token ID
     function fusionMint(address to, uint8 tier) external override returns (uint256 tokenId) {
         if (msg.sender != fusionContract) revert NotAuthorized();
-        if (tier == 0 || tier >= TIER_COUNT) revert InvalidTier();
+        if (tier >= TIER_COUNT) revert InvalidTier();
 
         tokenId = ++totalSupply;
         tokenTier[tokenId] = tier;

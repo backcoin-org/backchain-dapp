@@ -190,6 +190,14 @@ interface INFTFusion {
     /// @return newTokenId The newly minted higher-tier NFT
     function fuse(uint256 tokenId1, uint256 tokenId2, address operator)
         external payable returns (uint256 newTokenId);
+
+    /// @notice Split 1 NFT into 2 of the tier below
+    function split(uint256 tokenId, address operator)
+        external payable returns (uint256[] memory newTokenIds);
+
+    /// @notice Split 1 NFT into 2^N target-tier NFTs (multi-level)
+    function splitTo(uint256 tokenId, uint8 targetTier, address operator)
+        external payable returns (uint256[] memory newTokenIds);
 }
 
 // ─── Airdrop Vesting ───────────────────────────────────────────────────────

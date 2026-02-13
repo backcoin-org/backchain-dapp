@@ -7,30 +7,31 @@ import "./IBackchain.sol";
 // NFT FUSION — IMMUTABLE (Tier 1: ETH only)
 // ============================================================================
 //
-// Burn 2 NFTs of the same tier → Mint 1 NFT of the next tier.
+// Two-way NFT tier transformation:
 //
+// FUSE (up):   Burn 2 same-tier NFTs → Mint 1 next-tier NFT
 //   2 Bronze  → 1 Silver
 //   2 Silver  → 1 Gold
 //   2 Gold    → 1 Diamond
 //
+// SPLIT (down): Burn 1 NFT → Mint 2 lower-tier NFTs
+//   1 Silver  → 2 Bronze
+//   1 Gold    → 2 Silver
+//   1 Diamond → 2 Gold
+//
+// SPLIT TO (multi-level down): Burn 1 NFT → Mint 2^N target-tier NFTs
+//   1 Diamond → 2 Gold   (1 level)
+//   1 Diamond → 4 Silver (2 levels)
+//   1 Diamond → 8 Bronze (3 levels)
+//   1 Gold    → 2 Silver (1 level)
+//   1 Gold    → 4 Bronze (2 levels)
+//   1 Silver  → 2 Bronze (1 level)
+//
 // Economics:
-//   - ETH fee per fusion → ecosystem (operator/treasury/buyback)
-//   - Per-tier fee IDs allow different costs per tier level
-//   - Deflationary: net -1 NFT per fusion
-//   - Creates organic demand for lower tiers (need 8 Bronze to make 1 Diamond)
-//
-// Community-driven supply:
-//   - Only Bronze is minted initially (1000 total)
-//   - All higher tiers are created ONLY through player fusion
-//   - Maximum possible from 1000 Bronze:
-//     500 Silver, 250 Gold, 125 Diamond (if ALL are fused)
-//
-// Security:
-//   - Both NFTs must be owned by caller
-//   - Both must be same tier
-//   - Cannot fuse Diamond (already max tier)
-//   - CEI pattern
-//   - Reentrancy guard
+//   - ETH fee per operation → ecosystem (operator/treasury/buyback)
+//   - Split fee > Fuse fee (splitting is a premium service)
+//   - Creates bidirectional arbitrage between tier pools
+//   - Generates continuous ETH fee revenue from tier trading
 //
 // No admin. No pause. Fully immutable.
 //
@@ -50,10 +51,15 @@ contract NFTFusion is INFTFusion {
 
     bytes32 public constant MODULE_ID = keccak256("NFT_FUSION");
 
-    /// @notice Per-tier ETH fee action IDs
+    /// @notice Fuse fee action IDs (per source tier)
     bytes32 public constant ACTION_FUSE_BRONZE = keccak256("FUSION_BRONZE");
     bytes32 public constant ACTION_FUSE_SILVER = keccak256("FUSION_SILVER");
     bytes32 public constant ACTION_FUSE_GOLD   = keccak256("FUSION_GOLD");
+
+    /// @notice Split fee action IDs (per source tier)
+    bytes32 public constant ACTION_SPLIT_SILVER  = keccak256("SPLIT_SILVER");
+    bytes32 public constant ACTION_SPLIT_GOLD    = keccak256("SPLIT_GOLD");
+    bytes32 public constant ACTION_SPLIT_DIAMOND = keccak256("SPLIT_DIAMOND");
 
     uint8 public constant TIER_BRONZE  = 0;
     uint8 public constant TIER_SILVER  = 1;
@@ -72,7 +78,9 @@ contract NFTFusion is INFTFusion {
     // ════════════════════════════════════════════════════════════════════════
 
     uint256 public totalFusions;
+    uint256 public totalSplits;
     mapping(uint8 => uint256) public fusionsByTier;  // count per source tier
+    mapping(uint8 => uint256) public splitsByTier;   // count per source tier
 
     // Reentrancy guard
     uint8 private _locked;
@@ -91,6 +99,16 @@ contract NFTFusion is INFTFusion {
         address operator
     );
 
+    event Split(
+        address indexed user,
+        uint256 indexed burnedTokenId,
+        uint8 sourceTier,
+        uint8 targetTier,
+        uint256 mintCount,
+        uint256[] newTokenIds,
+        address operator
+    );
+
     // ════════════════════════════════════════════════════════════════════════
     // ERRORS
     // ════════════════════════════════════════════════════════════════════════
@@ -98,6 +116,8 @@ contract NFTFusion is INFTFusion {
     error NotNFTOwner();
     error TierMismatch();
     error MaxTierReached();
+    error MinTierReached();
+    error InvalidTargetTier();
     error SameToken();
     error InsufficientFee();
     error Reentrancy();
@@ -123,12 +143,11 @@ contract NFTFusion is INFTFusion {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // FUSE
+    // FUSE (2 → 1 higher)
     // ════════════════════════════════════════════════════════════════════════
 
     /// @notice Fuse 2 NFTs of the same tier into 1 of the next tier.
     ///         Both NFTs must be approved for this contract.
-    ///         msg.value must cover the ETH fee.
     ///
     /// @param tokenId1 First NFT to burn
     /// @param tokenId2 Second NFT to burn
@@ -141,12 +160,10 @@ contract NFTFusion is INFTFusion {
     ) external payable override nonReentrant returns (uint256 newTokenId) {
         if (tokenId1 == tokenId2) revert SameToken();
 
-        // Verify ownership
         IERC721Fusion nft = IERC721Fusion(address(booster));
         if (nft.ownerOf(tokenId1) != msg.sender) revert NotNFTOwner();
         if (nft.ownerOf(tokenId2) != msg.sender) revert NotNFTOwner();
 
-        // Verify same tier
         uint8 sourceTier = booster.tokenTier(tokenId1);
         if (booster.tokenTier(tokenId2) != sourceTier) revert TierMismatch();
         if (sourceTier >= TIER_DIAMOND) revert MaxTierReached();
@@ -157,15 +174,13 @@ contract NFTFusion is INFTFusion {
         uint256 ethFee = _getFusionFee(sourceTier);
         if (msg.value < ethFee) revert InsufficientFee();
 
-        // Pull both NFTs from user to this contract
+        // Pull + burn both NFTs
         nft.transferFrom(msg.sender, address(this), tokenId1);
         nft.transferFrom(msg.sender, address(this), tokenId2);
-
-        // Burn both NFTs via booster
         booster.fusionBurn(tokenId1);
         booster.fusionBurn(tokenId2);
 
-        // Mint new higher-tier NFT
+        // Mint higher-tier NFT
         newTokenId = booster.fusionMint(msg.sender, resultTier);
 
         // Stats
@@ -186,26 +201,161 @@ contract NFTFusion is INFTFusion {
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    // SPLIT (1 → 2 lower)
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Split 1 NFT into 2 of the tier below.
+    ///         e.g., 1 Diamond → 2 Gold, 1 Silver → 2 Bronze
+    ///         NFT must be approved for this contract.
+    ///
+    /// @param tokenId  NFT to split
+    /// @param operator Frontend operator earning commission
+    /// @return newTokenIds The 2 newly minted lower-tier NFTs
+    function split(
+        uint256 tokenId,
+        address operator
+    ) external payable nonReentrant returns (uint256[] memory newTokenIds) {
+        IERC721Fusion nft = IERC721Fusion(address(booster));
+        if (nft.ownerOf(tokenId) != msg.sender) revert NotNFTOwner();
+
+        uint8 sourceTier = booster.tokenTier(tokenId);
+        if (sourceTier == TIER_BRONZE) revert MinTierReached();
+
+        uint8 targetTier = sourceTier - 1;
+
+        // ETH fee (based on source tier being split)
+        uint256 ethFee = _getSplitFee(sourceTier);
+        if (msg.value < ethFee) revert InsufficientFee();
+
+        // Pull + burn source NFT
+        nft.transferFrom(msg.sender, address(this), tokenId);
+        booster.fusionBurn(tokenId);
+
+        // Mint 2 lower-tier NFTs
+        newTokenIds = new uint256[](2);
+        newTokenIds[0] = booster.fusionMint(msg.sender, targetTier);
+        newTokenIds[1] = booster.fusionMint(msg.sender, targetTier);
+
+        // Stats
+        totalSplits++;
+        splitsByTier[sourceTier]++;
+
+        // ETH fee to ecosystem
+        if (msg.value > 0) {
+            ecosystem.collectFee{value: msg.value}(
+                msg.sender, operator, address(0), MODULE_ID, 0
+            );
+        }
+
+        emit Split(
+            msg.sender, tokenId,
+            sourceTier, targetTier, 2,
+            newTokenIds, operator
+        );
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // SPLIT TO (1 → 2^N target tier, multi-level)
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Split 1 NFT into multiple lower-tier NFTs in a single tx.
+    ///         e.g., 1 Diamond → 8 Bronze (3 levels), 1 Gold → 4 Bronze (2 levels)
+    ///         Mints 2^(sourceTier - targetTier) NFTs of the target tier.
+    ///         Fee = sum of split fees for each level traversed.
+    ///
+    /// @param tokenId    NFT to split
+    /// @param targetTier Target tier (must be < source tier)
+    /// @param operator   Frontend operator earning commission
+    /// @return newTokenIds All newly minted NFTs
+    function splitTo(
+        uint256 tokenId,
+        uint8 targetTier,
+        address operator
+    ) external payable nonReentrant returns (uint256[] memory newTokenIds) {
+        IERC721Fusion nft = IERC721Fusion(address(booster));
+        if (nft.ownerOf(tokenId) != msg.sender) revert NotNFTOwner();
+
+        uint8 sourceTier = booster.tokenTier(tokenId);
+        if (sourceTier == TIER_BRONZE) revert MinTierReached();
+        if (targetTier >= sourceTier) revert InvalidTargetTier();
+
+        uint8 levels = sourceTier - targetTier;
+
+        // Calculate total fee (sum of fees for each level)
+        uint256 totalFee = _getMultiSplitFee(sourceTier, targetTier);
+        if (msg.value < totalFee) revert InsufficientFee();
+
+        // Pull + burn source NFT
+        nft.transferFrom(msg.sender, address(this), tokenId);
+        booster.fusionBurn(tokenId);
+
+        // Calculate mint count: 2^levels
+        uint256 mintCount = 1 << levels; // 2^1=2, 2^2=4, 2^3=8
+
+        // Mint all target-tier NFTs
+        newTokenIds = new uint256[](mintCount);
+        for (uint256 i; i < mintCount;) {
+            newTokenIds[i] = booster.fusionMint(msg.sender, targetTier);
+            unchecked { ++i; }
+        }
+
+        // Stats
+        totalSplits++;
+        splitsByTier[sourceTier]++;
+
+        // ETH fee to ecosystem
+        if (msg.value > 0) {
+            ecosystem.collectFee{value: msg.value}(
+                msg.sender, operator, address(0), MODULE_ID, 0
+            );
+        }
+
+        emit Split(
+            msg.sender, tokenId,
+            sourceTier, targetTier, mintCount,
+            newTokenIds, operator
+        );
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     // VIEWS
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Get ETH fee required for a fusion at given tier
+    /// @notice Get ETH fee for a fusion (2 → 1 up)
     function getFusionFee(uint8 sourceTier) external view returns (uint256) {
         return _getFusionFee(sourceTier);
     }
 
-    /// @notice Fusion statistics
+    /// @notice Get ETH fee for a split (1 → 2 down, one level)
+    function getSplitFee(uint8 sourceTier) external view returns (uint256) {
+        return _getSplitFee(sourceTier);
+    }
+
+    /// @notice Get total ETH fee for a multi-level split (1 → 2^N target tier)
+    function getMultiSplitFee(uint8 sourceTier, uint8 targetTier) external view returns (uint256) {
+        return _getMultiSplitFee(sourceTier, targetTier);
+    }
+
+    /// @notice Statistics
     function getStats() external view returns (
-        uint256 total,
+        uint256 _totalFusions,
+        uint256 _totalSplits,
         uint256 bronzeFusions,
         uint256 silverFusions,
-        uint256 goldFusions
+        uint256 goldFusions,
+        uint256 silverSplits,
+        uint256 goldSplits,
+        uint256 diamondSplits
     ) {
         return (
             totalFusions,
+            totalSplits,
             fusionsByTier[TIER_BRONZE],
             fusionsByTier[TIER_SILVER],
-            fusionsByTier[TIER_GOLD]
+            fusionsByTier[TIER_GOLD],
+            splitsByTier[TIER_SILVER],
+            splitsByTier[TIER_GOLD],
+            splitsByTier[TIER_DIAMOND]
         );
     }
 
@@ -218,7 +368,6 @@ contract NFTFusion is INFTFusion {
     ) {
         IERC721Fusion nft = IERC721Fusion(address(booster));
 
-        // Check if tokens exist and get tiers
         try nft.ownerOf(tokenId1) returns (address) {
             try nft.ownerOf(tokenId2) returns (address) {
                 sourceTier = booster.tokenTier(tokenId1);
@@ -233,8 +382,29 @@ contract NFTFusion is INFTFusion {
         } catch {}
     }
 
+    /// @notice Preview split result
+    function previewSplit(uint256 tokenId, uint8 targetTier) external view returns (
+        uint8 sourceTier,
+        uint256 mintCount,
+        uint256 ethFee,
+        bool canSplit
+    ) {
+        IERC721Fusion nft = IERC721Fusion(address(booster));
+
+        try nft.ownerOf(tokenId) returns (address) {
+            sourceTier = booster.tokenTier(tokenId);
+
+            if (sourceTier > TIER_BRONZE && targetTier < sourceTier) {
+                uint8 levels = sourceTier - targetTier;
+                mintCount = 1 << levels;
+                ethFee = _getMultiSplitFee(sourceTier, targetTier);
+                canSplit = true;
+            }
+        } catch {}
+    }
+
     function version() external pure returns (string memory) {
-        return "1.0.0";
+        return "2.0.0";
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -246,5 +416,20 @@ contract NFTFusion is INFTFusion {
         if (sourceTier == TIER_SILVER) return ecosystem.calculateFee(ACTION_FUSE_SILVER, 0);
         if (sourceTier == TIER_GOLD)   return ecosystem.calculateFee(ACTION_FUSE_GOLD, 0);
         return 0;
+    }
+
+    function _getSplitFee(uint8 sourceTier) internal view returns (uint256) {
+        if (sourceTier == TIER_SILVER)  return ecosystem.calculateFee(ACTION_SPLIT_SILVER, 0);
+        if (sourceTier == TIER_GOLD)    return ecosystem.calculateFee(ACTION_SPLIT_GOLD, 0);
+        if (sourceTier == TIER_DIAMOND) return ecosystem.calculateFee(ACTION_SPLIT_DIAMOND, 0);
+        return 0;
+    }
+
+    /// @dev Sum of split fees for each level: Diamond→Bronze = split(Diamond) + split(Gold) + split(Silver)
+    function _getMultiSplitFee(uint8 sourceTier, uint8 targetTier) internal view returns (uint256 total) {
+        for (uint8 t = sourceTier; t > targetTier;) {
+            total += _getSplitFee(t);
+            unchecked { --t; }
+        }
     }
 }
