@@ -75,6 +75,7 @@ let minerRewardsAmount = 0n;
 let buybackPreview = null;
 let buybackStats = null;
 let buybackLastInfo = null;
+let buybackFee = 0n;
 
 // ============================================================================
 // HELPERS
@@ -860,14 +861,16 @@ async function loadClaimPreview() {
 
 async function loadBuybackData() {
     try {
-        const [preview, stats, lastInfo] = await Promise.all([
+        const [preview, stats, lastInfo, fee] = await Promise.all([
             BuybackTx.getPreviewBuyback().catch(() => null),
             BuybackTx.getBuybackStats().catch(() => null),
-            BuybackTx.getLastBuyback().catch(() => null)
+            BuybackTx.getLastBuyback().catch(() => null),
+            BuybackTx.getExecutionFee().catch(() => 0n)
         ]);
         buybackPreview = preview;
         buybackStats = stats;
         buybackLastInfo = lastInfo;
+        buybackFee = fee;
         updateBuybackCard();
     } catch (e) {
         console.error('Buyback data load error:', e);
@@ -905,14 +908,17 @@ function updateBuybackCard() {
 
     btn.disabled = !isReady;
 
-    // Info line with last buyback
-    let infoText = 'Execute buyback to earn 5% of pending ETH.';
+    // Info line with fee + last buyback
+    const feeStr = buybackFee > 0n ? Number(ethers.formatEther(buybackFee)).toFixed(4) : '0';
+    let infoText = buybackFee > 0n
+        ? `Fee: ${feeStr} ETH (added to buyback). Earn 5% of total.`
+        : 'Execute buyback to earn 5% of pending ETH.';
     if (buybackLastInfo && Number(buybackLastInfo.timeSinceLast) > 0) {
         const secsAgo = Number(buybackLastInfo.timeSinceLast);
         const timeAgo = secsAgo < 3600 ? `${Math.floor(secsAgo / 60)}m ago`
             : secsAgo < 86400 ? `${Math.floor(secsAgo / 3600)}h ago`
             : `${Math.floor(secsAgo / 86400)}d ago`;
-        infoText += ` Last: ${timeAgo}`;
+        infoText += ` | Last: ${timeAgo}`;
     }
     if (buybackStats && Number(buybackStats.totalBuybacks) > 0) {
         infoText += ` | Total: ${Number(buybackStats.totalBuybacks)} buybacks`;

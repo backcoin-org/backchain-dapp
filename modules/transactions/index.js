@@ -140,11 +140,12 @@ export {
     isFusionApproved
 } from './fusion-tx.js';
 
-// Buyback Miner (permissionless buyback + 5% caller reward)
+// Buyback Miner V2 (permissionless buyback + execution fee + 5% caller reward)
 export {
     BuybackTx,
     executeBuyback,
     executeBuybackWithSlippage,
+    getExecutionFee,
     getPreviewBuyback,
     getPendingETH,
     getMiningRate,

@@ -1,14 +1,15 @@
 // modules/js/transactions/buyback-tx.js
-// ✅ V1.0 - BuybackMiner: Permissionless buyback + 5% caller reward
+// ✅ V2.0 - BuybackMiner V2: Permissionless buyback + execution fee + 5% caller reward
 //
 // BuybackMiner converts accumulated ETH protocol fees into BKC:
-//   1. Anyone calls executeBuyback() → pulls pending ETH from ecosystem
-//   2. Caller gets 5% of ETH as reward (permissionless incentive)
-//   3. Remaining 95% buys BKC from LiquidityPool
-//   4. Scarcity curve mints additional BKC (decreases as supply → 200M cap)
-//   5. 5% of total BKC burned, 95% → StakingPool as staker rewards
+//   1. Caller pays execution fee (anti-spam, ~$1, added to buyback)
+//   2. Pull pending ETH from ecosystem
+//   3. Caller gets 5% of TOTAL ETH (ecosystem + fee) as reward
+//   4. Remaining 95% buys BKC from LiquidityPool
+//   5. Scarcity curve mints additional BKC (decreases as supply → 200M cap)
+//   6. 5% of total BKC burned, 95% → StakingPool as staker rewards
 //
-// No ETH fee required — caller EARNS ETH by triggering buyback.
+// The fee amplifies the buyback — more ETH → more BKC for stakers.
 // ============================================================================
 
 import { txEngine } from '../core/index.js';
@@ -34,7 +35,8 @@ async function getBuybackContractReadOnly() {
 // ============================================================================
 
 /**
- * Execute a buyback — caller earns 5% of pending ETH
+ * Execute a buyback — caller pays execution fee and earns 5% of total ETH
+ * Fee is added to the buyback, amplifying BKC purchase for stakers.
  * @param {Object} params
  * @param {HTMLElement} [params.button] - Button element for loading state
  * @param {Function} [params.onSuccess] - Callback on success (receives receipt)
@@ -44,10 +46,14 @@ export async function executeBuyback({ button, onSuccess, onError } = {}) {
     const addr = getBuybackAddress();
     if (!addr) throw new Error('BuybackMiner contract address not loaded');
 
+    // Read execution fee from contract
+    const fee = await getExecutionFee();
+
     return txEngine.execute({
         getContract: (signer) => new window.ethers.Contract(addr, buybackMinerABI, signer),
         method: 'executeBuyback',
         args: [],
+        value: fee,
         button,
         txName: 'Execute Buyback',
         onSuccess: (receipt) => {
@@ -73,10 +79,13 @@ export async function executeBuybackWithSlippage({ minTotalBkcOut, button, onSuc
     const addr = getBuybackAddress();
     if (!addr) throw new Error('BuybackMiner contract address not loaded');
 
+    const fee = await getExecutionFee();
+
     return txEngine.execute({
         getContract: (signer) => new window.ethers.Contract(addr, buybackMinerABI, signer),
         method: 'executeBuybackWithSlippage',
         args: [minTotalBkcOut],
+        value: fee,
         button,
         txName: 'Execute Buyback (Slippage)',
         onSuccess: (receipt) => {
@@ -93,6 +102,15 @@ export async function executeBuybackWithSlippage({ minTotalBkcOut, button, onSuc
 // ============================================================================
 // 3. READ FUNCTIONS
 // ============================================================================
+
+/**
+ * Get the execution fee required for buyback (anti-spam)
+ * @returns {bigint} Fee in wei
+ */
+export async function getExecutionFee() {
+    const contract = await getBuybackContractReadOnly();
+    return contract.executionFee();
+}
 
 /**
  * Preview the next buyback — returns estimates for ETH, BKC, rewards
@@ -192,6 +210,7 @@ export async function getSupplyInfo() {
 export const BuybackTx = {
     executeBuyback,
     executeBuybackWithSlippage,
+    getExecutionFee,
     getPreviewBuyback,
     getPendingETH,
     getMiningRate,

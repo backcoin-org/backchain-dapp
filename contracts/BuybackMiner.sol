@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 import "./IBackchain.sol";
 
 // ============================================================================
-// BUYBACK MINER — IMMUTABLE
+// BUYBACK MINER V2 — IMMUTABLE ECONOMICS + CONFIGURABLE EXECUTION FEE
 // ============================================================================
 //
 // The economic engine of Backchain. Converts accumulated ETH protocol fees
@@ -13,12 +13,16 @@ import "./IBackchain.sol";
 // When ANY ETH accumulates in the BackchainEcosystem,
 // ANYONE can call executeBuyback() to trigger the cycle:
 //
-//   1. Pull ETH from BackchainEcosystem
-//   2. Caller earns 5% of ETH as incentive (permissionless MEV)
-//   3. Buy BKC from LiquidityPool with remaining 95%
-//   4. Mint NEW BKC proportional to scarcity (linear curve → 200M cap)
-//   5. Burn 5% of total BKC (purchased + mined)
-//   6. Send 95% to StakingPool as rewards for delegators
+//   1. Caller pays small execution fee (anti-spam, added to buyback)
+//   2. Pull ETH from BackchainEcosystem
+//   3. Caller earns 5% of TOTAL ETH (ecosystem + fee) as incentive
+//   4. Buy BKC from LiquidityPool with remaining 95%
+//   5. Mint NEW BKC proportional to scarcity (linear curve → 200M cap)
+//   6. Burn 5% of total BKC (purchased + mined)
+//   7. Send 95% to StakingPool as rewards for delegators
+//
+// The execution fee is ADDED to the buyback amount, amplifying the purchase.
+// Caller receives 5% of the total (ecosystem + fee), so net cost is 95% of fee.
 //
 // MINING SCARCITY CURVE (linear decrease):
 //   rate = (MAX_SUPPLY - currentSupply) / MAX_MINTABLE
@@ -28,14 +32,7 @@ import "./IBackchain.sol";
 //   Supply 160M          → mining rate  25%
 //   Supply 200M (cap)    → mining rate   0% (pure real yield, no inflation)
 //
-// ECONOMICS:
-//   - Early phase: high mining rewards attract stakers, bootstrap liquidity
-//   - Mid phase: decreasing mining creates scarcity, price appreciation
-//   - Late phase: pure real yield from protocol fees only (sustainable)
-//   - BKC burn on every buyback creates permanent deflation
-//   - Caller incentive ensures buybacks happen regularly without centralization
-//
-// Owner can change: swap target (liquidity pool).
+// Owner can change: swap target (liquidity pool), execution fee.
 // Owner CANNOT change: caller reward, mining curve, burn rate.
 //
 // ============================================================================
@@ -68,6 +65,9 @@ contract BuybackMiner is IBuybackMiner {
     IBKCToken public immutable bkcToken;
     ILiquidityPool public liquidityPool;        // configurable — owner can redirect to new pool
     IStakingPool public immutable stakingPool;
+
+    /// @notice Anti-spam fee to execute buyback (configurable by owner, added to buyback)
+    uint256 public executionFee;
 
     // ════════════════════════════════════════════════════════════════════════
     // GOVERNANCE (two-step ownership — for swap target management)
@@ -124,6 +124,7 @@ contract BuybackMiner is IBuybackMiner {
     error NoPurchase();
     error SlippageExceeded();
     error TransferFailed();
+    error InsufficientFee();
     error NotOwner();
     error NotPendingOwner();
     error ZeroAddress();
@@ -146,38 +147,30 @@ contract BuybackMiner is IBuybackMiner {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // EXECUTE BUYBACK (permissionless — anyone can call, earns 1%)
+    // EXECUTE BUYBACK (permissionless — anyone can call, earns 5%)
     // ════════════════════════════════════════════════════════════════════════
 
     /// @notice Execute the buyback cycle. Permissionless — anyone can call.
-    ///         Caller earns 5% of the ETH as incentive.
-    ///         No minimum — self-regulating (callers only execute when profitable).
-    ///
-    ///         Flow:
-    ///         1. Pull accumulated ETH from BackchainEcosystem
-    ///         2. Send 5% to msg.sender (caller incentive)
-    ///         3. Swap 95% ETH → BKC via LiquidityPool
-    ///         4. Mint new BKC proportional to scarcity curve
-    ///         5. Burn 5% of (purchased + mined)
-    ///         6. Send 95% to StakingPool → notifyReward
-    function executeBuyback() external override {
+    ///         Caller must send >= executionFee ETH (anti-spam).
+    ///         Fee is ADDED to buyback, amplifying BKC purchase.
+    ///         Caller earns 5% of total ETH (ecosystem + fee) as incentive.
+    function executeBuyback() external payable override {
+        if (msg.value < executionFee) revert InsufficientFee();
         _executeBuyback(0);
     }
 
     /// @notice Execute buyback with slippage protection.
     ///         Same as executeBuyback() but reverts if total BKC output
     ///         (purchased + mined) is less than minTotalBkcOut.
-    ///
-    /// @param minTotalBkcOut Minimum total BKC (purchased + mined) expected.
-    ///                       Pass 0 to skip slippage check.
-    ///                       Protects against sandwich attacks on the swap.
-    function executeBuybackWithSlippage(uint256 minTotalBkcOut) external {
+    function executeBuybackWithSlippage(uint256 minTotalBkcOut) external payable {
+        if (msg.value < executionFee) revert InsufficientFee();
         _executeBuyback(minTotalBkcOut);
     }
 
     function _executeBuyback(uint256 minTotalBkcOut) internal {
-        // 1. Pull ETH from ecosystem (no minimum — self-regulating)
-        uint256 ethAmount = ecosystem.withdrawBuybackETH();
+        // 1. Pull ETH from ecosystem + add caller's fee (amplifies buyback)
+        uint256 ethFromEcosystem = ecosystem.withdrawBuybackETH();
+        uint256 ethAmount = ethFromEcosystem + msg.value;
         if (ethAmount == 0) revert NoPurchase();
 
         // 2. Caller incentive (5% of ETH)
@@ -427,6 +420,7 @@ contract BuybackMiner is IBuybackMiner {
     // ════════════════════════════════════════════════════════════════════════
 
     event SwapTargetUpdated(address indexed oldPool, address indexed newPool);
+    event ExecutionFeeUpdated(uint256 oldFee, uint256 newFee);
     event OwnershipTransferStarted(address indexed currentOwner, address indexed newOwner);
     event OwnershipTransferred(address indexed oldOwner, address indexed newOwner);
 
@@ -441,6 +435,13 @@ contract BuybackMiner is IBuybackMiner {
         if (_pool == address(0)) revert ZeroAddress();
         emit SwapTargetUpdated(address(liquidityPool), _pool);
         liquidityPool = ILiquidityPool(_pool);
+    }
+
+    /// @notice Set the execution fee for buyback (anti-spam, added to buyback).
+    ///         Set to 0 for free buybacks. Fee goes into the buyback itself.
+    function setExecutionFee(uint256 _fee) external onlyOwner {
+        emit ExecutionFeeUpdated(executionFee, _fee);
+        executionFee = _fee;
     }
 
     /// @notice Initiate ownership transfer. New owner must call acceptOwnership().

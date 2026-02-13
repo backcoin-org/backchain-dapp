@@ -1541,7 +1541,10 @@ async function updateGlobalMetrics() {
 
 async function loadDashBuybackData() {
     try {
-        const preview = await BuybackTx.getPreviewBuyback();
+        const [preview, fee] = await Promise.all([
+            BuybackTx.getPreviewBuyback(),
+            BuybackTx.getExecutionFee().catch(() => 0n)
+        ]);
         const widget = document.getElementById('dash-buyback-widget');
         if (!widget) return;
 
@@ -1557,13 +1560,18 @@ async function loadDashBuybackData() {
         widget.style.display = '';
         const pendingStr = Number(ethers.formatEther(pendingEth)).toFixed(6);
         const rewardStr = Number(ethers.formatEther(callerReward)).toFixed(6);
+        const feeStr = fee > 0n ? Number(ethers.formatEther(fee)).toFixed(4) : '0';
 
         const pendingEl = document.getElementById('dash-buyback-pending');
         const rewardEl = document.getElementById('dash-buyback-reward');
         const titleEl = document.getElementById('dash-buyback-title');
+        const descEl = document.getElementById('dash-buyback-desc');
         if (pendingEl) pendingEl.textContent = pendingStr;
         if (rewardEl) rewardEl.textContent = rewardStr;
         if (titleEl) titleEl.textContent = `Buyback Ready — ${pendingStr} ETH`;
+        if (descEl) descEl.textContent = fee > 0n
+            ? `Pay ${feeStr} ETH fee, earn ${rewardStr} ETH (5%). Fee amplifies buyback.`
+            : `Execute buyback to earn 5% of pending ETH as staker rewards`;
     } catch (e) {
         console.error('Dashboard buyback load error:', e);
     }

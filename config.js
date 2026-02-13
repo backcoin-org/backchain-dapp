@@ -725,11 +725,11 @@ export const ecosystemManagerABI = [
     "event EthWithdrawn(address indexed recipient, uint256 amount)"
 ];
 
-// BuybackMiner V10 ABI — Permissionless buyback + mining scarcity curve (no minimum, 5% caller, configurable pool)
+// BuybackMiner V2 ABI — Permissionless buyback + execution fee + mining scarcity curve
 export const buybackMinerABI = [
-    // Write
-    "function executeBuyback() external",
-    "function executeBuybackWithSlippage(uint256 _minTotalBkcOut) external",
+    // Write (payable — msg.value = execution fee, added to buyback)
+    "function executeBuyback() external payable",
+    "function executeBuybackWithSlippage(uint256 _minTotalBkcOut) external payable",
 
     // Constants
     "function MAX_SUPPLY() view returns (uint256)",
@@ -738,6 +738,9 @@ export const buybackMinerABI = [
     "function BURN_BPS() view returns (uint256)",
     "function liquidityPool() view returns (address)",
     "function owner() view returns (address)",
+
+    // Fee
+    "function executionFee() view returns (uint256)",
 
     // Views
     "function currentMiningRate() view returns (uint256 rateBps)",

@@ -226,7 +226,8 @@ interface IAirdropVesting {
 
 interface IBuybackMiner {
     /// @notice Execute buyback + mining (permissionless, caller earns 5%)
-    function executeBuyback() external;
+    ///         Caller must send >= executionFee ETH (anti-spam, added to buyback)
+    function executeBuyback() external payable;
 
     /// @notice Current mining rate in bps (10000 = 100%, 0 = no mining)
     function currentMiningRate() external view returns (uint256 rateBps);
