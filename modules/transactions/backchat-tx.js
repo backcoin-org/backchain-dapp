@@ -1,24 +1,20 @@
 // modules/js/transactions/backchat-tx.js
-// ✅ V2.0 - Agora V2 Social Protocol (ETH-only, tiered badges/boosts, reports, tips)
+// ✅ V3.0 - Agora V3 "The Forever Protocol" (ETH-only, zero hardcoded prices)
 //
-// V2.0 CHANGES:
-// - reportPost(postId, category) payable — 0.0001 ETH, community moderation
-// - boostPost(postId, tier, operator) payable — Standard(0.001/day) or Featured(0.005/day)
-// - tipPost(postId, operator) payable — free-value ETH tip to post author
-// - obtainBadge(tier, operator) payable — Verified(0.01), Premium(0.05), Elite(0.1) per year
-// - createPost fee varies by contentType (text/image/video/live)
-// - getPostMeta(postId) — reports, boost, tips data
-// - getUserProfile returns 8-tuple (added badgeTier)
+// V3.0 CHANGES:
+// - ALL pricing via ecosystem.calculateFee (zero hardcoded ETH values)
+// - Text/link posts are FREE (gas only). Only media (image/video/live) pays fees.
+// - SuperLike: free-value (any amount > 0), 1 count per call, tracks cumulative ETH
+// - Downvote: 1 per user per post, ecosystem fee (AGORA_DOWNVOTE)
+// - editPost(postId, newContentHash) — 15 min window, free
+// - blockUser / unblockUser — on-chain, free
+// - getPostsBatch(ids) — batch read via PostView struct
+// - getPost returns PostView struct (replaces getPost + getPostMeta)
+// - getUserProfile returns 10 fields (added followers, following)
+// - On-chain social graph: isFollowing, followerCount, followingCount
+// - Post boost pricing via ecosystem fees (AGORA_BOOST_STD, AGORA_BOOST_FEAT)
+// - Username pricing via ecosystem fees per length tier
 //
-// ============================================================================
-// V2 FEE STRUCTURE (ETH only):
-// - Posts: ecosystem.calculateFee (varies by contentType)
-// - SuperLike/Downvote: 100 gwei per vote
-// - Post Boost: Standard 0.002 ETH/day, Featured 0.01 ETH/day
-// - Profile Boost: 0.0005 ETH/day
-// - Badge: Verified 0.02, Premium 0.1, Elite 0.25 ETH/year
-// - Report: 0.0001 ETH (anti-spam)
-// - Tip: min 0.0001 ETH (free value)
 // ============================================================================
 
 import { txEngine, calculateFeeClientSide } from '../core/index.js';
@@ -54,10 +50,6 @@ async function getAgoraContractReadOnly() {
 // 3. PROFILE TRANSACTIONS
 // ============================================================================
 
-/**
- * Creates a new user profile with username
- * V9: createProfile(username, metadataURI, operator) — no displayName/bio
- */
 export async function createProfile({
     username, metadataURI = '', operator,
     button = null, onSuccess = null, onError = null
@@ -76,13 +68,13 @@ export async function createProfile({
 
         validate: async (signer, userAddress) => {
             const contract = await getAgoraContractReadOnly();
-
             if (!username || username.length < 1 || username.length > 15) throw new Error('Username must be 1-15 characters');
             if (!/^[a-z0-9_]+$/.test(username)) throw new Error('Username: lowercase letters, numbers, underscores only');
 
             const available = await contract.isUsernameAvailable(username);
             if (!available) throw new Error('Username is already taken');
 
+            // V3: pricing via ecosystem governance per length tier
             usernameFee = await contract.getUsernamePrice(username.length);
             console.log('[Agora] Username fee:', ethers.formatEther(usernameFee), 'ETH');
 
@@ -96,10 +88,6 @@ export async function createProfile({
     });
 }
 
-/**
- * Updates user profile metadata
- * V9: updateProfile(metadataURI) — free, only gas
- */
 export async function updateProfile({
     metadataURI,
     button = null, onSuccess = null, onError = null
@@ -119,8 +107,7 @@ export async function updateProfile({
 // ============================================================================
 
 /**
- * Creates a new post
- * V9: createPost(contentHash, tag, contentType, operator)
+ * V3: Text/link posts are FREE. Only image/video/live charge fees.
  */
 export async function createPost({
     content, tag = 0, contentType = 0, operator,
@@ -141,11 +128,16 @@ export async function createPost({
         validate: async (signer, userAddress) => {
             if (!content || content.length === 0) throw new Error('Content is required');
             if (tag < 0 || tag > 14) throw new Error('Tag must be 0-14');
-            // V2: differentiated fees by content type
-            const actionIds = { 0: 'AGORA_POST', 1: 'AGORA_POST_IMAGE', 2: 'AGORA_POST_VIDEO', 3: 'AGORA_POST', 4: 'AGORA_LIVE' };
-            const actionId = actionIds[contentType] || 'AGORA_POST';
-            fee = await calculateFeeClientSide(ethers.id(actionId), 0n);
-            console.log(`[Agora] Post fee (${actionId}):`, ethers.formatEther(fee), 'ETH');
+            // V3: text (0) and link (3) are FREE. Image/video/live pay fees.
+            const isMedia = contentType === 1 || contentType === 2 || contentType === 4;
+            if (isMedia) {
+                const actionIds = { 1: 'AGORA_POST_IMAGE', 2: 'AGORA_POST_VIDEO', 4: 'AGORA_LIVE' };
+                fee = await calculateFeeClientSide(ethers.id(actionIds[contentType]), 0n);
+                console.log(`[Agora] Post fee (${actionIds[contentType]}):`, ethers.formatEther(fee), 'ETH');
+            } else {
+                fee = 0n;
+                console.log('[Agora] Text/link post: FREE');
+            }
         },
 
         onSuccess: async (receipt) => {
@@ -166,8 +158,7 @@ export async function createPost({
 }
 
 /**
- * Creates a reply to an existing post
- * V9: createReply(parentId, contentHash, contentType, operator)
+ * V3: Text replies are FREE. Media replies pay fees.
  */
 export async function createReply({
     parentId, content, contentType = 0, operator,
@@ -187,7 +178,12 @@ export async function createReply({
 
         validate: async (signer, userAddress) => {
             if (!content) throw new Error('Content is required');
-            fee = await calculateFeeClientSide(ethers.id('AGORA_REPLY'), 0n);
+            const isMedia = contentType === 1 || contentType === 2 || contentType === 4;
+            if (isMedia) {
+                fee = await calculateFeeClientSide(ethers.id('AGORA_REPLY'), 0n);
+            } else {
+                fee = 0n;
+            }
         },
 
         onSuccess: async (receipt) => {
@@ -207,17 +203,11 @@ export async function createReply({
     });
 }
 
-/**
- * Reposts an existing post (optionally with quote)
- * V9: createRepost(originalId, contentHash, operator)
- */
 export async function createRepost({
     originalPostId, quote = '', operator,
     button = null, onSuccess = null, onError = null
 }) {
-    const ethers = window.ethers;
     let storedOperator = operator;
-    let fee = 0n;
 
     return await txEngine.execute({
         name: 'CreateRepost', button,
@@ -225,10 +215,27 @@ export async function createRepost({
         getContract: async (signer) => getAgoraContract(signer),
         method: 'createRepost',
         args: () => [originalPostId, quote || '', resolveOperator(storedOperator)],
-        get value() { return fee; },
+        // V3: reposts are free
+        onSuccess, onError
+    });
+}
+
+/**
+ * V3 NEW: Edit a post within 15-minute window (free, gas only)
+ */
+export async function editPost({
+    postId, newContent,
+    button = null, onSuccess = null, onError = null
+}) {
+    return await txEngine.execute({
+        name: 'EditPost', button,
+        skipSimulation: true, fixedGasLimit: 150000n,
+        getContract: async (signer) => getAgoraContract(signer),
+        method: 'editPost',
+        args: [postId, newContent],
 
         validate: async () => {
-            fee = await calculateFeeClientSide(ethers.id('AGORA_REPOST'), 0n);
+            if (!newContent || newContent.length === 0) throw new Error('Content is required');
         },
         onSuccess, onError
     });
@@ -238,10 +245,6 @@ export async function createRepost({
 // 5. ENGAGEMENT TRANSACTIONS
 // ============================================================================
 
-/**
- * Like a post (1 per user per post)
- * V9: like(postId, operator)
- */
 export async function like({
     postId, operator,
     button = null, onSuccess = null, onError = null
@@ -269,8 +272,7 @@ export async function like({
 }
 
 /**
- * Super like a post (100 gwei per, unlimited)
- * V9: superLike(postId, operator) payable — multiples of 100 gwei
+ * V3: SuperLike — send any amount > 0 ETH. 1 count per call, tracks cumulative ETH.
  */
 export async function superLike({
     postId, ethAmount, operator,
@@ -288,41 +290,41 @@ export async function superLike({
         value: amount,
 
         validate: async () => {
-            if (amount < 100000000n) throw new Error('Minimum super like is 100 gwei'); // 100 gwei
+            if (amount <= 0n) throw new Error('SuperLike requires ETH > 0');
         },
         onSuccess, onError
     });
 }
 
 /**
- * Downvote a post (100 gwei per, unlimited) — V9 NEW
+ * V3: Downvote — 1 per user per post, ecosystem fee (AGORA_DOWNVOTE)
  */
 export async function downvote({
-    postId, ethAmount, operator,
+    postId, operator,
     button = null, onSuccess = null, onError = null
 }) {
+    const ethers = window.ethers;
     let storedOperator = operator;
-    const amount = BigInt(ethAmount);
+    let fee = 0n;
 
     return await txEngine.execute({
         name: 'Downvote', button,
-        skipSimulation: true, fixedGasLimit: 250000n,
+        skipSimulation: true, fixedGasLimit: 200000n,
         getContract: async (signer) => getAgoraContract(signer),
         method: 'downvote',
         args: () => [postId, resolveOperator(storedOperator)],
-        value: amount,
+        get value() { return fee; },
 
-        validate: async () => {
-            if (amount < 100000000n) throw new Error('Minimum downvote is 100 gwei');
+        validate: async (signer, userAddress) => {
+            const contract = await getAgoraContractReadOnly();
+            const already = await contract.hasDownvoted(postId, userAddress);
+            if (already) throw new Error('Already downvoted this post');
+            fee = await calculateFeeClientSide(ethers.id('AGORA_DOWNVOTE'), 0n);
         },
         onSuccess, onError
     });
 }
 
-/**
- * Follow a user
- * V9: follow(user, operator) payable
- */
 export async function follow({
     toFollow, operator,
     button = null, onSuccess = null, onError = null
@@ -342,15 +344,16 @@ export async function follow({
         validate: async (signer, userAddress) => {
             if (!toFollow || toFollow === '0x0000000000000000000000000000000000000000') throw new Error('Invalid address');
             if (toFollow.toLowerCase() === userAddress.toLowerCase()) throw new Error('Cannot follow yourself');
+            // V3: check on-chain state
+            const contract = await getAgoraContractReadOnly();
+            const already = await contract.isFollowing(userAddress, toFollow);
+            if (already) throw new Error('Already following this user');
             fee = await calculateFeeClientSide(ethers.id('AGORA_FOLLOW'), 0n);
         },
         onSuccess, onError
     });
 }
 
-/**
- * Unfollow a user (free, only gas)
- */
 export async function unfollow({
     toUnfollow,
     button = null, onSuccess = null, onError = null
@@ -366,8 +369,39 @@ export async function unfollow({
 }
 
 /**
- * Delete a post (soft delete, free) — V9 NEW
+ * V3 NEW: Block user on-chain (free, gas only)
  */
+export async function blockUser({
+    userAddress,
+    button = null, onSuccess = null, onError = null
+}) {
+    return await txEngine.execute({
+        name: 'BlockUser', button,
+        skipSimulation: true, fixedGasLimit: 100000n,
+        getContract: async (signer) => getAgoraContract(signer),
+        method: 'blockUser',
+        args: [userAddress],
+        onSuccess, onError
+    });
+}
+
+/**
+ * V3 NEW: Unblock user on-chain (free, gas only)
+ */
+export async function unblockUser({
+    userAddress,
+    button = null, onSuccess = null, onError = null
+}) {
+    return await txEngine.execute({
+        name: 'UnblockUser', button,
+        skipSimulation: true, fixedGasLimit: 100000n,
+        getContract: async (signer) => getAgoraContract(signer),
+        method: 'unblockUser',
+        args: [userAddress],
+        onSuccess, onError
+    });
+}
+
 export async function deletePost({
     postId,
     button = null, onSuccess = null, onError = null
@@ -382,9 +416,6 @@ export async function deletePost({
     });
 }
 
-/**
- * Pin a post to profile (1 per user, free) — V9 NEW
- */
 export async function pinPost({
     postId,
     button = null, onSuccess = null, onError = null
@@ -399,9 +430,6 @@ export async function pinPost({
     });
 }
 
-/**
- * Change a post's tag (free, only gas) — V9
- */
 export async function changeTag({
     postId, newTag,
     button = null, onSuccess = null, onError = null
@@ -424,9 +452,8 @@ export async function boostProfile({
     days = 1, operator,
     button = null, onSuccess = null, onError = null
 }) {
-    const ethers = window.ethers;
     let storedOperator = operator;
-    const actionId = ethers.id('AGORA_PROFILE_BOOST');
+    const actionId = window.ethers.id('AGORA_PROFILE_BOOST');
     const pricePerDay = await calculateFeeClientSide(actionId);
     const boostAmount = pricePerDay * BigInt(days);
 
@@ -441,12 +468,6 @@ export async function boostProfile({
     });
 }
 
-/**
- * Obtain a badge — V10: gas-based pricing per year
- * Tier 0 (Verified) — blue checkmark
- * Tier 1 (Premium)  — gold checkmark
- * Tier 2 (Elite)    — diamond animated checkmark
- */
 export async function obtainBadge({
     tier = 0, operator,
     button = null, onSuccess = null, onError = null
@@ -469,13 +490,9 @@ export async function obtainBadge({
 }
 
 // ============================================================================
-// V2: REPORT, BOOST POST, TIP
+// 7. REPORT, BOOST POST, TIP
 // ============================================================================
 
-/**
- * Report a post — V10: gas-based fee, auto-blocks author for reporter
- * Categories: 0=Spam, 1=Harassment, 2=Illegal, 3=Scam, 4=Other
- */
 export async function reportPost({
     postId, category = 0, operator,
     button = null, onSuccess = null, onError = null
@@ -503,16 +520,17 @@ export async function reportPost({
 }
 
 /**
- * Boost a post — V2: tiered visibility boost
- * Tier 0 (Standard): 0.002 ETH/day — "Boosted" badge
- * Tier 1 (Featured): 0.01 ETH/day  — top of feed + cross-tag
+ * V3: Post boost pricing via ecosystem fees (AGORA_BOOST_STD, AGORA_BOOST_FEAT)
  */
 export async function boostPost({
-    postId, tier = 0, ethAmount, operator,
+    postId, tier = 0, days = 1, operator,
     button = null, onSuccess = null, onError = null
 }) {
+    const ethers = window.ethers;
     let storedOperator = operator;
-    const amount = BigInt(ethAmount);
+    const actionName = tier === 1 ? 'AGORA_BOOST_FEAT' : 'AGORA_BOOST_STD';
+    const pricePerDay = await calculateFeeClientSide(ethers.id(actionName));
+    const boostAmount = pricePerDay * BigInt(days);
 
     return await txEngine.execute({
         name: 'BoostPost', button,
@@ -520,21 +538,26 @@ export async function boostPost({
         getContract: async (signer) => getAgoraContract(signer),
         method: 'boostPost',
         args: () => [postId, tier, resolveOperator(storedOperator)],
-        value: amount,
+        value: boostAmount,
 
         validate: async () => {
-            const ethers = window.ethers;
-            const minPrice = tier === 1 ? ethers.parseEther('0.01') : ethers.parseEther('0.002');
-            if (amount < minPrice) throw new Error(`Minimum boost is ${ethers.formatEther(minPrice)} ETH/day`);
+            if (boostAmount <= 0n) throw new Error('Boost requires at least 1 day');
         },
         onSuccess, onError
     });
 }
 
 /**
- * Tip a post's author — V2: free-value ETH transfer
- * Min 0.0001 ETH, author earns via ecosystem distribution
+ * V3: Boost cost estimate for UI (returns cost for N days at given tier)
  */
+export async function getBoostCost(tier = 0, days = 1) {
+    const ethers = window.ethers;
+    const actionName = tier === 1 ? 'AGORA_BOOST_FEAT' : 'AGORA_BOOST_STD';
+    const pricePerDay = await calculateFeeClientSide(ethers.id(actionName));
+    const total = pricePerDay * BigInt(days);
+    return { pricePerDay, total, formatted: ethers.formatEther(total) };
+}
+
 export async function tipPost({
     postId, ethAmount, operator,
     button = null, onSuccess = null, onError = null
@@ -551,15 +574,14 @@ export async function tipPost({
         value: amount,
 
         validate: async () => {
-            const ethers = window.ethers;
-            if (amount < ethers.parseEther('0.0001')) throw new Error('Minimum tip is 0.0001 ETH');
+            if (amount <= 0n) throw new Error('Tip requires ETH > 0');
         },
         onSuccess, onError
     });
 }
 
 // ============================================================================
-// 7. READ FUNCTIONS
+// 8. READ FUNCTIONS
 // ============================================================================
 
 export async function getUsernamePrice(length) {
@@ -569,18 +591,77 @@ export async function getUsernamePrice(length) {
     return { fee, formatted: ethers.formatEther(fee) };
 }
 
-// Backward-compatible alias
 export const getUsernameFee = getUsernamePrice;
 
+/**
+ * V3: getPost returns PostView struct (replaces getPost + getPostMeta)
+ */
 export async function getPost(postId) {
     const contract = await getAgoraContractReadOnly();
     const p = await contract.getPost(postId);
     return {
-        author: p.author, tag: Number(p.tag), contentType: Number(p.contentType),
-        deleted: p.deleted, createdAt: Number(p.createdAt),
-        replyTo: Number(p._replyTo), repostOf: Number(p._repostOf),
-        likes: Number(p.likes), superLikes: Number(p.superLikes),
-        downvotes: Number(p.downvotes), replies: Number(p.replies), reposts: Number(p.reposts)
+        author: p.author || p[0],
+        tag: Number(p.tag ?? p[1]),
+        contentType: Number(p.contentType ?? p[2]),
+        deleted: p.deleted ?? p[3],
+        createdAt: Number(p.createdAt ?? p[4]),
+        editedAt: Number(p.editedAt_ ?? p[5]),
+        replyTo: Number(p.replyTo_ ?? p[6]),
+        repostOf: Number(p.repostOf_ ?? p[7]),
+        likes: Number(p.likes ?? p[8]),
+        superLikes: Number(p.superLikes ?? p[9]),
+        superLikeETH: p.superLikeETH ?? p[10] ?? 0n,
+        downvotes: Number(p.downvotes ?? p[11]),
+        replies: Number(p.replies ?? p[12]),
+        reposts: Number(p.reposts ?? p[13]),
+        reports: Number(p.reports ?? p[14]),
+        tips: p.tips ?? p[15] ?? 0n,
+        boostTier: Number(p.boostTier ?? p[16]),
+        boostExpiry: Number(p.boostExpiry ?? p[17])
+    };
+}
+
+/**
+ * V3 NEW: Batch read posts — 1 RPC call for N posts
+ */
+export async function getPostsBatch(postIds) {
+    const contract = await getAgoraContractReadOnly();
+    const batch = await contract.getPostsBatch(postIds);
+    return batch.map((p, i) => ({
+        author: p.author || p[0],
+        tag: Number(p.tag ?? p[1]),
+        contentType: Number(p.contentType ?? p[2]),
+        deleted: p.deleted ?? p[3],
+        createdAt: Number(p.createdAt ?? p[4]),
+        editedAt: Number(p.editedAt_ ?? p[5]),
+        replyTo: Number(p.replyTo_ ?? p[6]),
+        repostOf: Number(p.repostOf_ ?? p[7]),
+        likes: Number(p.likes ?? p[8]),
+        superLikes: Number(p.superLikes ?? p[9]),
+        superLikeETH: p.superLikeETH ?? p[10] ?? 0n,
+        downvotes: Number(p.downvotes ?? p[11]),
+        replies: Number(p.replies ?? p[12]),
+        reposts: Number(p.reposts ?? p[13]),
+        reports: Number(p.reports ?? p[14]),
+        tips: p.tips ?? p[15] ?? 0n,
+        boostTier: Number(p.boostTier ?? p[16]),
+        boostExpiry: Number(p.boostExpiry ?? p[17])
+    }));
+}
+
+/**
+ * V3: getPostMeta no longer exists — kept as alias for backward compatibility
+ */
+export async function getPostMeta(postId) {
+    const p = await getPost(postId);
+    return {
+        reports: p.reports,
+        illegalReports: 0,
+        boostTier: p.boostTier,
+        boostExpiry: p.boostExpiry,
+        isBoosted: p.boostExpiry > Math.floor(Date.now() / 1000),
+        boostSpent: 0n,
+        tips: p.tips
     };
 }
 
@@ -589,24 +670,23 @@ export async function getPostCount() {
     return Number(await contract.postCounter());
 }
 
+/**
+ * V3: getUserProfile returns 10 fields (added followers, following)
+ */
 export async function getUserProfile(userAddress) {
     const contract = await getAgoraContractReadOnly();
     const p = await contract.getUserProfile(userAddress);
     return {
-        usernameHash: p.usernameHash, metadataURI: p.metadataURI,
-        pinnedPost: Number(p.pinned), boosted: p.boosted, hasBadge: p.hasBadge,
-        badgeTier: Number(p.badgeTier || p._badgeTier || 0),
-        boostExpiry: Number(p.boostExp), badgeExpiry: Number(p.badgeExp)
-    };
-}
-
-export async function getPostMeta(postId) {
-    const contract = await getAgoraContractReadOnly();
-    const m = await contract.getPostMeta(postId);
-    return {
-        reports: Number(m.reports), illegalReports: Number(m.illegalReports),
-        boostTier: Number(m.boostTier), boostExpiry: Number(m.boostExp),
-        isBoosted: m.isBoosted, boostSpent: m.boostSpent, tips: m.tips
+        usernameHash: p.usernameHash || p[0],
+        metadataURI: p.metadataURI || p[1],
+        pinnedPost: Number(p.pinned ?? p[2]),
+        boosted: p.boosted ?? p[3],
+        hasBadge: p.hasBadge ?? p[4],
+        badgeTier: Number(p._badgeTier ?? p[5] ?? 0),
+        boostExpiry: Number(p.boostExp ?? p[6]),
+        badgeExpiry: Number(p.badgeExp ?? p[7]),
+        followers: Number(p.followers ?? p[8] ?? 0),
+        following: Number(p.following ?? p[9] ?? 0)
     };
 }
 
@@ -618,6 +698,30 @@ export async function isUsernameAvailable(username) {
 export async function hasUserLiked(postId, userAddress) {
     const contract = await getAgoraContractReadOnly();
     return await contract.hasLiked(postId, userAddress);
+}
+
+/**
+ * V3 NEW: Check if user has downvoted a post
+ */
+export async function hasUserDownvoted(postId, userAddress) {
+    const contract = await getAgoraContractReadOnly();
+    return await contract.hasDownvoted(postId, userAddress);
+}
+
+/**
+ * V3 NEW: Check if user A is following user B (on-chain)
+ */
+export async function checkFollowing(a, b) {
+    const contract = await getAgoraContractReadOnly();
+    return await contract.checkFollowing(a, b);
+}
+
+/**
+ * V3 NEW: Check if user A has blocked user B (on-chain)
+ */
+export async function checkBlocked(a, b) {
+    const contract = await getAgoraContractReadOnly();
+    return await contract.checkBlocked(a, b);
 }
 
 export async function isProfileBoosted(userAddress) {
@@ -633,13 +737,13 @@ export async function hasTrustBadge(userAddress) {
 export async function getBoostExpiry(userAddress) {
     const contract = await getAgoraContractReadOnly();
     const profile = await contract.getUserProfile(userAddress);
-    return Number(profile.boostExp);
+    return Number(profile.boostExp ?? profile[6]);
 }
 
 export async function getBadgeExpiry(userAddress) {
     const contract = await getAgoraContractReadOnly();
     const profile = await contract.getUserProfile(userAddress);
-    return Number(profile.badgeExp);
+    return Number(profile.badgeExp ?? profile[7]);
 }
 
 export async function getGlobalStats() {
@@ -667,24 +771,27 @@ export async function getVersion() {
 }
 
 // ============================================================================
-// 8. EXPORT
+// 9. EXPORT
 // ============================================================================
 
 export const BackchatTx = {
     // Profile
     createProfile, updateProfile,
     // Content
-    createPost, createReply, createRepost, deletePost, pinPost, changeTag,
+    createPost, createReply, createRepost, editPost, deletePost, pinPost, changeTag,
     // Engagement
     like, superLike, downvote, follow, unfollow,
-    // V2: Reports, Boosts, Tips
-    reportPost, boostPost, tipPost,
-    // Premium (V2: tiered)
+    // Social (V3)
+    blockUser, unblockUser,
+    // Reports, Boosts, Tips
+    reportPost, boostPost, getBoostCost, tipPost,
+    // Premium
     boostProfile, obtainBadge,
     // Read
     getUsernamePrice, getUsernameFee,
-    getPost, getPostMeta, getPostCount, getUserProfile,
-    isUsernameAvailable, hasUserLiked,
+    getPost, getPostsBatch, getPostMeta, getPostCount, getUserProfile,
+    isUsernameAvailable, hasUserLiked, hasUserDownvoted,
+    checkFollowing, checkBlocked,
     isProfileBoosted, hasTrustBadge,
     getBoostExpiry, getBadgeExpiry,
     getGlobalStats, getOperatorStats, getVersion

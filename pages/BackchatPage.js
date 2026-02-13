@@ -1,24 +1,21 @@
 // pages/BackchatPage.js
-// ✅ V11.0 — Agora Complete Redesign (V9 Contract Alignment)
+// ✅ V12.0 — Agora V3 "The Forever Protocol" Frontend
 // ═══════════════════════════════════════════════════════════════════════════
 //                          BACKCHAIN PROTOCOL
 //                     AGORA — Unstoppable Social Network
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// V11.0 Changes (V9 Agora Contract Alignment):
-// - Rebranded: Backchat → Agora
-// - Removed: Referral system, earnings/withdraw (not in V9)
-// - Fixed: createPost uses tag/contentType (not mediaCID)
-// - Fixed: createReply has no mediaCID/tipBkc
-// - Fixed: createProfile uses metadataURI (JSON) for displayName/bio
-// - Fixed: updateProfile uses metadataURI only
-// - Added: Tag system (15 tags, filter bar, compose tag picker)
-// - Added: Downvote button (100 gwei per, unlimited)
-// - Added: Delete post (soft delete, own posts)
-// - Added: Pin post (1 per user)
-// - Added: Post options menu (three dots)
-// - Added: Global stats display in Discover tab
-// - Improved: CSS design, mobile UX
+// V12.0 Changes (Agora V3 Contract Alignment):
+// - Text/link posts are FREE (gas only). Only media pays ecosystem fees.
+// - Reposts are FREE
+// - SuperLike: free-value (any ETH > 0), tracks cumulative ETH total
+// - Downvote: 1 per user per post, ecosystem fee (no more unlimited)
+// - Edit Post: 15-min window, free (gas only)
+// - Block/Unblock: on-chain (free, gas only)
+// - Batch reads: getPostsBatch for efficient loading
+// - On-chain social graph: followerCount/followingCount from getUserProfile
+// - Post boost pricing via ecosystem fees (dynamic, not hardcoded)
+// - Username pricing via ecosystem governance per length tier
 //
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -142,7 +139,7 @@ const BC = {
     wizUsernameOk: null,
     wizFee: null,
     wizChecking: false,
-    fees: { post: 0n, reply: 0n, like: 0n, follow: 0n, repost: 0n, superLikeMin: 0n, downvoteMin: 0n, boostMin: 0n, badge: 0n },
+    fees: { post: 0n, reply: 0n, like: 0n, follow: 0n, repost: 0n, downvote: 0n, boostStd: 0n, boostFeat: 0n, badge: 0n },
     hasBadge: false,
     badgeTier: 0,
     isBoosted: false,
@@ -609,33 +606,27 @@ function getContract() {
 
 async function loadFees() {
     try {
-        const contract = getContract();
-        if (!contract) return;
-        let votePrice = 100000000n;
-        try { votePrice = await contract.VOTE_PRICE(); } catch {}
-
-        // Calculate real fees from ecosystem contract
-        const defaultFee = ethers.parseEther('0.0001');
-        let postFee = defaultFee, replyFee = defaultFee, likeFee = defaultFee;
-        let followFee = defaultFee, repostFee = defaultFee;
+        // V3: All fees via ecosystem governance. Text/link posts are FREE.
+        let likeFee = 0n, followFee = 0n, downvoteFee = 0n;
+        let boostStdFee = 0n, boostFeatFee = 0n;
         try {
-            [postFee, replyFee, repostFee, likeFee, followFee] = await Promise.all([
-                calculateFeeClientSide(ethers.id('AGORA_POST'), 0n),
-                calculateFeeClientSide(ethers.id('AGORA_REPLY'), 0n),
-                calculateFeeClientSide(ethers.id('AGORA_REPOST'), 0n),
+            [likeFee, followFee, downvoteFee, boostStdFee, boostFeatFee] = await Promise.all([
                 calculateFeeClientSide(ethers.id('AGORA_LIKE'), 0n),
-                calculateFeeClientSide(ethers.id('AGORA_FOLLOW'), 0n)
+                calculateFeeClientSide(ethers.id('AGORA_FOLLOW'), 0n),
+                calculateFeeClientSide(ethers.id('AGORA_DOWNVOTE'), 0n),
+                calculateFeeClientSide(ethers.id('AGORA_BOOST_STD'), 0n),
+                calculateFeeClientSide(ethers.id('AGORA_BOOST_FEAT'), 0n)
             ]);
         } catch (e) {
-            console.warn('[Agora] Fee calc fallback to default:', e.message);
+            console.warn('[Agora] Fee calc fallback:', e.message);
         }
 
         BC.fees = {
-            post: postFee, reply: replyFee, like: likeFee,
-            follow: followFee, repost: repostFee,
-            superLikeMin: votePrice, downvoteMin: votePrice,
-            boostMin: ethers.parseEther('0.0005'),
-            badge: ethers.parseEther('0.001')
+            post: 0n, reply: 0n, repost: 0n,   // V3: text/link FREE
+            like: likeFee, follow: followFee,
+            downvote: downvoteFee,
+            boostStd: boostStdFee, boostFeat: boostFeatFee,
+            badge: 0n  // badge pricing via ecosystem governance
         };
     } catch (e) {
         console.warn('[Agora] Failed to load fees:', e.message);
@@ -645,18 +636,15 @@ async function loadFees() {
 async function loadUserStatus() {
     if (!State.isConnected || !State.userAddress) return;
     try {
-        const contract = getContract();
-        if (!contract) return;
-        const [profile, hasBadge, isBoosted] = await Promise.all([
-            contract.getUserProfile(State.userAddress).catch(() => null),
-            contract.hasTrustBadge(State.userAddress).catch(() => false),
-            contract.isProfileBoosted(State.userAddress).catch(() => false)
-        ]);
-        BC.hasBadge = hasBadge;
-        BC.isBoosted = isBoosted;
-        BC.boostExpiry = profile ? Number(profile.boostExp || profile[5] || 0) : 0;
-        BC.badgeExpiry = profile ? Number(profile.badgeExp || profile[6] || 0) : 0;
-        BC.badgeTier = profile ? Number(profile.badgeTier || profile[7] || 0) : 0;
+        // V3: getUserProfile returns 10 fields including followers/following
+        const profile = await BackchatTx.getUserProfile(State.userAddress).catch(() => null);
+        if (profile) {
+            BC.hasBadge = profile.hasBadge;
+            BC.isBoosted = profile.boosted;
+            BC.boostExpiry = profile.boostExpiry;
+            BC.badgeExpiry = profile.badgeExpiry;
+            BC.badgeTier = profile.badgeTier;
+        }
     } catch (e) {
         console.warn('[Agora] Failed to load user status:', e.message);
     }
@@ -694,11 +682,15 @@ async function loadProfiles() {
             let myProfile = BC.profiles.get(myAddr);
             if (!myProfile) {
                 try {
-                    const profile = await contract.getUserProfile(State.userAddress);
+                    const profile = await BackchatTx.getUserProfile(State.userAddress);
                     if (profile && profile.usernameHash && profile.usernameHash !== ethers.ZeroHash) {
-                        const meta = parseMetadata(profile.metadataURI || profile[1] || '');
-                        myProfile = { username: null, metadataURI: profile.metadataURI || profile[1] || '', displayName: meta.displayName, bio: meta.bio, avatar: meta.avatar };
+                        const meta = parseMetadata(profile.metadataURI);
+                        myProfile = { username: null, metadataURI: profile.metadataURI, displayName: meta.displayName, bio: meta.bio, avatar: meta.avatar };
                         BC.profiles.set(myAddr, myProfile);
+                    }
+                    // V3: Store on-chain follower counts
+                    if (profile) {
+                        BC.followCounts.set(myAddr, { followers: profile.followers, following: profile.following });
                     }
                 } catch {}
             }
@@ -721,9 +713,40 @@ async function loadProfiles() {
 }
 
 async function loadSocialGraph() {
+    // V3: On-chain follower/following counts from getUserProfile
+    // Per-user following state checked on demand via checkFollowing
     BC.following = new Set();
     BC.followers = new Set();
     BC.followCounts = new Map();
+
+    if (!State.isConnected || !State.userAddress) return;
+    try {
+        const contract = getContract();
+        if (!contract) return;
+        // Load follow events to know who the current user follows
+        const followEvents = await contract.queryFilter(contract.filters.Followed(), -50000).catch(() => []);
+        const unfollowEvents = await contract.queryFilter(contract.filters.Unfollowed(), -50000).catch(() => []);
+        const myAddr = State.userAddress.toLowerCase();
+        for (const ev of followEvents) {
+            if (ev.args.follower?.toLowerCase() === myAddr) {
+                BC.following.add(ev.args.followed?.toLowerCase());
+            }
+            if (ev.args.followed?.toLowerCase() === myAddr) {
+                BC.followers.add(ev.args.follower?.toLowerCase());
+            }
+        }
+        for (const ev of unfollowEvents) {
+            if (ev.args.follower?.toLowerCase() === myAddr) {
+                BC.following.delete(ev.args.followed?.toLowerCase());
+            }
+            if (ev.args.followed?.toLowerCase() === myAddr) {
+                BC.followers.delete(ev.args.follower?.toLowerCase());
+            }
+        }
+        console.log(`[Agora] Social graph: following=${BC.following.size}, followers=${BC.followers.size}`);
+    } catch (e) {
+        console.warn('[Agora] Failed to load social graph:', e.message);
+    }
 }
 
 async function loadBlockedAuthors() {
@@ -785,74 +808,81 @@ async function loadPosts() {
         BC.repostCountMap = new Map();
         BC.likesMap = new Map();
 
-        for (let i = 0; i < allEventItems.length; i += 10) {
-            const batch = allEventItems.slice(i, i + 10);
-            const metadataBatch = await Promise.all(
-                batch.map(({ ev }) => {
-                    const pid = ev.args.postId || ev.args.newPostId;
-                    return contract.getPost(pid).catch(() => null);
-                })
-            );
-
-            for (let j = 0; j < batch.length; j++) {
-                const { ev, type } = batch[j];
-                const meta = metadataBatch[j];
-                const pid = (ev.args.postId || ev.args.newPostId).toString();
-
-                if (meta && meta.deleted) continue;
-
-                const timestamp = meta ? Number(meta.createdAt || meta[4] || 0) : 0;
-                const likesCount = meta ? Number(meta.likes || meta[7] || 0) : 0;
-                const superLikesCount = meta ? BigInt(meta.superLikes || meta[8] || 0) : 0n;
-                const downvotesCount = meta ? Number(meta.downvotes || meta[9] || 0) : 0;
-                const repliesCount = meta ? Number(meta.replies || meta[10] || 0) : 0;
-                const repostsCount = meta ? Number(meta.reposts || meta[11] || 0) : 0;
-                const postTag = meta ? Number(meta.tag || meta[1] || 0) : 0;
-
-                if (type === 'post') {
-                    const { text, mediaCID } = parsePostContent(ev.args.contentHash || ev.args.content || '');
-                    const post = {
-                        id: pid, type: 'post',
-                        author: ev.args.author,
-                        content: text, mediaCID,
-                        tag: ev.args.tag != null ? Number(ev.args.tag) : postTag,
-                        timestamp, superLikes: superLikesCount,
-                        likesCount, downvotesCount, repliesCount, repostsCount,
-                        txHash: ev.transactionHash
-                    };
-                    allItems.push(post);
-                    feedPosts.push(post);
-                    BC.postsById.set(pid, post);
-                } else if (type === 'reply') {
-                    const parentId = ev.args.parentId.toString();
-                    const { text, mediaCID } = parsePostContent(ev.args.contentHash || ev.args.content || '');
-                    const reply = {
-                        id: pid, type: 'reply', parentId,
-                        author: ev.args.author,
-                        content: text, mediaCID,
-                        tag: ev.args.tag != null ? Number(ev.args.tag) : postTag,
-                        timestamp, superLikes: superLikesCount,
-                        likesCount, downvotesCount,
-                        txHash: ev.transactionHash
-                    };
-                    allItems.push(reply);
-                    BC.postsById.set(pid, reply);
-                    if (!BC.replies.has(parentId)) BC.replies.set(parentId, []);
-                    BC.replies.get(parentId).push(reply);
-                    BC.replyCountMap.set(parentId, (BC.replyCountMap.get(parentId) || 0) + 1);
-                } else if (type === 'repost') {
-                    const originalPostId = ev.args.originalId?.toString() || ev.args.originalPostId?.toString() || '0';
-                    const repost = {
-                        id: pid, type: 'repost', originalPostId,
-                        author: ev.args.author || ev.args.reposter,
-                        timestamp, superLikes: 0n,
-                        txHash: ev.transactionHash
-                    };
-                    allItems.push(repost);
-                    feedPosts.push(repost);
-                    BC.postsById.set(pid, repost);
-                    BC.repostCountMap.set(originalPostId, (BC.repostCountMap.get(originalPostId) || 0) + 1);
+        // V3: Use getPostsBatch for efficient batch reads
+        const allPostIds = allEventItems.map(({ ev }) => ev.args.postId || ev.args.newPostId);
+        const allMetadata = [];
+        for (let i = 0; i < allPostIds.length; i += 20) {
+            const batchIds = allPostIds.slice(i, i + 20);
+            try {
+                const batchResult = await BackchatTx.getPostsBatch(batchIds);
+                allMetadata.push(...batchResult);
+            } catch {
+                // Fallback to individual calls if batch fails
+                for (const pid of batchIds) {
+                    try { allMetadata.push(await BackchatTx.getPost(pid)); } catch { allMetadata.push(null); }
                 }
+            }
+        }
+
+        for (let j = 0; j < allEventItems.length; j++) {
+            const { ev, type } = allEventItems[j];
+            const meta = allMetadata[j];
+            const pid = (ev.args.postId || ev.args.newPostId).toString();
+
+            if (meta && meta.deleted) continue;
+
+            const timestamp = meta ? meta.createdAt : 0;
+            const likesCount = meta ? meta.likes : 0;
+            const superLikeETH = meta ? (meta.superLikeETH || 0n) : 0n;
+            const downvotesCount = meta ? meta.downvotes : 0;
+            const repliesCount = meta ? meta.replies : 0;
+            const repostsCount = meta ? meta.reposts : 0;
+            const editedAt = meta ? meta.editedAt : 0;
+            const postTag = meta ? meta.tag : 0;
+
+            if (type === 'post') {
+                const { text, mediaCID } = parsePostContent(ev.args.contentHash || ev.args.content || '');
+                const post = {
+                    id: pid, type: 'post',
+                    author: ev.args.author || (meta ? meta.author : null),
+                    content: text, mediaCID,
+                    tag: ev.args.tag != null ? Number(ev.args.tag) : postTag,
+                    timestamp, superLikeETH, editedAt,
+                    likesCount, downvotesCount, repliesCount, repostsCount,
+                    txHash: ev.transactionHash
+                };
+                allItems.push(post);
+                feedPosts.push(post);
+                BC.postsById.set(pid, post);
+            } else if (type === 'reply') {
+                const parentId = ev.args.parentId.toString();
+                const { text, mediaCID } = parsePostContent(ev.args.contentHash || ev.args.content || '');
+                const reply = {
+                    id: pid, type: 'reply', parentId,
+                    author: ev.args.author || (meta ? meta.author : null),
+                    content: text, mediaCID,
+                    tag: ev.args.tag != null ? Number(ev.args.tag) : postTag,
+                    timestamp, superLikeETH, editedAt,
+                    likesCount, downvotesCount,
+                    txHash: ev.transactionHash
+                };
+                allItems.push(reply);
+                BC.postsById.set(pid, reply);
+                if (!BC.replies.has(parentId)) BC.replies.set(parentId, []);
+                BC.replies.get(parentId).push(reply);
+                BC.replyCountMap.set(parentId, (BC.replyCountMap.get(parentId) || 0) + 1);
+            } else if (type === 'repost') {
+                const originalPostId = ev.args.originalId?.toString() || ev.args.originalPostId?.toString() || '0';
+                const repost = {
+                    id: pid, type: 'repost', originalPostId,
+                    author: ev.args.author || ev.args.reposter,
+                    timestamp, superLikeETH: 0n, editedAt: 0,
+                    txHash: ev.transactionHash
+                };
+                allItems.push(repost);
+                feedPosts.push(repost);
+                BC.postsById.set(pid, repost);
+                BC.repostCountMap.set(originalPostId, (BC.repostCountMap.get(originalPostId) || 0) + 1);
             }
         }
 
@@ -883,10 +913,10 @@ async function loadPosts() {
         BC.posts = filterBlocked(feedPosts);
         BC.allItems = allItems;
         BC.trendingPosts = filterBlocked([...allItems]
-            .filter(p => p.type !== 'repost' && p.superLikes > 0n))
+            .filter(p => p.type !== 'repost' && p.superLikeETH > 0n))
             .sort((a, b) => {
-                const aVal = BigInt(a.superLikes || 0);
-                const bVal = BigInt(b.superLikes || 0);
+                const aVal = BigInt(a.superLikeETH || 0);
+                const bVal = BigInt(b.superLikeETH || 0);
                 return bVal > aVal ? 1 : bVal < aVal ? -1 : 0;
             });
 
@@ -1030,15 +1060,17 @@ async function doSuperLike(postId, amount) {
     });
 }
 
-async function doDownvote(postId, amount) {
-    const ethAmount = ethers.parseEther(amount || '0.001');
+async function doDownvote(postId) {
+    // V3: 1 per user per post, ecosystem fee (no amount input needed)
     await BackchatTx.downvote({
         postId,
-        ethAmount,
         operator: getOperatorAddress(),
         onSuccess: async () => {
             showToast('Downvoted', 'success');
             await loadPosts();
+        },
+        onError: (err) => {
+            showToast(err?.shortMessage || err?.message || 'Downvote failed', 'error');
         }
     });
 }
@@ -1050,6 +1082,53 @@ async function doDeletePost(postId) {
             showToast('Post deleted', 'success');
             await loadPosts();
         }
+    });
+}
+
+async function doEditPost(postId) {
+    const input = document.getElementById('bc-edit-post-input');
+    const newContent = input?.value?.trim();
+    if (!newContent) { showToast('Content is required', 'error'); return; }
+    if (newContent.length > MAX_CONTENT) { showToast(`Too long (max ${MAX_CONTENT})`, 'error'); return; }
+
+    const btn = document.getElementById('bc-edit-post-btn');
+    await BackchatTx.editPost({
+        postId,
+        newContent,
+        button: btn,
+        onSuccess: async () => {
+            showToast('Post edited!', 'success');
+            closeModal('edit-post');
+            await loadPosts();
+            renderContent();
+        },
+        onError: (err) => {
+            showToast(err?.shortMessage || err?.message || 'Edit failed', 'error');
+        }
+    });
+}
+
+async function doBlockUser(address) {
+    await BackchatTx.blockUser({
+        userAddress: address,
+        onSuccess: () => {
+            BC.blockedAuthors.add(address.toLowerCase());
+            showToast('User blocked', 'success');
+            renderContent();
+        },
+        onError: (err) => { showToast(err?.shortMessage || err?.message || 'Block failed', 'error'); }
+    });
+}
+
+async function doUnblockUser(address) {
+    await BackchatTx.unblockUser({
+        userAddress: address,
+        onSuccess: () => {
+            BC.blockedAuthors.delete(address.toLowerCase());
+            showToast('User unblocked', 'success');
+            renderContent();
+        },
+        onError: (err) => { showToast(err?.shortMessage || err?.message || 'Unblock failed', 'error'); }
     });
 }
 
@@ -1208,7 +1287,7 @@ async function doObtainBadge(tier = 0) {
 
 async function doReportPost(postId, category = 0) {
     await BackchatTx.reportPost({
-        postId, category,
+        postId, category, operator: getOperatorAddress(),
         onSuccess: () => {
             // Auto-block: find the author and add to blocked set
             const post = BC.postsById.get(Number(postId));
@@ -1222,15 +1301,14 @@ async function doReportPost(postId, category = 0) {
 }
 
 async function doBoostPost(postId, tier = 0) {
-    const amount = document.getElementById('boost-post-amount')?.value || '0.001';
-    const ethers = window.ethers;
+    const days = parseInt(document.getElementById('boost-post-days')?.value || '1', 10);
     await BackchatTx.boostPost({
-        postId, tier, ethAmount: ethers.parseEther(amount),
+        postId, tier, days,
         operator: getOperatorAddress(),
         onSuccess: () => {
             closeModal('boost-post');
             const names = ['Standard', 'Featured'];
-            showToast(`Post boosted (${names[tier]})!`, 'success');
+            showToast(`Post boosted (${names[tier]}) for ${days} day${days !== 1 ? 's' : ''}!`, 'success');
             renderContent();
         },
         onError: (err) => { showToast(err?.shortMessage || err?.message || 'Boost failed', 'error'); }
@@ -1252,17 +1330,17 @@ async function doTipPost(postId) {
     });
 }
 
-async function doBoostProfile(amount) {
-    const ethAmount = ethers.parseEther(amount || '0.001');
+async function doBoostProfile(days = 1) {
     await BackchatTx.boostProfile({
-        ethAmount,
+        days,
         operator: getOperatorAddress(),
         onSuccess: () => {
             BC.isBoosted = true;
             closeModal('boost');
-            showToast('Profile boosted!', 'success');
+            showToast(`Profile boosted for ${days} day${days !== 1 ? 's' : ''}!`, 'success');
             renderContent();
-        }
+        },
+        onError: (err) => { showToast(err?.shortMessage || err?.message || 'Boost failed', 'error'); }
     });
 }
 
@@ -1692,7 +1770,9 @@ function renderComposeTagPicker() {
 
 function renderCompose() {
     if (!State.isConnected) return '';
-    const fee = formatETH(BC.fees.post);
+    // V3: text/link posts FREE, only media pays
+    const hasMedia = !!BC.pendingImage;
+    const feeLabel = hasMedia ? `~${formatETH(BC.fees.post || 0n)} ETH` : 'FREE';
     const profileBanner = (!BC.hasProfile && State.isConnected) ? `
         <div class="bc-profile-create-banner">
             <p>Create your profile to get a username and start posting</p>
@@ -1730,7 +1810,7 @@ function renderCompose() {
                 </div>
                 <div class="bc-compose-right">
                     <span class="bc-char-count" id="bc-char-counter">0/${MAX_CONTENT}</span>
-                    <span class="bc-compose-fee">${fee} ETH</span>
+                    <span class="bc-compose-fee">${feeLabel}</span>
                     <button id="bc-post-btn" class="bc-post-btn" onclick="BackchatPage.createPost()" ${BC.isPosting ? 'disabled' : ''}>
                         ${BC.isPosting ? '<i class="fa-solid fa-spinner fa-spin"></i> Posting' : 'Post'}
                     </button>
@@ -1742,6 +1822,10 @@ function renderCompose() {
 function renderPostMenu(post) {
     if (!State.isConnected) return '';
     const isOwn = post.author?.toLowerCase() === State.userAddress?.toLowerCase();
+    const isBlocked = BC.blockedAuthors.has(post.author?.toLowerCase());
+    // V3: Edit available within 15-min window
+    const canEdit = isOwn && post.editedAt === 0 && post.timestamp > 0 &&
+        (Math.floor(Date.now() / 1000) - post.timestamp) < 900;
     return `
         <div class="bc-post-menu-wrap">
             <button class="bc-post-menu-btn" onclick="event.stopPropagation(); BackchatPage.togglePostMenu('${post.id}')" title="Options">
@@ -1749,6 +1833,9 @@ function renderPostMenu(post) {
             </button>
             <div class="bc-post-dropdown" id="post-menu-${post.id}" style="display:none;">
                 ${isOwn ? `
+                ${canEdit ? `<button class="bc-post-dropdown-item" onclick="event.stopPropagation(); BackchatPage.openEditPost('${post.id}')">
+                    <i class="fa-solid fa-pen"></i> Edit Post
+                </button>` : ''}
                 <button class="bc-post-dropdown-item" onclick="event.stopPropagation(); BackchatPage.pinPost('${post.id}')">
                     <i class="fa-solid fa-thumbtack"></i> Pin to profile
                 </button>
@@ -1757,6 +1844,9 @@ function renderPostMenu(post) {
                 </button>` : `
                 <button class="bc-post-dropdown-item" onclick="event.stopPropagation(); BackchatPage.openTip('${post.id}')">
                     <i class="fa-solid fa-hand-holding-dollar"></i> Tip Author
+                </button>
+                <button class="bc-post-dropdown-item" onclick="event.stopPropagation(); BackchatPage.${isBlocked ? 'unblockUser' : 'blockUser'}('${post.author}')">
+                    <i class="fa-solid fa-${isBlocked ? 'unlock' : 'ban'}"></i> ${isBlocked ? 'Unblock' : 'Block'} User
                 </button>
                 <button class="bc-post-dropdown-item danger" onclick="event.stopPropagation(); BackchatPage.openReport('${post.id}')">
                     <i class="fa-solid fa-flag"></i> Report
@@ -1786,12 +1876,13 @@ function renderPost(post, index = 0, options = {}) {
     const username = getProfileUsername(post.author);
     const boosted = isUserBoosted(post.author);
     const badged = isUserBadged(post.author);
-    const superLikesETH = formatETH(post.superLikes);
+    const superLikesETH = formatETH(post.superLikeETH || 0n);
     const replyCount = post.repliesCount || BC.replyCountMap.get(post.id) || 0;
     const repostCount = post.repostsCount || BC.repostCountMap.get(post.id) || 0;
     const likeCount = post.likesCount || BC.likesMap.get(post.id)?.size || 0;
     const downCount = post.downvotesCount || 0;
     const isLiked = BC.likesMap.get(post.id)?.has(State.userAddress?.toLowerCase()) || false;
+    const isEdited = post.editedAt > 0;
     const animStyle = options.noAnimation ? '' : `style="animation-delay:${Math.min(index * 0.04, 0.4)}s"`;
     const tagInfo = getTagInfo(post.tag || 0);
 
@@ -1807,8 +1898,9 @@ function renderPost(post, index = 0, options = {}) {
                         ${badged ? `<i class="fa-solid fa-circle-check bc-verified-icon" title="${['Verified','Premium','Elite'][BC.badgeTier] || 'Verified'}" style="${BC.badgeTier === 2 ? 'color:#a855f7' : BC.badgeTier === 1 ? 'color:#f59e0b' : ''}"></i>` : ''}
                         ${username ? `<span class="bc-post-time">@${username}</span>` : ''}
                         <span class="bc-post-time">&middot; ${formatTimeAgo(post.timestamp)}</span>
+                        ${isEdited ? '<span class="bc-post-time" title="Edited">(edited)</span>' : ''}
                         ${post.tag > 0 ? `<span class="bc-tag-badge" style="color:${tagInfo.color};border-color:${tagInfo.color}30"><i class="fa-solid ${tagInfo.icon}"></i> ${tagInfo.name}</span>` : ''}
-                        ${post.superLikes > 0n ? `<span class="bc-trending-tag"><i class="fa-solid fa-bolt"></i> ${superLikesETH}</span>` : ''}
+                        ${(post.superLikeETH || 0n) > 0n ? `<span class="bc-trending-tag"><i class="fa-solid fa-bolt"></i> ${superLikesETH}</span>` : ''}
                         ${BC.activeRooms.has(String(post.id)) ? '<span class="bc-live-badge"><span class="bc-live-badge-dot"></span> LIVE</span>' : ''}
                     </div>
                     ${post.type === 'reply' ? `<div class="bc-post-context">Replying to ${getProfileName(BC.postsById.get(post.parentId)?.author)}</div>` : ''}
@@ -1949,8 +2041,9 @@ function renderProfile() {
 
     const myAddr = State.userAddress?.toLowerCase();
     const userPosts = BC.allItems.filter(p => p.author?.toLowerCase() === myAddr && p.type !== 'repost');
-    const followersCount = BC.followers.size;
-    const followingCount = BC.following.size;
+    // V3: prefer on-chain counts, fallback to event-based
+    const followersCount = BC.followCounts.get(myAddr)?.followers ?? BC.followers.size;
+    const followingCount = BC.followCounts.get(myAddr)?.following ?? BC.following.size;
     const displayName = BC.userProfile?.displayName || BC.userProfile?.username || shortenAddress(State.userAddress);
     const avatarUrl = BC.userProfile?.avatar ? getIPFSUrl(BC.userProfile.avatar) : '';
 
@@ -2053,7 +2146,7 @@ function renderPostDetail() {
                     <textarea id="bc-reply-input" class="bc-reply-input" placeholder="Write a reply..." maxlength="${MAX_CONTENT}"></textarea>
                     <button id="bc-reply-btn" class="bc-btn bc-btn-primary bc-reply-send" onclick="BackchatPage.submitReply('${post.id}')">Reply</button>
                 </div>
-                <div style="font-size:11px;color:var(--bc-text-3);margin-top:6px;">Fee: ${formatETH(BC.fees.reply)} ETH</div>
+                <div style="font-size:11px;color:var(--bc-text-3);margin-top:6px;">Text replies: FREE (gas only)</div>
             </div>` : ''}`;
 }
 
@@ -2070,8 +2163,19 @@ function renderUserProfile() {
     const avatarFallback = username ? username.charAt(0).toUpperCase() : getInitials(addr);
     const isMe = addrLower === State.userAddress?.toLowerCase();
     const isFollowing = BC.following.has(addrLower);
+    const isBlocked = BC.blockedAuthors.has(addrLower);
     const counts = BC.followCounts.get(addrLower) || { followers: 0, following: 0 };
     const userPosts = BC.allItems.filter(p => p.author?.toLowerCase() === addrLower && p.type !== 'repost');
+
+    // V3: Lazy-load on-chain follow counts for this profile
+    if (!BC.followCounts.has(addrLower)) {
+        BackchatTx.getUserProfile(addr).then(p => {
+            if (p) {
+                BC.followCounts.set(addrLower, { followers: p.followers, following: p.following });
+                renderContent();
+            }
+        }).catch(() => {});
+    }
 
     return `
         <div class="bc-profile-section">
@@ -2084,6 +2188,10 @@ function renderUserProfile() {
                             <button class="bc-follow-toggle ${isFollowing ? 'do-unfollow' : 'do-follow'}"
                                 onclick="BackchatPage.${isFollowing ? 'unfollow' : 'follow'}('${addr}')">
                                 ${isFollowing ? 'Following' : 'Follow'}
+                            </button>
+                            <button class="bc-btn bc-btn-outline" style="padding:8px 14px;${isBlocked ? 'border-color:var(--bc-red);color:var(--bc-red);' : ''}"
+                                onclick="BackchatPage.${isBlocked ? 'unblockUser' : 'blockUser'}('${addr}')">
+                                <i class="fa-solid fa-${isBlocked ? 'unlock' : 'ban'}"></i> ${isBlocked ? 'Unblock' : 'Block'}
                             </button>` : ''}
                     </div>
                 </div>
@@ -2185,15 +2293,15 @@ function renderModals() {
                     <button class="bc-modal-x" onclick="BackchatPage.closeModal('superlike')"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="bc-modal-inner">
-                    <p class="bc-modal-desc">Super Likes boost posts to trending. The more ETH you contribute, the higher it ranks.</p>
-                    <div class="bc-field"><label class="bc-label">Amount (ETH)</label><input type="number" id="superlike-amount" class="bc-input" value="0.001" min="0.0001" step="0.0001"></div>
-                    <div class="bc-fee-row"><span class="bc-fee-label">Minimum</span><span class="bc-fee-val">0.0001 ETH</span></div>
+                    <p class="bc-modal-desc">Send any amount of ETH to boost this post to trending. More ETH = higher rank. All ETH goes to the ecosystem.</p>
+                    <div class="bc-field"><label class="bc-label">Amount (ETH)</label><input type="number" id="superlike-amount" class="bc-input" value="0.001" min="0.000001" step="0.0001"></div>
+                    <div class="bc-fee-row"><span class="bc-fee-label">Any amount</span><span class="bc-fee-val">&gt; 0 ETH</span></div>
                     <button class="bc-btn bc-btn-primary" style="width:100%;margin-top:20px;justify-content:center;" onclick="BackchatPage.confirmSuperLike()"><i class="fa-solid fa-star"></i> Super Like</button>
                 </div>
             </div>
         </div>
 
-        <!-- Downvote Modal -->
+        <!-- Downvote Modal (V3: 1 per user per post) -->
         <div class="bc-modal-overlay" id="modal-downvote">
             <div class="bc-modal-box">
                 <div class="bc-modal-top">
@@ -2201,9 +2309,8 @@ function renderModals() {
                     <button class="bc-modal-x" onclick="BackchatPage.closeModal('downvote')"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="bc-modal-inner">
-                    <p class="bc-modal-desc">Downvote posts you disagree with. Each 100 gwei = 1 downvote. Unlimited.</p>
-                    <div class="bc-field"><label class="bc-label">Amount (ETH)</label><input type="number" id="downvote-amount" class="bc-input" value="0.001" min="0.0001" step="0.0001"></div>
-                    <div class="bc-fee-row"><span class="bc-fee-label">Minimum</span><span class="bc-fee-val">0.0001 ETH (100 gwei)</span></div>
+                    <p class="bc-modal-desc">Downvote this post. You can only downvote each post once. A small ecosystem fee applies.</p>
+                    <div class="bc-fee-row"><span class="bc-fee-label">Fee</span><span class="bc-fee-val">~${formatETH(BC.fees.downvote)} ETH</span></div>
                     <button class="bc-btn bc-btn-outline" style="width:100%;margin-top:20px;justify-content:center;border-color:var(--bc-purple);color:var(--bc-purple);" onclick="BackchatPage.confirmDownvote()"><i class="fa-solid fa-arrow-down"></i> Downvote</button>
                 </div>
             </div>
@@ -2233,7 +2340,7 @@ function renderModals() {
             </div>
         </div>
 
-        <!-- Boost Modal -->
+        <!-- Boost Modal (V3: ecosystem pricing) -->
         <div class="bc-modal-overlay" id="modal-boost">
             <div class="bc-modal-box">
                 <div class="bc-modal-top">
@@ -2241,9 +2348,8 @@ function renderModals() {
                     <button class="bc-modal-x" onclick="BackchatPage.closeModal('boost')"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="bc-modal-inner">
-                    <p class="bc-modal-desc">Boost your profile visibility. Each 0.0005 ETH gives 1 day of boost.</p>
-                    <div class="bc-field"><label class="bc-label">Amount (ETH)</label><input type="number" id="boost-amount" class="bc-input" value="0.001" min="0.0005" step="0.0005"></div>
-                    <div class="bc-fee-row"><span class="bc-fee-label">Minimum</span><span class="bc-fee-val">0.0005 ETH (1 day)</span></div>
+                    <p class="bc-modal-desc">Boost your profile for more visibility. Pricing set by ecosystem governance.</p>
+                    <div class="bc-field"><label class="bc-label">Days</label><input type="number" id="boost-days" class="bc-input" value="7" min="1" max="365" step="1"></div>
                     <button class="bc-btn bc-btn-primary" style="width:100%;margin-top:20px;justify-content:center;" onclick="BackchatPage.confirmBoost()"><i class="fa-solid fa-rocket"></i> Boost Profile</button>
                 </div>
             </div>
@@ -2257,7 +2363,7 @@ function renderModals() {
                     <button class="bc-modal-x" onclick="BackchatPage.closeModal('repost')"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="bc-modal-inner">
-                    <p class="bc-modal-desc">Repost this to your followers? Fee: ${formatETH(BC.fees.repost)} ETH</p>
+                    <p class="bc-modal-desc">Repost this to your followers? FREE (gas only)</p>
                     <button id="bc-repost-confirm-btn" class="bc-btn bc-btn-primary" style="width:100%;justify-content:center;" onclick="BackchatPage.confirmRepost()"><i class="fa-solid fa-retweet"></i> Repost</button>
                 </div>
             </div>
@@ -2328,7 +2434,7 @@ function renderModals() {
             </div>
         </div>
 
-        <!-- Boost Post Modal (V2) -->
+        <!-- Boost Post Modal (V3: ecosystem pricing) -->
         <div class="bc-modal-overlay" id="modal-boost-post">
             <div class="bc-modal-box">
                 <div class="bc-modal-top">
@@ -2336,14 +2442,14 @@ function renderModals() {
                     <button class="bc-modal-x" onclick="BackchatPage.closeModal('boost-post')"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="bc-modal-inner">
-                    <p class="bc-modal-desc">Boost this post for more visibility.</p>
-                    <div class="bc-field"><label class="bc-label">Amount (ETH)</label><input type="number" id="boost-post-amount" class="bc-input" value="0.01" min="0.002" step="0.001"></div>
+                    <p class="bc-modal-desc">Boost this post for more visibility. Pricing set by ecosystem governance.</p>
+                    <div class="bc-field"><label class="bc-label">Days</label><input type="number" id="boost-post-days" class="bc-input" value="1" min="1" max="90" step="1"></div>
                     <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
                         <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:space-between;" onclick="BackchatPage.confirmBoostPost(0)">
-                            <span><i class="fa-solid fa-rocket"></i> Standard</span><span style="color:var(--bc-text-3)">0.002 ETH/day</span>
+                            <span><i class="fa-solid fa-rocket"></i> Standard</span><span style="color:var(--bc-text-3)">~${formatETH(BC.fees.boostStd)} ETH/day</span>
                         </button>
                         <button class="bc-btn bc-btn-primary" style="width:100%;justify-content:space-between;" onclick="BackchatPage.confirmBoostPost(1)">
-                            <span><i class="fa-solid fa-star"></i> Featured</span><span>0.01 ETH/day</span>
+                            <span><i class="fa-solid fa-star"></i> Featured</span><span>~${formatETH(BC.fees.boostFeat)} ETH/day</span>
                         </button>
                     </div>
                 </div>
@@ -2358,10 +2464,26 @@ function renderModals() {
                     <button class="bc-modal-x" onclick="BackchatPage.closeModal('tip')"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="bc-modal-inner">
-                    <p class="bc-modal-desc">Send ETH directly to the post author as a tip.</p>
-                    <div class="bc-field"><label class="bc-label">Amount (ETH)</label><input type="number" id="tip-amount" class="bc-input" value="0.001" min="0.0001" step="0.0001"></div>
-                    <div class="bc-fee-row"><span class="bc-fee-label">Minimum</span><span class="bc-fee-val">0.0001 ETH</span></div>
+                    <p class="bc-modal-desc">Send ETH directly to the post author as a tip. Any amount &gt; 0.</p>
+                    <div class="bc-field"><label class="bc-label">Amount (ETH)</label><input type="number" id="tip-amount" class="bc-input" value="0.001" min="0.000001" step="0.0001"></div>
                     <button class="bc-btn bc-btn-primary" style="width:100%;margin-top:16px;justify-content:center;background:var(--bc-green);" onclick="BackchatPage.confirmTip()"><i class="fa-solid fa-hand-holding-dollar"></i> Send Tip</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Post Modal (V3: 15-min window) -->
+        <div class="bc-modal-overlay" id="modal-edit-post">
+            <div class="bc-modal-box">
+                <div class="bc-modal-top">
+                    <span class="bc-modal-title"><i class="fa-solid fa-pen" style="color:var(--bc-accent)"></i> Edit Post</span>
+                    <button class="bc-modal-x" onclick="BackchatPage.closeModal('edit-post')"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="bc-modal-inner">
+                    <p class="bc-modal-desc">Edit within 15 minutes of posting. Free (gas only). Can only edit once.</p>
+                    <div class="bc-field">
+                        <textarea id="bc-edit-post-input" class="bc-input" rows="4" maxlength="${MAX_CONTENT}" style="resize:none;"></textarea>
+                    </div>
+                    <button id="bc-edit-post-btn" class="bc-btn bc-btn-primary" style="width:100%;justify-content:center;" onclick="BackchatPage.confirmEditPost()"><i class="fa-solid fa-check"></i> Save Edit</button>
                 </div>
             </div>
         </div>`;
@@ -2407,18 +2529,17 @@ function openDownvote(postId) {
 }
 
 async function confirmDownvote() {
-    const amount = document.getElementById('downvote-amount')?.value || '0.001';
     closeModal('downvote');
-    await doDownvote(selectedPostForAction, amount);
+    await doDownvote(selectedPostForAction);
 }
 
 function openBadge() { document.getElementById('modal-badge')?.classList.add('active'); }
 async function confirmBadge(tier = 0) { await doObtainBadge(tier); }
 function openBoost() { document.getElementById('modal-boost')?.classList.add('active'); }
 async function confirmBoost() {
-    const amount = document.getElementById('boost-amount')?.value || '0.001';
+    const days = parseInt(document.getElementById('boost-days')?.value || '7', 10);
     closeModal('boost');
-    await doBoostProfile(amount);
+    await doBoostProfile(days);
 }
 
 // V2: Report, Boost Post, Tip
@@ -2428,6 +2549,17 @@ function openBoostPost(postId) { selectedPostForAction = postId; document.getEle
 async function confirmBoostPost(tier) { await doBoostPost(selectedPostForAction, tier); }
 function openTip(postId) { selectedPostForAction = postId; document.getElementById('modal-tip')?.classList.add('active'); }
 async function confirmTip() { await doTipPost(selectedPostForAction); }
+
+function openEditPost(postId) {
+    selectedPostForAction = postId;
+    const post = BC.postsById.get(postId);
+    render(); // re-render to include modal
+    const modal = document.getElementById('modal-edit-post');
+    const input = document.getElementById('bc-edit-post-input');
+    if (input && post) input.value = post.content || '';
+    modal?.classList.add('active');
+}
+async function confirmEditPost() { await doEditPost(selectedPostForAction); }
 
 function previewAvatar(input) {
     const file = input?.files?.[0];
@@ -2588,6 +2720,12 @@ export const BackchatPage = {
     openTip,
     confirmTip,
     previewAvatar,
+
+    // V3: Edit, Block/Unblock
+    openEditPost,
+    confirmEditPost,
+    blockUser: doBlockUser,
+    unblockUser: doUnblockUser,
 
     goLive,
     endLive,

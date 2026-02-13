@@ -157,7 +157,7 @@ export {
     getSupplyInfo
 } from './buyback-tx.js';
 
-// Backchat / Agora V2 (tiered badges/boosts, reports, tips)
+// Backchat / Agora V3 (The Forever Protocol)
 export {
     BackchatTx,
     createProfile,
@@ -165,27 +165,35 @@ export {
     createPost,
     createReply,
     createRepost,
+    editPost,
     like,
     superLike,
     downvote,
     follow,
     unfollow,
+    blockUser,
+    unblockUser,
     deletePost,
     pinPost,
     changeTag,
     reportPost,
     boostPost,
+    getBoostCost as agoraGetBoostCost,
     tipPost,
     boostProfile,
     obtainBadge,
     getUsernamePrice,
     getUsernameFee, // backward-compat alias
     getPost,
+    getPostsBatch,
     getPostMeta,
     getPostCount,
     getUserProfile,
     isUsernameAvailable,
     hasUserLiked,
+    hasUserDownvoted,
+    checkFollowing,
+    checkBlocked,
     getGlobalStats,
     getVersion as backchatGetVersion
 } from './backchat-tx.js';

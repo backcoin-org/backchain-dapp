@@ -806,26 +806,31 @@ export const charityPoolABI = [
 
 // Agora V9 ABI — Decentralized social protocol (Tier 1: ETH only)
 export const agoraABI = [
-    // ── Posts ──
+    // ── Posts (V3: text/link free, media paid) ──
     "function createPost(string contentHash, uint8 tag, uint8 contentType, address operator) external payable",
     "function createReply(uint256 parentId, string contentHash, uint8 contentType, address operator) external payable",
     "function createRepost(uint256 originalId, string contentHash, address operator) external payable",
+    "function editPost(uint256 postId, string newContentHash) external",
     "function deletePost(uint256 postId) external",
     "function changeTag(uint256 postId, uint8 newTag) external",
 
-    // ── Engagement ──
+    // ── Engagement (V3: superLike free-value, downvote 1-per-user) ──
     "function like(uint256 postId, address operator) external payable",
     "function superLike(uint256 postId, address operator) external payable",
     "function downvote(uint256 postId, address operator) external payable",
+
+    // ── Social Graph (V3: on-chain state + counts) ──
     "function follow(address user, address operator) external payable",
     "function unfollow(address user) external",
+    "function blockUser(address user) external",
+    "function unblockUser(address user) external",
 
-    // ── Reports (V2) ──
-    "function reportPost(uint256 postId, uint8 category) external payable",
+    // ── Reports ──
+    "function reportPost(uint256 postId, uint8 category, address operator) external payable",
     "function hasReported(uint256 postId, address user) view returns (bool)",
     "function reportCount(uint256 postId) view returns (uint256)",
 
-    // ── Post Boost & Tips (V2) ──
+    // ── Post Boost & Tips ──
     "function boostPost(uint256 postId, uint8 tier, address operator) external payable",
     "function tipPost(uint256 postId, address operator) external payable",
 
@@ -834,33 +839,38 @@ export const agoraABI = [
     "function updateProfile(string metadataURI) external",
     "function pinPost(uint256 postId) external",
 
-    // ── Premium (V2: tiers) ──
+    // ── Premium ──
     "function boostProfile(address operator) external payable",
     "function obtainBadge(uint8 tier, address operator) external payable",
 
     // ── Constants ──
-    "function VOTE_PRICE() view returns (uint256)",
     "function TAG_COUNT() view returns (uint8)",
-    "function REPORT_PRICE() view returns (uint256)",
-    "function MIN_TIP() view returns (uint256)",
-    "function PROFILE_BOOST_PRICE() view returns (uint256)",
+    "function EDIT_WINDOW() view returns (uint256)",
     "function BOOST_TIER_COUNT() view returns (uint8)",
     "function BADGE_TIER_COUNT() view returns (uint8)",
     "function postCounter() view returns (uint256)",
     "function totalProfiles() view returns (uint256)",
 
-    // ── Views ──
-    "function getPost(uint256 postId) view returns (address author, uint8 tag, uint8 contentType, bool deleted, uint32 createdAt, uint256 replyTo, uint256 repostOf, uint256 likes, uint256 superLikes, uint256 downvotes, uint256 replies, uint256 reposts)",
-    "function getPostMeta(uint256 postId) view returns (uint256 reports, uint256 illegalReports, uint8 boostTier, uint64 boostExp, bool isBoosted, uint256 boostSpent, uint256 tips)",
-    "function getUserProfile(address user) view returns (bytes32 usernameHash, string metadataURI, uint256 pinned, bool boosted, bool hasBadge, uint8 badgeTier, uint64 boostExp, uint64 badgeExp)",
+    // ── V3 Views (PostView struct, batch reads, on-chain social) ──
+    "function getPost(uint256 postId) view returns (tuple(address author, uint8 tag, uint8 contentType, bool deleted, uint32 createdAt, uint32 editedAt_, uint256 replyTo_, uint256 repostOf_, uint256 likes, uint256 superLikes, uint256 superLikeETH, uint256 downvotes, uint256 replies, uint256 reposts, uint256 reports, uint256 tips, uint8 boostTier, uint64 boostExpiry))",
+    "function getPostsBatch(uint256[] postIds) view returns (tuple(address author, uint8 tag, uint8 contentType, bool deleted, uint32 createdAt, uint32 editedAt_, uint256 replyTo_, uint256 repostOf_, uint256 likes, uint256 superLikes, uint256 superLikeETH, uint256 downvotes, uint256 replies, uint256 reposts, uint256 reports, uint256 tips, uint8 boostTier, uint64 boostExpiry)[])",
+    "function getUserProfile(address user) view returns (bytes32 usernameHash, string metadataURI, uint256 pinned, bool boosted, bool hasBadge, uint8 _badgeTier, uint64 boostExp, uint64 badgeExp, uint256 followers, uint256 following)",
+    "function checkFollowing(address a, address b) view returns (bool)",
+    "function checkBlocked(address a, address b) view returns (bool)",
+    "function isFollowing(address, address) view returns (bool)",
+    "function followerCount(address) view returns (uint256)",
+    "function followingCount(address) view returns (uint256)",
+    "function hasBlocked(address, address) view returns (bool)",
+    "function hasLiked(uint256 postId, address user) view returns (bool)",
+    "function hasDownvoted(uint256 postId, address user) view returns (bool)",
+    "function superLikeTotal(uint256 postId) view returns (uint256)",
     "function isProfileBoosted(address user) view returns (bool)",
     "function hasTrustBadge(address user) view returns (bool)",
     "function isPostBoosted(uint256 postId) view returns (bool)",
     "function isUsernameAvailable(string username) view returns (bool)",
-    "function getUsernamePrice(uint256 length) pure returns (uint256)",
-    "function getBoostPrice(uint8 tier) pure returns (uint256)",
-    "function getBadgePrice(uint8 tier) pure returns (uint256)",
-    "function hasLiked(uint256 postId, address user) view returns (bool)",
+    "function getUsernamePrice(uint256 length) view returns (uint256)",
+    "function getBoostPrice(uint8 tier) view returns (uint256)",
+    "function getBadgePrice(uint8 tier) view returns (uint256)",
     "function getOperatorStats(address operator) view returns (uint256 posts_, uint256 engagement)",
     "function getGlobalStats() view returns (uint256 totalPosts, uint256 totalProfiles, uint256[15] tagCounts)",
     "function version() pure returns (string)",
@@ -869,18 +879,22 @@ export const agoraABI = [
     "event PostCreated(uint256 indexed postId, address indexed author, uint8 tag, uint8 contentType, string contentHash, address operator)",
     "event ReplyCreated(uint256 indexed postId, uint256 indexed parentId, address indexed author, uint8 tag, uint8 contentType, string contentHash, address operator)",
     "event RepostCreated(uint256 indexed postId, uint256 indexed originalId, address indexed author, uint8 tag, string contentHash, address operator)",
+    "event PostEdited(uint256 indexed postId, address indexed author, string newContentHash)",
     "event PostDeleted(uint256 indexed postId, address indexed author)",
     "event TagChanged(uint256 indexed postId, uint8 oldTag, uint8 newTag)",
     "event Liked(uint256 indexed postId, address indexed liker, address indexed author, address operator)",
-    "event SuperLiked(uint256 indexed postId, address indexed voter, address indexed author, uint256 count, address operator)",
-    "event Downvoted(uint256 indexed postId, address indexed voter, address indexed author, uint256 count, address operator)",
+    "event SuperLiked(uint256 indexed postId, address indexed voter, address indexed author, uint256 amount, address operator)",
+    "event Downvoted(uint256 indexed postId, address indexed voter, address indexed author, address operator)",
     "event Followed(address indexed follower, address indexed followed, address operator)",
     "event Unfollowed(address indexed follower, address indexed followed)",
+    "event UserBlocked(address indexed blocker, address indexed blocked)",
+    "event UserUnblocked(address indexed blocker, address indexed unblocked)",
     "event PostReported(uint256 indexed postId, address indexed reporter, address indexed author, uint8 category, uint256 totalReports)",
     "event PostBoosted(uint256 indexed postId, address indexed booster, uint8 tier, uint256 amount, uint64 newExpiry, address operator)",
     "event PostTipped(uint256 indexed postId, address indexed tipper, address indexed author, uint256 amount, address operator)",
     "event ProfileCreated(address indexed user, string username, string metadataURI, address operator)",
     "event ProfileUpdated(address indexed user, string metadataURI)",
+    "event PostPinned(address indexed user, uint256 indexed postId)",
     "event ProfileBoosted(address indexed user, uint256 daysAdded, uint64 expiresAt, address operator)",
     "event BadgeObtained(address indexed user, uint8 tier, uint64 expiresAt, address operator)"
 ];
