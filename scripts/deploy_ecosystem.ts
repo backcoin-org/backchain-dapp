@@ -186,8 +186,11 @@ const RETRY_DELAY_MS = 5000;
 // ════════════════════════════════════════════════════════════════════════════
 
 // RewardBooster: Only mint Bronze. Higher tiers come from NFTFusion (2→1 fuse)
+// NOTE: mintCount capped at 50 — initializePool transfers each NFT individually
+// and costs ~250K gas/NFT. 50 × 250K = 12.5M gas (safe under 50M limit).
+// More Bronze enter the pool when users sell back or split higher-tier NFTs.
 const NFT_TIERS = [
-    { tier: 0, name: "Bronze", mintCount: 1000 },
+    { tier: 0, name: "Bronze", mintCount: 50 },
 ];
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -199,7 +202,7 @@ const LIQUIDITY_CONFIG = {
     FAUCET_BKC: 4_000_000n * 10n**18n,
     // NFT Pools: Bronze seeded with real NFTs; higher tiers start empty with virtual reserves
     NFT_POOL_BKC: [
-        500_000n * 10n**18n,   // Bronze:  1000 NFTs + 500K BKC
+        25_000n * 10n**18n,    // Bronze:  50 NFTs + 25K BKC (~500 BKC/NFT)
         250_000n * 10n**18n,   // Silver:  0 NFTs + 250K BKC (virtualReserves=10)
         200_000n * 10n**18n,   // Gold:    0 NFTs + 200K BKC (virtualReserves=10)
         150_000n * 10n**18n,   // Diamond: 0 NFTs + 150K BKC (virtualReserves=10)
@@ -679,31 +682,37 @@ async function main() {
         // Mint genesis Bronze NFTs only (higher tiers via NFTFusion)
         const bronzeMintCount = NFT_TIERS[0].mintCount;
         const bronzeTokenIds: bigint[] = [];
+        const MINT_BATCH_SIZE = 100; // Arbitrum gas limit — mint in smaller batches
 
         {
-            const startIdTx = await booster.mintBatch(deployerAddr, 0, bronzeMintCount);
-            const receipt = await startIdTx.wait();
+            let minted = 0;
+            while (minted < bronzeMintCount) {
+                const batchSize = Math.min(MINT_BATCH_SIZE, bronzeMintCount - minted);
+                const tx = await booster.mintBatch(deployerAddr, 0, batchSize);
+                const receipt = await tx.wait();
 
-            const totalSupply = await booster.totalSupply();
-            const startId = Number(totalSupply) - bronzeMintCount + 1;
+                const totalSupply = await booster.totalSupply();
+                const batchStartId = Number(totalSupply) - batchSize + 1;
 
-            for (let i = 0; i < bronzeMintCount; i++) {
-                bronzeTokenIds.push(BigInt(startId + i));
+                for (let i = 0; i < batchSize; i++) {
+                    bronzeTokenIds.push(BigInt(batchStartId + i));
+                }
+
+                console.log(`   ✅ Minted batch ${minted + 1}..${minted + batchSize} of ${bronzeMintCount} Bronze NFTs`);
+
+                logTransaction({
+                    description: `mintBatch: ${batchSize} Bronze (batch ${Math.ceil((minted + 1) / MINT_BATCH_SIZE)})`,
+                    txHash: receipt?.hash || "N/A",
+                    from: deployerAddr,
+                    to: boosterAddr,
+                    gasUsed: receipt?.gasUsed?.toString() || "0",
+                    blockNumber: receipt?.blockNumber || 0,
+                    status: "success",
+                });
+
+                minted += batchSize;
+                await sleep(TX_DELAY_MS);
             }
-
-            console.log(`   ✅ Minted ${bronzeMintCount} Bronze NFTs (IDs: ${startId}..${startId + bronzeMintCount - 1})`);
-
-            logTransaction({
-                description: `mintBatch: ${bronzeMintCount} Bronze`,
-                txHash: receipt?.hash || "N/A",
-                from: deployerAddr,
-                to: boosterAddr,
-                gasUsed: receipt?.gasUsed?.toString() || "0",
-                blockNumber: receipt?.blockNumber || 0,
-                status: "success",
-            });
-
-            await sleep(TX_DELAY_MS);
         }
 
         console.log(`   🎉 Total NFTs mintados: ${bronzeMintCount} (higher tiers via fusion)`);
@@ -1020,11 +1029,8 @@ async function main() {
             "StakingPool.setRewardBooster(RewardBooster)"
         );
 
-        // StakingPool: configurar penalidade de force unstake (10%)
-        await sendTxWithRetry(
-            async () => await staking.setForceUnstakePenalty(1000),
-            "StakingPool.setForceUnstakePenalty(1000 = 10%)"
-        );
+        // NOTE: forceUnstake penalty is auto-computed by NFT tier (no setter needed)
+        // Default forceUnstakeEthFee = 0.0004 ether (set in constructor)
 
         // BKCToken: autorizar BuybackMiner como minter
         await sendTxWithRetry(

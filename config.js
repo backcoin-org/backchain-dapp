@@ -291,6 +291,7 @@ export async function loadAddresses() {
         addresses.liquidityPool = json.liquidityPool;
         addresses.faucet = json.faucet || json.simpleBkcFaucet;
         addresses.backchainGovernance = json.backchainGovernance;
+        addresses.nftFusion = json.nftFusion;
         addresses.treasuryWallet = json.treasuryWallet;
 
         // Pool addresses (per-tier NFT liquidity pools)

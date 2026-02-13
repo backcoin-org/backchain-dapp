@@ -127,6 +127,19 @@ export {
     executeFaucetClaim
 } from './faucet-tx.js';
 
+// NFT Fusion (fuse 2→1 up, split 1→2 down)
+export {
+    FusionTx,
+    fuseNfts,
+    splitNft,
+    splitNftTo,
+    getEstimatedFusionFee,
+    getEstimatedSplitFee,
+    getEstimatedMultiSplitFee,
+    getFusionStats,
+    isFusionApproved
+} from './fusion-tx.js';
+
 // Backchat / Agora V2 (tiered badges/boosts, reports, tips)
 export {
     BackchatTx,
@@ -175,6 +188,7 @@ export const Transactions = {
     Rental: (async () => (await import('./rental-tx.js')).RentalTx)(),
     Notary: (async () => (await import('./notary-tx.js')).NotaryTx)(),
     Faucet: (async () => (await import('./faucet-tx.js')).FaucetTx)(),
+    Fusion: (async () => (await import('./fusion-tx.js')).FusionTx)(),
     Backchat: (async () => (await import('./backchat-tx.js')).BackchatTx)()
 };
 
