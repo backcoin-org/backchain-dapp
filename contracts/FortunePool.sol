@@ -7,7 +7,7 @@ import "./IBackchain.sol";
 // FORTUNE POOL V2 — IMMUTABLE (Tier 2: ETH + BKC)
 // ============================================================================
 //
-// Provably fair commit-reveal game with 3 prize tiers + Activity Pool.
+// Provably fair commit-reveal game with 3 prize tiers.
 //
 // How it works:
 //   1. COMMIT: Player picks tiers (1, 2, or 3), submits hash + BKC wager + ETH
@@ -19,20 +19,12 @@ import "./IBackchain.sol";
 //   Tier 1 — range 1-20,  pays  15x  (5% chance)
 //   Tier 2 — range 1-100, pays  75x  (1% chance)
 //
-// V2: Activity Pool
-//   - Excess BKC above POOL_CAP → Activity Pool (instead of burn)
-//   - When Activity Pool reaches ACTIVITY_THRESHOLD (10K BKC):
-//     → Distributes equally to top 10 players by game count in current cycle
-//     → If < 10 players: unclaimed portions are burned
-//     → Cycle resets after distribution
-//   - Incentivizes more games → more ETH fees → more ecosystem revenue
-//
 // Economics:
 //   - 20% BKC fee on wager → ecosystem (burn/stakers/treasury/operator)
 //   - ETH fee per tier played → ecosystem (operator/treasury/buyback)
 //   - 80% of wager enters the prize pool
 //   - Max payout per game: 10% of prize pool
-//   - Pool capped at 1M BKC — excess → Activity Pool
+//   - Pool capped at 1M BKC — excess is burned (deflationary)
 //   - Expired games forfeit wager to pool
 //
 // No admin. No pause. Fully immutable and permissionless.
@@ -57,8 +49,6 @@ contract FortunePool {
     uint256 public constant REVEAL_DELAY        = 5;             // blocks to wait
     uint256 public constant REVEAL_WINDOW       = 200;           // blocks to reveal
     uint256 public constant POOL_CAP            = 1_000_000e18;  // 1M BKC
-    uint256 public constant ACTIVITY_THRESHOLD  = 10_000e18;     // 10K BKC
-    uint256 public constant TOP_PLAYERS         = 10;            // top 10 per cycle
 
     uint256 private constant BPS = 10_000;
 
@@ -75,7 +65,7 @@ contract FortunePool {
     IBKCToken public immutable bkcToken;
 
     // ════════════════════════════════════════════════════════════════════════
-    // STATE — GAME
+    // STATE
     // ════════════════════════════════════════════════════════════════════════
 
     uint256 public gameCounter;
@@ -112,32 +102,6 @@ contract FortunePool {
     uint256 public totalBkcBurned;
 
     // ════════════════════════════════════════════════════════════════════════
-    // STATE — ACTIVITY POOL
-    // ════════════════════════════════════════════════════════════════════════
-
-    /// @notice BKC accumulated in the activity pool (from excess above cap)
-    uint256 public activityPool;
-
-    /// @notice Current cycle number (incremented after each distribution)
-    uint256 public currentCycle;
-
-    /// @notice Game count per player in current cycle
-    mapping(address => uint256) public cycleGameCount;
-
-    /// @notice All players who played in current cycle (for enumeration)
-    address[] internal _cyclePlayers;
-    mapping(address => bool) internal _cyclePlayerExists;
-
-    /// @notice Total distributions completed
-    uint256 public totalDistributions;
-
-    /// @notice Total BKC distributed via activity pool
-    uint256 public totalActivityDistributed;
-
-    /// @notice Total BKC burned from activity pool (unclaimed portions)
-    uint256 public totalActivityBurned;
-
-    // ════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ════════════════════════════════════════════════════════════════════════
 
@@ -158,15 +122,7 @@ contract FortunePool {
         uint256 indexed gameId, address indexed player, uint256 forfeitedAmount
     );
     event PrizePoolFunded(address indexed funder, uint256 amount);
-    event PoolExcessToActivity(uint256 amount, uint256 newActivityPool);
-    event ActivityDistributed(
-        uint256 indexed cycle,
-        uint256 totalAmount,
-        uint256 burnedAmount,
-        uint256 playerCount,
-        address[10] topPlayers,
-        uint256[10] gameCounts
-    );
+    event ExcessBurned(uint256 amount, uint256 totalBurned);
 
     // ════════════════════════════════════════════════════════════════════════
     // ERRORS
@@ -188,7 +144,6 @@ contract FortunePool {
     error BlockhashUnavailable();
     error InvalidTier();
     error WagerTooLarge();
-    error ActivityThresholdNotReached();
 
     // ════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -267,10 +222,7 @@ contract FortunePool {
         totalGamesPlayed++;
         totalBkcWagered += wagerAmount;
 
-        // Track player in current cycle
-        _trackCyclePlayer(msg.sender);
-
-        // Redirect excess to activity pool
+        // Burn excess above cap (deflationary)
         _checkExcess(newPool);
 
         emit GameCommitted(gameId, msg.sender, wagerAmount, tierMask, operator);
@@ -386,52 +338,6 @@ contract FortunePool {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // ACTIVITY POOL — DISTRIBUTE
-    // ════════════════════════════════════════════════════════════════════════
-
-    /// @notice Distribute activity pool to top 10 players. Permissionless.
-    ///         Called when activity pool reaches threshold (10K BKC).
-    ///         Top 10 by game count in current cycle split the pool equally.
-    ///         If fewer than 10 players, unclaimed portions are burned.
-    function distributeActivityPool() external {
-        if (activityPool < ACTIVITY_THRESHOLD) revert ActivityThresholdNotReached();
-
-        uint256 amount = activityPool;
-        activityPool = 0;
-
-        // Find top 10 players by game count
-        (address[10] memory topAddrs, uint256[10] memory topCounts, uint256 validCount) = _getTopPlayers();
-
-        uint256 sharePerPlayer = amount / TOP_PLAYERS;
-        uint256 distributed;
-
-        for (uint256 i; i < validCount;) {
-            bkcToken.transfer(topAddrs[i], sharePerPlayer);
-            distributed += sharePerPlayer;
-            unchecked { ++i; }
-        }
-
-        // Burn unclaimed portions (if < 10 players)
-        uint256 toBurn = amount - distributed;
-        if (toBurn > 0) {
-            bkcToken.burn(toBurn);
-            totalBkcBurned += toBurn;
-            totalActivityBurned += toBurn;
-        }
-
-        totalDistributions++;
-        totalActivityDistributed += distributed;
-
-        emit ActivityDistributed(
-            currentCycle, amount, toBurn, validCount,
-            topAddrs, topCounts
-        );
-
-        // Reset cycle
-        _resetCycle();
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
     // FUND PRIZE POOL
     // ════════════════════════════════════════════════════════════════════════
 
@@ -539,7 +445,6 @@ contract FortunePool {
 
     function getPoolStats() external view returns (
         uint256 _prizePool,
-        uint256 _activityPool,
         uint256 _totalGamesPlayed,
         uint256 _totalBkcWagered,
         uint256 _totalBkcWon,
@@ -548,59 +453,9 @@ contract FortunePool {
         uint256 _maxPayoutNow
     ) {
         return (
-            prizePool, activityPool, totalGamesPlayed, totalBkcWagered,
+            prizePool, totalGamesPlayed, totalBkcWagered,
             totalBkcWon, totalBkcForfeited, totalBkcBurned,
             prizePool * MAX_PAYOUT_BPS / BPS
-        );
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
-    // VIEWS: ACTIVITY POOL
-    // ════════════════════════════════════════════════════════════════════════
-
-    /// @notice Get activity pool state
-    function getActivityPoolInfo() external view returns (
-        uint256 poolBalance,
-        uint256 threshold,
-        uint256 cycle,
-        uint256 playerCount,
-        bool canDistribute
-    ) {
-        return (
-            activityPool,
-            ACTIVITY_THRESHOLD,
-            currentCycle,
-            _cyclePlayers.length,
-            activityPool >= ACTIVITY_THRESHOLD
-        );
-    }
-
-    /// @notice Get top 10 players in current cycle (view only)
-    function getTopPlayersView() external view returns (
-        address[10] memory topAddrs,
-        uint256[10] memory topCounts,
-        uint256 validCount
-    ) {
-        return _getTopPlayers();
-    }
-
-    /// @notice Get a player's game count in current cycle
-    function getPlayerCycleGames(address player) external view returns (uint256) {
-        return cycleGameCount[player];
-    }
-
-    /// @notice Get activity pool stats
-    function getActivityStats() external view returns (
-        uint256 _totalDistributions,
-        uint256 _totalActivityDistributed,
-        uint256 _totalActivityBurned,
-        uint256 _currentCycle
-    ) {
-        return (
-            totalDistributions,
-            totalActivityDistributed,
-            totalActivityBurned,
-            currentCycle
         );
     }
 
@@ -616,7 +471,7 @@ contract FortunePool {
     }
 
     function version() external pure returns (string memory) {
-        return "2.0.0";
+        return "2.1.0";
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -658,78 +513,14 @@ contract FortunePool {
         emit GameExpired(gameId, g.player, netWager);
     }
 
-    /// @dev Redirect excess BKC above cap to activity pool (instead of burning)
+    /// @dev Burn BKC excess above pool cap (deflationary pressure)
     function _checkExcess(uint256 currentPool) internal {
         if (currentPool > POOL_CAP) {
             uint256 excess = currentPool - POOL_CAP;
             prizePool = POOL_CAP;
-            activityPool += excess;
-            emit PoolExcessToActivity(excess, activityPool);
+            bkcToken.burn(excess);
+            totalBkcBurned += excess;
+            emit ExcessBurned(excess, totalBkcBurned);
         }
-    }
-
-    /// @dev Track a player's game count in the current cycle
-    function _trackCyclePlayer(address player) internal {
-        cycleGameCount[player]++;
-        if (!_cyclePlayerExists[player]) {
-            _cyclePlayerExists[player] = true;
-            _cyclePlayers.push(player);
-        }
-    }
-
-    /// @dev Find top 10 players by game count (insertion sort on small array)
-    function _getTopPlayers() internal view returns (
-        address[10] memory topAddrs,
-        uint256[10] memory topCounts,
-        uint256 validCount
-    ) {
-        uint256 playerLen = _cyclePlayers.length;
-
-        for (uint256 i; i < playerLen;) {
-            address player = _cyclePlayers[i];
-            uint256 count = cycleGameCount[player];
-
-            // Check if this player qualifies for top 10
-            if (validCount < TOP_PLAYERS || count > topCounts[TOP_PLAYERS - 1]) {
-                // Find insertion position (descending)
-                uint256 pos = validCount < TOP_PLAYERS ? validCount : TOP_PLAYERS - 1;
-                for (uint256 j; j < validCount && j < TOP_PLAYERS;) {
-                    if (count > topCounts[j]) {
-                        pos = j;
-                        break;
-                    }
-                    unchecked { ++j; }
-                }
-
-                // Shift down
-                if (pos < TOP_PLAYERS - 1) {
-                    uint256 end = validCount < TOP_PLAYERS - 1 ? validCount : TOP_PLAYERS - 1;
-                    for (uint256 j = end; j > pos;) {
-                        topAddrs[j] = topAddrs[j - 1];
-                        topCounts[j] = topCounts[j - 1];
-                        unchecked { --j; }
-                    }
-                }
-
-                topAddrs[pos] = player;
-                topCounts[pos] = count;
-                if (validCount < TOP_PLAYERS) validCount++;
-            }
-
-            unchecked { ++i; }
-        }
-    }
-
-    /// @dev Reset cycle data for next round
-    function _resetCycle() internal {
-        uint256 len = _cyclePlayers.length;
-        for (uint256 i; i < len;) {
-            address player = _cyclePlayers[i];
-            delete cycleGameCount[player];
-            delete _cyclePlayerExists[player];
-            unchecked { ++i; }
-        }
-        delete _cyclePlayers;
-        currentCycle++;
     }
 }

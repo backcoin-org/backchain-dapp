@@ -1933,8 +1933,10 @@ describe("Backchain V10 — Integration Tests", function () {
       expect(await f.ecosystem.owner()).to.equal(f.alice.address);
     });
 
-    it("fortune pool redirects excess above 1M cap to activity pool", async function () {
+    it("fortune pool burns excess above 1M cap", async function () {
       const f = await loadFixture(deployAllFixture);
+
+      const burnedBefore = await f.bkcToken.totalBurned();
 
       // Fund with more than 1M BKC
       const extraBkc = ethers.parseEther("1100000"); // 1.1M
@@ -1943,9 +1945,10 @@ describe("Backchain V10 — Integration Tests", function () {
 
       await f.fortunePool.connect(f.alice).fundPrizePool(extraBkc);
 
-      // V2: Prize pool capped at 1M, excess goes to activity pool (not burned)
+      // Prize pool capped at 1M, excess burned
       expect(await f.fortunePool.prizePool()).to.equal(ethers.parseEther("1000000"));
-      expect(await f.fortunePool.activityPool()).to.equal(ethers.parseEther("100000"));
+      const burnedAfter = await f.bkcToken.totalBurned();
+      expect(burnedAfter - burnedBefore).to.equal(ethers.parseEther("100000"));
     });
 
     it("operator earns from multiple modules", async function () {

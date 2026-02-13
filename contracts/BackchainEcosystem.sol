@@ -71,6 +71,19 @@ contract BackchainEcosystem is IBackchainEcosystem {
     uint16  public override referralBps;  // global referral share (e.g., 1000 = 10% of ETH fees)
 
     // ════════════════════════════════════════════════════════════════════════
+    // REFERRAL BKC BONUS (welcome gift for both sides)
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice BKC bonus per side on referral (default 0.1 BKC)
+    uint256 public referralBonusAmount = 0.1e18;
+
+    /// @notice BKC reserved for referral bonuses (funded by owner/anyone)
+    uint256 public referralBonusPool;
+
+    /// @notice Total bonuses paid out
+    uint256 public referralBonusesPaid;
+
+    // ════════════════════════════════════════════════════════════════════════
     // MODULE REGISTRY
     // ════════════════════════════════════════════════════════════════════════
 
@@ -158,6 +171,9 @@ contract BackchainEcosystem is IBackchainEcosystem {
     event ReferrerSet(address indexed user, address indexed referrer);
     event ReferralRelayerUpdated(address indexed oldRelayer, address indexed newRelayer);
     event ReferralBpsUpdated(uint16 newBps);
+    event ReferralBonusPaid(address indexed user, address indexed referrer, uint256 bonusPerSide);
+    event ReferralBonusFunded(address indexed funder, uint256 amount, uint256 newPool);
+    event ReferralBonusAmountUpdated(uint256 oldAmount, uint256 newAmount);
 
     // ── Module management ──
     event ModuleRegistered(bytes32 indexed moduleId, address indexed contractAddr);
@@ -189,6 +205,7 @@ contract BackchainEcosystem is IBackchainEcosystem {
     error NotOwner();
     error NotPendingOwner();
     error NotAuthorizedModule();
+    error ZeroAmount();
     error NotBuybackMiner();
     error ModuleNotActive();
     error InvalidSplit();
@@ -432,6 +449,7 @@ contract BackchainEcosystem is IBackchainEcosystem {
     ///         The referrer earns: (1) referralBps% of ALL ETH fees across the ecosystem,
     ///         and (2) 5% of the user's staking reward claims (in BKC via StakingPool).
     ///         Dual earning — ETH and BKC, forever.
+    ///         Both sides receive a BKC welcome bonus (if bonus pool has funds).
     function setReferrer(address _referrer) external override {
         if (_referrer == address(0)) revert InvalidAddress();
         if (_referrer == msg.sender) revert CannotReferSelf();
@@ -439,6 +457,8 @@ contract BackchainEcosystem is IBackchainEcosystem {
 
         referredBy[msg.sender] = _referrer;
         referralCount[_referrer]++;
+
+        _payReferralBonus(msg.sender, _referrer);
 
         emit ReferrerSet(msg.sender, _referrer);
     }
@@ -460,6 +480,7 @@ contract BackchainEcosystem is IBackchainEcosystem {
 
     /// @notice Relayer sets a referrer on behalf of a user (gasless onboarding).
     ///         Same validation as setReferrer() but msg.sender is the relayer, not the user.
+    ///         Both sides receive the BKC welcome bonus.
     function setReferrerFor(address _user, address _referrer) external {
         if (msg.sender != referralRelayer) revert NotReferralRelayer();
         if (_user == address(0) || _referrer == address(0)) revert InvalidAddress();
@@ -469,7 +490,46 @@ contract BackchainEcosystem is IBackchainEcosystem {
         referredBy[_user] = _referrer;
         referralCount[_referrer]++;
 
+        _payReferralBonus(_user, _referrer);
+
         emit ReferrerSet(_user, _referrer);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // REFERRAL BONUS MANAGEMENT
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Fund the referral bonus pool. Anyone can deposit BKC.
+    ///         Must have approved this contract for the amount.
+    function fundReferralBonus(uint256 amount) external {
+        if (amount == 0) revert ZeroAmount();
+        bkcToken.transferFrom(msg.sender, address(this), amount);
+        referralBonusPool += amount;
+        emit ReferralBonusFunded(msg.sender, amount, referralBonusPool);
+    }
+
+    /// @notice Owner adjusts the bonus amount per side.
+    ///         Set to 0 to disable BKC bonuses (referral still works).
+    function setReferralBonusAmount(uint256 _amount) external onlyOwner {
+        emit ReferralBonusAmountUpdated(referralBonusAmount, _amount);
+        referralBonusAmount = _amount;
+    }
+
+    /// @dev Pay BKC bonus to both sides. Graceful: if pool is empty, no bonus.
+    function _payReferralBonus(address user, address referrer) internal {
+        uint256 bonus = referralBonusAmount;
+        if (bonus == 0) return;
+
+        uint256 totalNeeded = bonus * 2; // one for each side
+        if (referralBonusPool < totalNeeded) return; // not enough funds, skip silently
+
+        referralBonusPool -= totalNeeded;
+        referralBonusesPaid += totalNeeded;
+
+        bkcToken.transfer(user, bonus);
+        bkcToken.transfer(referrer, bonus);
+
+        emit ReferralBonusPaid(user, referrer, bonus);
     }
 
     // ════════════════════════════════════════════════════════════════════════
