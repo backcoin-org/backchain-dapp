@@ -27,7 +27,7 @@ import {
     calculateClaimDetails,
     API_ENDPOINTS
 } from '../modules/data.js';
-import { StakingTx } from '../modules/transactions/index.js';
+import { StakingTx, BuybackTx } from '../modules/transactions/index.js';
 import {
     formatBigNumber, formatPStake, renderLoading,
     renderNoData, renderError
@@ -760,6 +760,64 @@ function injectStyles() {
             .dash-referral-stats { justify-content: center; }
         }
 
+        /* ── Buyback Banner ── */
+        .dash-buyback-section {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 18px 22px;
+            background: linear-gradient(135deg, rgba(249,115,22,0.06), rgba(234,88,12,0.03));
+            border: 1px solid rgba(249,115,22,0.15);
+            border-radius: var(--dash-radius);
+            overflow: hidden;
+            animation: dash-scaleIn 0.5s ease-out 0.12s both;
+            transition: opacity var(--dash-tr);
+        }
+        .dash-buyback-section::before {
+            content: '';
+            position: absolute;
+            top: -60%; right: -10%;
+            width: 250px; height: 250px;
+            background: radial-gradient(circle, rgba(249,115,22,0.05) 0%, transparent 70%);
+            pointer-events: none;
+            animation: dash-glow 5s ease-in-out infinite 0.5s;
+        }
+        .dash-buyback-icon {
+            width: 48px; height: 48px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, rgba(249,115,22,0.15), rgba(234,88,12,0.1));
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; color: #f97316;
+            flex-shrink: 0;
+            animation: dash-float 4s ease-in-out infinite 0.3s;
+            position: relative; z-index: 1;
+        }
+        .dash-buyback-info { flex: 1; min-width: 0; position: relative; z-index: 1; }
+        .dash-buyback-info h3 { font-size: 14px; font-weight: 800; color: var(--dash-text); margin: 0 0 2px; }
+        .dash-buyback-info p { font-size: 11px; color: var(--dash-text-2); margin: 0; }
+        .dash-buyback-amounts { display: flex; gap: 10px; margin-top: 8px; }
+        .dash-buyback-badge {
+            font-size: 11px; font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 20px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--dash-border);
+            display: inline-flex; align-items: center; gap: 4px;
+        }
+        .dash-buyback-actions { position: relative; z-index: 1; flex-shrink: 0; }
+        .dash-btn-orange {
+            background: linear-gradient(135deg, #f97316, #ea580c);
+            color: #fff;
+            box-shadow: 0 4px 20px rgba(249,115,22,0.25);
+        }
+        .dash-btn-orange:hover { box-shadow: 0 4px 28px rgba(249,115,22,0.4); transform: translateY(-1px); }
+        @media (max-width: 640px) {
+            .dash-buyback-section { flex-direction: column; text-align: center; padding: 16px; }
+            .dash-buyback-actions { width: 100%; justify-content: center; }
+            .dash-buyback-amounts { justify-content: center; }
+        }
+
         /* ── Quick Actions Grid ── */
         .dash-actions-grid {
             display: grid;
@@ -1124,6 +1182,32 @@ function renderDashboardLayout() {
                 </div>
             </div>
 
+            <!-- BUYBACK BANNER — Only visible when pending ETH > 0 -->
+            <div id="dash-buyback-widget" class="dash-buyback-section" style="margin-bottom: 14px; display: none;">
+                <div class="dash-buyback-icon">
+                    <i class="fa-solid fa-hammer"></i>
+                </div>
+                <div class="dash-buyback-info">
+                    <h3 id="dash-buyback-title">Buyback Ready</h3>
+                    <p id="dash-buyback-desc">Execute buyback to earn 5% of pending ETH as staker rewards</p>
+                    <div class="dash-buyback-amounts">
+                        <span class="dash-buyback-badge" style="color:#f97316">
+                            <i class="fa-brands fa-ethereum" style="font-size:10px"></i>
+                            <span id="dash-buyback-pending">0</span> ETH pending
+                        </span>
+                        <span class="dash-buyback-badge" style="color:#4ade80">
+                            <i class="fa-solid fa-gift" style="font-size:10px"></i>
+                            Earn <span id="dash-buyback-reward">0</span> ETH
+                        </span>
+                    </div>
+                </div>
+                <div class="dash-buyback-actions">
+                    <button id="dash-buyback-btn" class="dash-btn-primary dash-btn-orange">
+                        <i class="fa-solid fa-hammer"></i> Execute
+                    </button>
+                </div>
+            </div>
+
             <!-- TUTOR SECTION -->
             <div id="dashboard-referral-widget" class="dash-referral-section" style="margin-bottom: 14px;">
                 <div class="dash-referral-icon">
@@ -1447,8 +1531,64 @@ async function updateGlobalMetrics() {
         if (notaryText) notaryText.innerText = notaryCount > 0 ? `${notaryCount} docs certified` : 'Certify documents';
 
         DashboardState.metricsCache = { supply: supplyNum, burned: burnedNum, fees: ethFeesNum, timestamp: Date.now() };
+
+        // Load buyback data for banner
+        loadDashBuybackData();
     } catch (e) {
         console.error("Metrics Error", e);
+    }
+}
+
+async function loadDashBuybackData() {
+    try {
+        const preview = await BuybackTx.getPreviewBuyback();
+        const widget = document.getElementById('dash-buyback-widget');
+        if (!widget) return;
+
+        const pendingEth = preview.ethAvailable || 0n;
+        const callerReward = preview.estimatedCallerReward || 0n;
+        const isReady = preview.isReady;
+
+        if (!isReady || pendingEth === 0n) {
+            widget.style.display = 'none';
+            return;
+        }
+
+        widget.style.display = '';
+        const pendingStr = Number(ethers.formatEther(pendingEth)).toFixed(6);
+        const rewardStr = Number(ethers.formatEther(callerReward)).toFixed(6);
+
+        const pendingEl = document.getElementById('dash-buyback-pending');
+        const rewardEl = document.getElementById('dash-buyback-reward');
+        const titleEl = document.getElementById('dash-buyback-title');
+        if (pendingEl) pendingEl.textContent = pendingStr;
+        if (rewardEl) rewardEl.textContent = rewardStr;
+        if (titleEl) titleEl.textContent = `Buyback Ready — ${pendingStr} ETH`;
+    } catch (e) {
+        console.error('Dashboard buyback load error:', e);
+    }
+}
+
+async function handleDashBuyback(btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Executing...';
+    try {
+        await BuybackTx.executeBuyback({
+            button: btn,
+            onSuccess: async () => {
+                showToast('Buyback executed! You earned 5% ETH reward', 'success');
+                loadDashBuybackData();
+            },
+            onError: (error) => {
+                if (!error.cancelled) showToast('Buyback failed: ' + (error.reason || error.message || 'Unknown error'), 'error');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-hammer"></i> Execute';
+            }
+        });
+    } catch (e) {
+        showToast('Buyback failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-hammer"></i> Execute';
     }
 }
 
@@ -1923,6 +2063,12 @@ function attachDashboardListeners() {
 
         if (target.closest('#faucet-action-btn')) { const btn = target.closest('#faucet-action-btn'); if (!btn.disabled) await requestSmartFaucet(btn); }
         if (target.closest('#emergency-faucet-btn')) await requestSmartFaucet(target.closest('#emergency-faucet-btn'));
+
+        // Buyback
+        if (target.closest('#dash-buyback-btn')) {
+            const btn = target.closest('#dash-buyback-btn');
+            if (!btn.disabled) await handleDashBuyback(btn);
+        }
 
         // Referral
         if (target.closest('#referral-copy-btn')) copyTutorLink();

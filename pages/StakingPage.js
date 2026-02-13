@@ -29,7 +29,7 @@ import {
     safeContractCall
 } from '../modules/data.js';
 import { showToast } from '../ui-feedback.js';
-import { StakingTx } from '../modules/transactions/index.js';
+import { StakingTx, BuybackTx } from '../modules/transactions/index.js';
 
 // ============================================================================
 // CONSTANTS
@@ -70,6 +70,11 @@ let hasTutor = false;
 // Rewards split
 let stakingRewardsAmount = 0n;
 let minerRewardsAmount = 0n;
+
+// Buyback State
+let buybackPreview = null;
+let buybackStats = null;
+let buybackLastInfo = null;
 
 // ============================================================================
 // HELPERS
@@ -432,6 +437,77 @@ function injectStyles() {
         }
         .stk-connect-btn:hover { filter: brightness(1.1); }
 
+        /* ── Buyback Card ── */
+        .stk-buyback {
+            position: relative;
+            padding: 16px 18px;
+            background: linear-gradient(135deg, rgba(249,115,22,0.06), rgba(234,88,12,0.03));
+            border: 1px solid rgba(249,115,22,0.18);
+            border-radius: var(--stk-radius);
+            margin-bottom: 14px;
+            overflow: hidden;
+            animation: stk-fadeIn 0.5s ease-out both;
+        }
+        .stk-buyback::before {
+            content: '';
+            position: absolute;
+            top: -50%; right: -10%;
+            width: 200px; height: 200px;
+            background: radial-gradient(circle, rgba(249,115,22,0.06) 0%, transparent 70%);
+            pointer-events: none;
+            animation: stk-glow 5s ease-in-out infinite;
+        }
+        .stk-buyback-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 12px; position: relative; z-index: 1;
+        }
+        .stk-buyback-title {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 13px; font-weight: 700; color: var(--stk-text);
+        }
+        .stk-buyback-title i { color: #f97316; font-size: 14px; }
+        .stk-buyback-badge {
+            font-size: 10px; font-weight: 700; padding: 3px 10px;
+            border-radius: 20px; background: rgba(249,115,22,0.12);
+            color: #f97316; border: 1px solid rgba(249,115,22,0.2);
+        }
+        .stk-buyback-grid {
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 8px; margin-bottom: 12px; position: relative; z-index: 1;
+        }
+        .stk-buyback-metric {
+            padding: 8px 10px; background: var(--stk-surface);
+            border: 1px solid var(--stk-border); border-radius: var(--stk-radius-sm);
+        }
+        .stk-buyback-metric-label {
+            font-size: 9px; color: var(--stk-text-3); text-transform: uppercase;
+            letter-spacing: 0.08em; font-weight: 700; margin-bottom: 2px;
+        }
+        .stk-buyback-metric-value {
+            font-size: 13px; font-weight: 700; color: var(--stk-text);
+            font-variant-numeric: tabular-nums;
+        }
+        .stk-buyback-footer {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 12px; position: relative; z-index: 1;
+        }
+        .stk-buyback-info {
+            font-size: 10px; color: var(--stk-text-3); flex: 1;
+        }
+        .stk-buyback-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 10px 20px; font-size: 12px; font-weight: 700;
+            color: #000; background: linear-gradient(135deg, #f97316, #ea580c);
+            border: none; border-radius: var(--stk-radius-sm); cursor: pointer;
+            transition: all var(--stk-tr); white-space: nowrap;
+        }
+        .stk-buyback-btn:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 6px 24px rgba(249,115,22,0.3); }
+        .stk-buyback-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: none; }
+        .stk-buyback-empty {
+            text-align: center; padding: 8px 0; font-size: 11px; color: var(--stk-text-3);
+            position: relative; z-index: 1;
+        }
+
         /* ── Responsive ── */
         @media (max-width: 640px) {
             .stk-shell { padding: 0 10px 30px; }
@@ -439,6 +515,9 @@ function injectStyles() {
             .stk-hero-inner { flex-direction: column; gap: 16px; }
             .stk-hero-right { border-top: 1px solid var(--stk-border); padding-top: 16px; }
             .stk-stats { grid-template-columns: repeat(2, 1fr); }
+            .stk-buyback-grid { grid-template-columns: 1fr 1fr; }
+            .stk-buyback-footer { flex-direction: column; text-align: center; }
+            .stk-buyback-btn { width: 100%; justify-content: center; }
             .stk-reward-value { font-size: 28px; }
             .stk-duration-grid { grid-template-columns: repeat(2, 1fr); }
             .stk-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
@@ -515,6 +594,42 @@ function render() {
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- BUYBACK CARD -->
+            <div id="stk-buyback-card" class="stk-buyback" style="display:none">
+                <div class="stk-buyback-header">
+                    <div class="stk-buyback-title">
+                        <i class="fa-solid fa-hammer"></i> Buyback Available
+                    </div>
+                    <span id="stk-buyback-badge" class="stk-buyback-badge">5% Reward</span>
+                </div>
+                <div class="stk-buyback-grid">
+                    <div class="stk-buyback-metric">
+                        <div class="stk-buyback-metric-label">Pending ETH</div>
+                        <div id="stk-buyback-pending" class="stk-buyback-metric-value" style="color:#f97316">--</div>
+                    </div>
+                    <div class="stk-buyback-metric">
+                        <div class="stk-buyback-metric-label">Your Reward (5%)</div>
+                        <div id="stk-buyback-reward" class="stk-buyback-metric-value" style="color:var(--stk-green)">--</div>
+                    </div>
+                    <div class="stk-buyback-metric">
+                        <div class="stk-buyback-metric-label">BKC to Stakers</div>
+                        <div id="stk-buyback-stakers" class="stk-buyback-metric-value" style="color:var(--stk-cyan)">--</div>
+                    </div>
+                    <div class="stk-buyback-metric">
+                        <div class="stk-buyback-metric-label">Mining Rate</div>
+                        <div id="stk-buyback-rate" class="stk-buyback-metric-value" style="color:var(--stk-purple)">--</div>
+                    </div>
+                </div>
+                <div class="stk-buyback-footer">
+                    <div class="stk-buyback-info" id="stk-buyback-info">
+                        Execute buyback to earn 5% of pending ETH. Remaining converts to BKC staker rewards.
+                    </div>
+                    <button id="stk-buyback-btn" class="stk-buyback-btn" disabled>
+                        <i class="fa-solid fa-hammer"></i> Execute Buyback
+                    </button>
                 </div>
             </div>
 
@@ -669,6 +784,7 @@ async function loadData(force = false) {
         renderDelegations();
         loadStakingHistory();
         updatePreview();
+        loadBuybackData();
     } catch (e) {
         console.error('Staking data load error:', e);
     } finally {
@@ -740,6 +856,68 @@ async function loadClaimPreview() {
         const recycleAmount = (total * BigInt(userRecycleRate)) / 100n;
         claimPreview = { totalRewards: total, recycleAmount, burnAmount: 0n, tutorCut: 0n, userReceives: total - recycleAmount, recycleRateBps: BigInt(userRecycleRate * 100), nftBoost: BigInt(userNftBoost) };
     }
+}
+
+async function loadBuybackData() {
+    try {
+        const [preview, stats, lastInfo] = await Promise.all([
+            BuybackTx.getPreviewBuyback().catch(() => null),
+            BuybackTx.getBuybackStats().catch(() => null),
+            BuybackTx.getLastBuyback().catch(() => null)
+        ]);
+        buybackPreview = preview;
+        buybackStats = stats;
+        buybackLastInfo = lastInfo;
+        updateBuybackCard();
+    } catch (e) {
+        console.error('Buyback data load error:', e);
+    }
+}
+
+function updateBuybackCard() {
+    const card = document.getElementById('stk-buyback-card');
+    if (!card) return;
+
+    const pendingEl = document.getElementById('stk-buyback-pending');
+    const rewardEl = document.getElementById('stk-buyback-reward');
+    const stakersEl = document.getElementById('stk-buyback-stakers');
+    const rateEl = document.getElementById('stk-buyback-rate');
+    const btn = document.getElementById('stk-buyback-btn');
+    const infoEl = document.getElementById('stk-buyback-info');
+
+    if (!buybackPreview) {
+        card.style.display = 'none';
+        return;
+    }
+
+    card.style.display = '';
+
+    const pendingEth = buybackPreview.ethAvailable || 0n;
+    const callerReward = buybackPreview.estimatedCallerReward || 0n;
+    const toStakers = buybackPreview.estimatedToStakers || 0n;
+    const rateBps = Number(buybackPreview.currentMiningRateBps || 0n);
+    const isReady = buybackPreview.isReady;
+
+    pendingEl.textContent = `${Number(ethers.formatEther(pendingEth)).toFixed(6)} ETH`;
+    rewardEl.textContent = `+${Number(ethers.formatEther(callerReward)).toFixed(6)} ETH`;
+    stakersEl.textContent = `${formatBigNumber(toStakers).toLocaleString('en-US', { maximumFractionDigits: 1 })} BKC`;
+    rateEl.textContent = `${(rateBps / 100).toFixed(1)}%`;
+
+    btn.disabled = !isReady;
+
+    // Info line with last buyback
+    let infoText = 'Execute buyback to earn 5% of pending ETH.';
+    if (buybackLastInfo && Number(buybackLastInfo.timeSinceLast) > 0) {
+        const secsAgo = Number(buybackLastInfo.timeSinceLast);
+        const timeAgo = secsAgo < 3600 ? `${Math.floor(secsAgo / 60)}m ago`
+            : secsAgo < 86400 ? `${Math.floor(secsAgo / 3600)}h ago`
+            : `${Math.floor(secsAgo / 86400)}d ago`;
+        infoText += ` Last: ${timeAgo}`;
+    }
+    if (buybackStats && Number(buybackStats.totalBuybacks) > 0) {
+        infoText += ` | Total: ${Number(buybackStats.totalBuybacks)} buybacks`;
+    }
+    infoEl.textContent = infoText;
 }
 
 // ============================================================================
@@ -1290,6 +1468,30 @@ async function handleClaim() {
     }
 }
 
+async function handleBuyback() {
+    if (isProcessing) return;
+    const btn = document.getElementById('stk-buyback-btn');
+    isProcessing = true;
+
+    try {
+        await BuybackTx.executeBuyback({
+            button: btn,
+            onSuccess: async (receipt) => {
+                const reward = buybackPreview?.estimatedCallerReward || 0n;
+                const rewardStr = Number(ethers.formatEther(reward)).toFixed(6);
+                showToast(`Buyback executed! You earned ${rewardStr} ETH`, 'success');
+                isLoading = false; lastFetch = 0;
+                await loadData(true);
+            },
+            onError: (error) => { if (!error.cancelled) showToast('Buyback failed: ' + (error.reason || error.message || 'Unknown error'), 'error'); }
+        });
+    } catch (e) {
+        showToast('Buyback failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
+    } finally {
+        isProcessing = false;
+    }
+}
+
 // ============================================================================
 // EVENT LISTENERS
 // ============================================================================
@@ -1339,6 +1541,9 @@ function setupListeners() {
 
     // Claim button
     document.getElementById('stk-claim-btn')?.addEventListener('click', handleClaim);
+
+    // Buyback button
+    document.getElementById('stk-buyback-btn')?.addEventListener('click', handleBuyback);
 
     // Navigation via event delegation
     container.addEventListener('click', (e) => {

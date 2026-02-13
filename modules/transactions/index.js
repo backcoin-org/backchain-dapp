@@ -140,6 +140,19 @@ export {
     isFusionApproved
 } from './fusion-tx.js';
 
+// Buyback Miner (permissionless buyback + 5% caller reward)
+export {
+    BuybackTx,
+    executeBuyback,
+    executeBuybackWithSlippage,
+    getPreviewBuyback,
+    getPendingETH,
+    getMiningRate,
+    getBuybackStats,
+    getLastBuyback,
+    getSupplyInfo
+} from './buyback-tx.js';
+
 // Backchat / Agora V2 (tiered badges/boosts, reports, tips)
 export {
     BackchatTx,
@@ -189,6 +202,7 @@ export const Transactions = {
     Notary: (async () => (await import('./notary-tx.js')).NotaryTx)(),
     Faucet: (async () => (await import('./faucet-tx.js')).FaucetTx)(),
     Fusion: (async () => (await import('./fusion-tx.js')).FusionTx)(),
+    Buyback: (async () => (await import('./buyback-tx.js')).BuybackTx)(),
     Backchat: (async () => (await import('./backchat-tx.js')).BackchatTx)()
 };
 
