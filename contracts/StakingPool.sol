@@ -13,16 +13,17 @@ import "./IBackchain.sol";
 // Reward claim flow:
 //   1. Calculate total pending (active delegations + savedRewards)
 //   2. Apply burn rate (reduced by NFT boost tier)
-//   3. 5% of net rewards → referrer (or treasury if no referrer)
-//   4. 95% of net rewards → user
-//   5. Pay ETH fee to ecosystem
+//   3. If referrer: redirect 10% of total from burn → 5% referrer + 5% staker bonus
+//   4. Burn remaining burn portion
+//   5. User receives: (total - burn) + referral bonus
+//   6. Pay ETH fee to ecosystem
 //
 // NFT Burn Reduction Tiers:
-//   No NFT  → 50% burn (user keeps 50%)
-//   Bronze  → 40% burn (user keeps 60%)
-//   Silver  → 25% burn (user keeps 75%)
-//   Gold    → 10% burn (user keeps 90%)
-//   Diamond →  0% burn (user keeps 100%)
+//   No NFT  → 20% burn (user keeps 80%, or 85% with referrer)
+//   Bronze  → 18% burn (user keeps 82%, or 87% with referrer)
+//   Silver  → 15% burn (user keeps 85%, or 90% with referrer)
+//   Gold    → 12% burn (user keeps 88%, or 93% with referrer)
+//   Diamond → 10% burn (user keeps 90%, or 95% with referrer)
 //
 // Force unstake:
 //   Allows unstaking before lock expires with a BKC penalty.
@@ -44,8 +45,9 @@ contract StakingPool is IStakingPool {
     uint256 private constant BPS       = 10_000;
     uint256 private constant PRECISION = 1e18;
 
-    // Referrer/treasury cut on claims
-    uint256 public constant REFERRER_CUT_BPS = 500; // 5%
+    // Referral redirect: 10% of total rewards redirected from burn
+    // → 5% to referrer + 5% bonus to staker (being referred = advantage)
+    uint256 public constant REFERRAL_REDIRECT_BPS = 1000; // 10%
 
     // Lock duration limits
     uint256 public constant MIN_LOCK_DAYS = 1;
@@ -64,11 +66,11 @@ contract StakingPool is IStakingPool {
     uint256 public constant BOOST_DIAMOND = 5000;
 
     // ── Burn Rates per Tier (in basis points) ──
-    uint256 public constant BURN_RATE_NO_NFT  = 5000; // 50%
-    uint256 public constant BURN_RATE_BRONZE  = 4000; // 40%
-    uint256 public constant BURN_RATE_SILVER  = 2500; // 25%
-    uint256 public constant BURN_RATE_GOLD    = 1000; // 10%
-    uint256 public constant BURN_RATE_DIAMOND = 0;    //  0%
+    uint256 public constant BURN_RATE_NO_NFT  = 2000; // 20%
+    uint256 public constant BURN_RATE_BRONZE  = 1800; // 18%
+    uint256 public constant BURN_RATE_SILVER  = 1500; // 15%
+    uint256 public constant BURN_RATE_GOLD    = 1200; // 12%
+    uint256 public constant BURN_RATE_DIAMOND = 1000; // 10%
 
     // ════════════════════════════════════════════════════════════════════════
     // IMMUTABLE ADDRESSES
@@ -490,6 +492,13 @@ contract StakingPool is IStakingPool {
     // ════════════════════════════════════════════════════════════════════════
 
     /// @dev Core claim logic shared by claimRewards() and claimRewards(operator)
+    ///
+    ///      New referral-from-burn model:
+    ///      - Burn rate reduced by NFT tier (20%/18%/15%/12%/10%)
+    ///      - If user has referrer: 10% of total redirected FROM burn
+    ///        → 5% to referrer + 5% bonus to staker
+    ///      - Being referred = advantage (less burn, more rewards)
+    ///      - No referrer = full burn, no penalty
     function _executeClaim(address user, address operator) internal {
         // 1. Calculate total pending
         uint256 totalReward = _calculateAllPending(user) + savedRewards[user];
@@ -503,35 +512,45 @@ contract StakingPool is IStakingPool {
         uint256 nftBoost = _getUserBestBoost(user);
         uint256 burnRateBps = _getBurnRateForBoost(nftBoost);
         uint256 burnAmount = totalReward * burnRateBps / BPS;
-        uint256 afterBurn = totalReward - burnAmount;
 
-        // 4. Burn
+        // 4. Referral redirect from burn (if user has referrer)
+        address referrer = ecosystem.referredBy(user);
+        uint256 referrerAmount;
+        uint256 stakerBonus;
+
+        if (referrer != address(0)) {
+            // Redirect 10% of total rewards from the burn portion
+            uint256 redirect = totalReward * REFERRAL_REDIRECT_BPS / BPS;
+            // Cap redirect at burn amount (safety)
+            if (redirect > burnAmount) redirect = burnAmount;
+            referrerAmount = redirect / 2;           // 5% to referrer
+            stakerBonus = redirect - referrerAmount;  // 5% bonus to staker
+            burnAmount -= redirect;                   // reduce burn by redirect
+        }
+
+        // 5. Burn
         if (burnAmount > 0) {
             bkcToken.burn(burnAmount);
             totalBurnedOnClaim += burnAmount;
             emit TokensBurnedOnClaim(user, burnAmount, burnRateBps, totalBurnedOnClaim);
         }
 
-        // 5. Referrer/treasury cut (5% of after-burn amount)
-        uint256 cut = afterBurn * REFERRER_CUT_BPS / BPS;
-        uint256 userReward = afterBurn - cut;
+        // 6. User receives: total - originalBurn + stakerBonus
+        //    = total - (burnAmount + referrerAmount + stakerBonus) + stakerBonus
+        //    = total - burnAmount - referrerAmount
+        uint256 userReward = totalReward - burnAmount - referrerAmount;
 
-        address referrer = ecosystem.referredBy(user);
-        address cutRecipient = referrer != address(0)
-            ? referrer
-            : ecosystem.treasury();
-
-        // 6. Transfer rewards
+        // 7. Transfer rewards
         if (userReward > 0) {
             bkcToken.transfer(user, userReward);
         }
-        if (cut > 0) {
-            bkcToken.transfer(cutRecipient, cut);
+        if (referrerAmount > 0) {
+            bkcToken.transfer(referrer, referrerAmount);
         }
 
         emit RewardsClaimed(
             user, totalReward, burnAmount, userReward,
-            cut, cutRecipient, nftBoost, operator
+            referrerAmount, referrer, nftBoost, operator
         );
     }
 
@@ -578,9 +597,16 @@ contract StakingPool is IStakingPool {
         burnRateBps = _getBurnRateForBoost(nftBoost);
         burnAmount = totalRewards * burnRateBps / BPS;
 
-        uint256 afterBurn = totalRewards - burnAmount;
-        referrerCut = afterBurn * REFERRER_CUT_BPS / BPS;
-        userReceives = afterBurn - referrerCut;
+        // Referral redirect from burn
+        address referrer = ecosystem.referredBy(user);
+        if (referrer != address(0)) {
+            uint256 redirect = totalRewards * REFERRAL_REDIRECT_BPS / BPS;
+            if (redirect > burnAmount) redirect = burnAmount;
+            referrerCut = redirect / 2;
+            burnAmount -= redirect;
+        }
+
+        userReceives = totalRewards - burnAmount - referrerCut;
     }
 
     // ════════════════════════════════════════════════════════════════════════

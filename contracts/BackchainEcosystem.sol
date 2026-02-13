@@ -126,9 +126,10 @@ contract BackchainEcosystem is IBackchainEcosystem {
     // BKC FEE DISTRIBUTION PARAMS (Tier 2 modules)
     // ════════════════════════════════════════════════════════════════════════
 
-    uint16 public bkcBurnBps     = 500;   // 5% burn
-    uint16 public bkcStakerBps   = 7500;  // 75% to stakers
-    uint16 public bkcTreasuryBps = 2000;  // 20% to treasury
+    uint16 public bkcBurnBps     = 0;      // 0% burn (deflation via StakingPool claims)
+    uint16 public bkcOperatorBps = 1500;   // 15% to frontend operator
+    uint16 public bkcStakerBps   = 7000;   // 70% to stakers
+    uint16 public bkcTreasuryBps = 1500;   // 15% to treasury
     // must sum to BPS (10000)
 
     // ════════════════════════════════════════════════════════════════════════
@@ -164,7 +165,7 @@ contract BackchainEcosystem is IBackchainEcosystem {
         uint256 toTreasury,
         uint256 toBuyback
     );
-    event BkcFeeDistributed(uint256 burned, uint256 toStakers, uint256 toTreasury);
+    event BkcFeeDistributed(uint256 burned, uint256 toOperator, uint256 toStakers, uint256 toTreasury);
 
     // ── Withdrawals ──
     event EthWithdrawn(address indexed recipient, uint256 amount);
@@ -193,7 +194,7 @@ contract BackchainEcosystem is IBackchainEcosystem {
     event TreasuryUpdated(address indexed oldAddr, address indexed newAddr);
     event BuybackMinerUpdated(address indexed oldAddr, address indexed newAddr);
     event StakingPoolUpdated(address indexed oldAddr, address indexed newAddr);
-    event BkcDistributionUpdated(uint16 burnBps, uint16 stakerBps, uint16 treasuryBps);
+    event BkcDistributionUpdated(uint16 burnBps, uint16 operatorBps, uint16 stakerBps, uint16 treasuryBps);
 
     // ── Ownership ──
     event OwnershipTransferStarted(address indexed currentOwner, address indexed pendingOwner);
@@ -329,7 +330,7 @@ contract BackchainEcosystem is IBackchainEcosystem {
         // The module must have already called bkcToken.approve(ecosystem, bkcFee).
         if (bkcFee > 0) {
             bkcToken.transferFrom(msg.sender, address(this), bkcFee);
-            _distributeBkc(bkcFee);
+            _distributeBkc(bkcFee, operator);
             totalBkcCollected += bkcFee;
         }
 
@@ -414,15 +415,26 @@ contract BackchainEcosystem is IBackchainEcosystem {
     // INTERNAL: BKC DISTRIBUTION (Tier 2)
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @dev Split BKC fee: burn portion → staking rewards → treasury.
-    ///      If staking pool is not yet set, staker share goes to treasury.
+    /// @dev Split BKC fee: burn → operator → staking rewards → treasury.
+    ///      If operator is address(0), operator share → treasury.
+    ///      If staking pool is not yet set, staker share → treasury.
     ///      Treasury absorbs rounding dust.
-    function _distributeBkc(uint256 amount) internal {
+    function _distributeBkc(uint256 amount, address operator) internal {
         // Burn
         uint256 burnAmt = amount * bkcBurnBps / BPS;
         if (burnAmt > 0) {
             bkcToken.burn(burnAmt);
             totalBkcBurned += burnAmt;
+        }
+
+        // Operator (frontend builder)
+        uint256 operatorAmt = amount * bkcOperatorBps / BPS;
+        if (operatorAmt > 0) {
+            if (operator != address(0)) {
+                bkcToken.transfer(operator, operatorAmt);
+            } else {
+                bkcToken.transfer(treasury, operatorAmt);
+            }
         }
 
         // Staking rewards
@@ -432,18 +444,17 @@ contract BackchainEcosystem is IBackchainEcosystem {
                 bkcToken.transfer(stakingPool, stakerAmt);
                 IStakingPool(stakingPool).notifyReward(stakerAmt);
             } else {
-                // No staking pool set → treasury gets staker share
                 bkcToken.transfer(treasury, stakerAmt);
             }
         }
 
         // Treasury (remainder absorbs rounding dust)
-        uint256 treasuryAmt = amount - burnAmt - stakerAmt;
+        uint256 treasuryAmt = amount - burnAmt - operatorAmt - stakerAmt;
         if (treasuryAmt > 0) {
             bkcToken.transfer(treasury, treasuryAmt);
         }
 
-        emit BkcFeeDistributed(burnAmt, stakerAmt, treasuryAmt);
+        emit BkcFeeDistributed(burnAmt, operatorAmt, stakerAmt, treasuryAmt);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -731,14 +742,16 @@ contract BackchainEcosystem is IBackchainEcosystem {
     /// @notice Update BKC fee split (Tier 2 modules). Must sum to 10000.
     function setBkcDistribution(
         uint16 _burnBps,
+        uint16 _operatorBps,
         uint16 _stakerBps,
         uint16 _treasuryBps
     ) external onlyOwner {
-        if (uint256(_burnBps) + _stakerBps + _treasuryBps != BPS) revert InvalidBkcSplit();
+        if (uint256(_burnBps) + _operatorBps + _stakerBps + _treasuryBps != BPS) revert InvalidBkcSplit();
         bkcBurnBps = _burnBps;
+        bkcOperatorBps = _operatorBps;
         bkcStakerBps = _stakerBps;
         bkcTreasuryBps = _treasuryBps;
-        emit BkcDistributionUpdated(_burnBps, _stakerBps, _treasuryBps);
+        emit BkcDistributionUpdated(_burnBps, _operatorBps, _stakerBps, _treasuryBps);
     }
 
     // ════════════════════════════════════════════════════════════════════════

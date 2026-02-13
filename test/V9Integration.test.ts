@@ -923,10 +923,9 @@ describe("Backchain V10 — Integration Tests", function () {
       await f.stakingPool.connect(buybackSigner).notifyReward(rewardAmt);
       await ethers.provider.send("hardhat_stopImpersonatingAccount", [f.buybackAddr]);
 
-      // Preview claim with Diamond boost (0% burn)
+      // Preview claim with Diamond boost (10% burn — lowest tier)
       const preview = await f.stakingPool.previewClaim(f.alice.address);
-      expect(preview.burnRateBps).to.equal(0); // Diamond = 0% burn
-      expect(preview.burnAmount).to.equal(0);
+      expect(preview.burnRateBps).to.equal(1000); // Diamond = 10% burn
     });
 
     it("referrer receives cut on claim", async function () {
@@ -1860,9 +1859,9 @@ describe("Backchain V10 — Integration Tests", function () {
       await f.stakingPool.connect(buybackSigner).notifyReward(rewardAmt);
       await ethers.provider.send("hardhat_stopImpersonatingAccount", [f.buybackAddr]);
 
-      // 4. Preview claim — Gold gives 10% burn (vs 50% without NFT)
+      // 4. Preview claim — Gold gives 12% burn (vs 20% without NFT)
       const preview = await f.stakingPool.previewClaim(f.alice.address);
-      expect(preview.burnRateBps).to.equal(1000); // 10% burn
+      expect(preview.burnRateBps).to.equal(1200); // 12% burn
       expect(preview.nftBoost).to.equal(4000); // Gold
 
       // 5. Claim
@@ -1870,9 +1869,9 @@ describe("Backchain V10 — Integration Tests", function () {
       await f.stakingPool.connect(f.alice).claimRewards();
       const burnAfter = await f.bkcToken.totalBurned();
 
-      // With Gold NFT, only 10% burned (not 50%)
+      // With Gold NFT, only 12% burned (not 20%)
       const totalReward = preview.totalRewards;
-      const expectedBurn = totalReward * 1000n / 10000n;
+      const expectedBurn = totalReward * 1200n / 10000n;
       expect(burnAfter - burnBefore).to.equal(expectedBurn);
     });
 

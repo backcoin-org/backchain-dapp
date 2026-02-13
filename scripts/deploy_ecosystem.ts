@@ -185,12 +185,9 @@ const RETRY_DELAY_MS = 5000;
 //                    🎨 NFT TIERS CONFIG (V9: uint8 tiers 0-3)
 // ════════════════════════════════════════════════════════════════════════════
 
-// RewardBooster tiers: 0=Bronze, 1=Silver, 2=Gold, 3=Diamond
+// RewardBooster: Only mint Bronze. Higher tiers come from NFTFusion (2→1 fuse)
 const NFT_TIERS = [
-    { tier: 0, name: "Bronze",   mintCount: 100 },
-    { tier: 1, name: "Silver",   mintCount: 50 },
-    { tier: 2, name: "Gold",     mintCount: 30 },
-    { tier: 3, name: "Diamond",  mintCount: 10 },
+    { tier: 0, name: "Bronze", mintCount: 1000 },
 ];
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -200,10 +197,19 @@ const NFT_TIERS = [
 const LIQUIDITY_CONFIG = {
     FORTUNE_POOL: 1_000_000n * 10n**18n,
     FAUCET_BKC: 4_000_000n * 10n**18n,
-    NFT_POOL_BKC_EACH: 500_000n * 10n**18n,
+    // NFT Pools: Bronze seeded with real NFTs; higher tiers start empty with virtual reserves
+    NFT_POOL_BKC: [
+        500_000n * 10n**18n,   // Bronze:  1000 NFTs + 500K BKC
+        250_000n * 10n**18n,   // Silver:  0 NFTs + 250K BKC (virtualReserves=10)
+        200_000n * 10n**18n,   // Gold:    0 NFTs + 200K BKC (virtualReserves=10)
+        150_000n * 10n**18n,   // Diamond: 0 NFTs + 150K BKC (virtualReserves=10)
+    ] as const,
+    NFT_POOL_VIRTUAL_RESERVES: [0, 10, 10, 10] as const,
     // LiquidityPool: ETH + BKC initial liquidity (define o preço inicial)
     LIQUIDITY_POOL_BKC: 2_000_000n * 10n**18n,
     LIQUIDITY_POOL_ETH: "0.5", // 0.5 ETH → preço inicial: 0.00000025 ETH/BKC
+    // Referral BKC bonus pool (welcome gift for referred users)
+    REFERRAL_BONUS_BKC: 100_000n * 10n**18n,
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -225,14 +231,18 @@ const FAUCET_CONFIG = {
 //      These BPS operate on the remaining 90%.
 //      Effective split: Referrer 10% | Operator 15% | Treasury 25% | Buyback 50%
 
+// V10 standard splits:
+//   Referral: 5% ETH off-the-top (ecosystem-wide)
+//   Standard modules (no custom): 15% operator / 30% treasury / 55% buyback
+//   Custom modules: custom% first, then 15/30/55 ratio on remainder
 const MODULE_CONFIGS = {
-    STAKING:  { active: true, customBps: 0,    operatorBps: 1667, treasuryBps: 2778, buybackBps: 5555 },
-    NFT_POOL: { active: true, customBps: 0,    operatorBps: 1667, treasuryBps: 2778, buybackBps: 5555 },
-    FORTUNE:  { active: true, customBps: 0,    operatorBps: 1667, treasuryBps: 2778, buybackBps: 5555 },
-    AGORA:    { active: true, customBps: 5000, operatorBps: 833,  treasuryBps: 1389, buybackBps: 2778 },
-    NOTARY:   { active: true, customBps: 0,    operatorBps: 1667, treasuryBps: 2778, buybackBps: 5555 },
-    CHARITY:  { active: true, customBps: 7000, operatorBps: 500,  treasuryBps: 833,  buybackBps: 1667 },
-    RENTAL:   { active: true, customBps: 7000, operatorBps: 500,  treasuryBps: 833,  buybackBps: 1667 },
+    // Standard (staking, nft_pool, fortune, notary, nft_fusion): no custom recipient
+    STANDARD:    { active: true, customBps: 0,    operatorBps: 1500, treasuryBps: 3000, buybackBps: 5500 },
+    // Agora (50% to content creator, 15/30/55 on remaining 50%)
+    AGORA:       { active: true, customBps: 5000, operatorBps: 750,  treasuryBps: 1500, buybackBps: 2750 },
+    // Charity/Rental (70% to campaign/lister, 15/30/55 on remaining 30%)
+    CHARITY:     { active: true, customBps: 7000, operatorBps: 450,  treasuryBps: 900,  buybackBps: 1650 },
+    RENTAL:      { active: true, customBps: 7000, operatorBps: 450,  treasuryBps: 900,  buybackBps: 1650 },
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -295,6 +305,13 @@ const ACTION_FEE_CONFIGS: Record<string, { feeType: number; bps: number; multipl
     "CHARITY_BOOST":          GAS_FEE_CONTENT,
     // RentalManager
     // (RENTAL_RENT e CHARITY_DONATE são value-based, definidos separadamente)
+    // NFTFusion (fuse 2→1 up, split 1→2 down)
+    "FUSION_BRONZE":          GAS_FEE_FINANCIAL,
+    "FUSION_SILVER":          GAS_FEE_FINANCIAL,
+    "FUSION_GOLD":            GAS_FEE_FINANCIAL,
+    "SPLIT_SILVER":           GAS_FEE_FINANCIAL,
+    "SPLIT_GOLD":             GAS_FEE_FINANCIAL,
+    "SPLIT_DIAMOND":          GAS_FEE_FINANCIAL,
 };
 
 // Ações value-based
@@ -311,15 +328,16 @@ const NFT_FEE_CONFIG = {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-//                    🔥 BKC DISTRIBUTION (burn / stakers / treasury)
+//                    🔥 BKC DISTRIBUTION (burn / operator / stakers / treasury)
 // ════════════════════════════════════════════════════════════════════════════
-// Defaults in contract: 500/7500/2000 (5% burn / 75% stakers / 20% treasury)
-// Must sum to 10000
+// burn + operator + staker + treasury = 10000
+// Deflation via StakingPool claims (20% base burn, reduced by NFT tier)
 
 const BKC_DISTRIBUTION = {
-    burnBps: 500,      // 5% burned
-    stakerBps: 7500,   // 75% to stakers via BuybackMiner → StakingPool
-    treasuryBps: 2000, // 20% to treasury
+    burnBps: 0,         // 0% burn in ecosystem (burn happens on StakingPool claims)
+    operatorBps: 1500,  // 15% to frontend operator
+    stakerBps: 7000,    // 70% to stakers via notifyReward
+    treasuryBps: 1500,  // 15% to treasury
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -656,26 +674,25 @@ async function main() {
         addresses.rewardBooster = boosterAddr;
         updateAddressJSON("rewardBooster", boosterAddr);
 
-        // Mint genesis NFTs por tier (DEVE ser feito ANTES de configurePools!)
-        const mintedTokensByTier: Record<number, bigint[]> = { 0: [], 1: [], 2: [], 3: [] };
+        // Mint genesis Bronze NFTs only (higher tiers via NFTFusion)
+        const bronzeMintCount = NFT_TIERS[0].mintCount;
+        const bronzeTokenIds: bigint[] = [];
 
-        for (const tierCfg of NFT_TIERS) {
-            const startIdTx = await booster.mintBatch(deployerAddr, tierCfg.tier, tierCfg.mintCount);
+        {
+            const startIdTx = await booster.mintBatch(deployerAddr, 0, bronzeMintCount);
             const receipt = await startIdTx.wait();
 
-            // Ler startId do retorno da transação
-            // mintBatch retorna startId, precisamos calcular os tokenIds
             const totalSupply = await booster.totalSupply();
-            const startId = Number(totalSupply) - tierCfg.mintCount + 1;
+            const startId = Number(totalSupply) - bronzeMintCount + 1;
 
-            for (let i = 0; i < tierCfg.mintCount; i++) {
-                mintedTokensByTier[tierCfg.tier].push(BigInt(startId + i));
+            for (let i = 0; i < bronzeMintCount; i++) {
+                bronzeTokenIds.push(BigInt(startId + i));
             }
 
-            console.log(`   ✅ Minted ${tierCfg.mintCount} ${tierCfg.name} NFTs (IDs: ${startId}..${startId + tierCfg.mintCount - 1})`);
+            console.log(`   ✅ Minted ${bronzeMintCount} Bronze NFTs (IDs: ${startId}..${startId + bronzeMintCount - 1})`);
 
             logTransaction({
-                description: `mintBatch: ${tierCfg.mintCount} ${tierCfg.name}`,
+                description: `mintBatch: ${bronzeMintCount} Bronze`,
                 txHash: receipt?.hash || "N/A",
                 from: deployerAddr,
                 to: boosterAddr,
@@ -687,8 +704,29 @@ async function main() {
             await sleep(TX_DELAY_MS);
         }
 
-        const totalNfts = await booster.totalSupply();
-        console.log(`   🎉 Total NFTs mintados: ${totalNfts}`);
+        console.log(`   🎉 Total NFTs mintados: ${bronzeMintCount} (higher tiers via fusion)`);
+
+        // ══════════════════════════════════════════════════════════════════════
+        // FASE 6b: NFTFusion (fuse 2→1 up, split 1→2 down)
+        // ══════════════════════════════════════════════════════════════════════
+        setCurrentPhase("FASE 6b: NFTFusion");
+        console.log("\n═══════════════════════════════════════════════════════════════════════");
+        console.log("   FASE 6b: Deploy NFTFusion + setFusionContract");
+        console.log("═══════════════════════════════════════════════════════════════════════");
+
+        const NFTFusion = await ethers.getContractFactory("NFTFusion");
+        const { contract: fusion, address: fusionAddr } = await deployContractWithRetry(
+            NFTFusion, [ecoAddr, boosterAddr], "NFTFusion"
+        );
+        addresses.nftFusion = fusionAddr;
+        updateAddressJSON("nftFusion", fusionAddr);
+
+        // Authorize NFTFusion as fusion contract in RewardBooster
+        await sendTxWithRetry(
+            async () => await booster.setFusionContract(fusionAddr),
+            "RewardBooster.setFusionContract(NFTFusion)"
+        );
+        console.log("   ✅ NFTFusion deployed + authorized for fusion mint/burn!");
 
         // ══════════════════════════════════════════════════════════════════════
         // FASE 7: NFTPool × 4 (deploy + initializePool)
@@ -702,12 +740,13 @@ async function main() {
         const poolContracts: any[] = [];
         const poolAddresses: string[] = [];
 
-        // NFTPool constructor(address _ecosystem, address _bkcToken, address _rewardBooster, uint8 _tier)
+        // NFTPool constructor(address _ecosystem, address _bkcToken, address _rewardBooster, uint8 _tier, uint256 _virtualReserves)
         const NFTPool = await ethers.getContractFactory("NFTPool");
 
         for (let tier = 0; tier < 4; tier++) {
+            const vReserves = LIQUIDITY_CONFIG.NFT_POOL_VIRTUAL_RESERVES[tier];
             const { contract: pool, address: poolAddr } = await deployContractWithRetry(
-                NFTPool, [ecoAddr, bkcAddr, boosterAddr, tier], `NFTPool_${tierNames[tier]}`
+                NFTPool, [ecoAddr, bkcAddr, boosterAddr, tier, vReserves], `NFTPool_${tierNames[tier]}`
             );
             poolContracts.push(pool);
             poolAddresses.push(poolAddr);
@@ -715,41 +754,54 @@ async function main() {
             updateAddressJSON(`pool_${tierNames[tier]}`, poolAddr);
         }
 
-        // Agora que temos os 4 pools, configurePools no RewardBooster (IRREVERSÍVEL!)
+        // configurePools no RewardBooster (IRREVERSÍVEL!)
         console.log("\n   🔒 configurePools no RewardBooster (IRREVERSÍVEL)...");
         await sendTxWithRetry(
             async () => await booster.configurePools(poolAddresses as [string, string, string, string]),
             "RewardBooster.configurePools([bronze, silver, gold, diamond])"
         );
 
-        // Aprovar NFTs e BKC para cada pool, depois initializePool
-        for (let tier = 0; tier < 4; tier++) {
-            const pool = poolContracts[tier];
-            const poolAddr = poolAddresses[tier];
-            const tokenIds = mintedTokensByTier[tier];
-            const tierName = tierNames[tier];
+        // Initialize Bronze pool: 1000 real NFTs + BKC
+        {
+            const pool = poolContracts[0];
+            const poolAddr = poolAddresses[0];
+            const bkcAmount = LIQUIDITY_CONFIG.NFT_POOL_BKC[0];
 
-            console.log(`\n   📦 Inicializando ${tierName.toUpperCase()} Pool: ${tokenIds.length} NFTs`);
+            console.log(`\n   📦 Inicializando BRONZE Pool: ${bronzeTokenIds.length} NFTs + ${ethers.formatEther(bkcAmount)} BKC`);
 
-            // Aprovar RewardBooster NFTs para o pool
             await sendTxWithRetry(
                 async () => await booster.setApprovalForAll(poolAddr, true),
-                `Approve NFTs para ${tierName} pool`
+                "Approve NFTs para bronze pool"
             );
-
-            // Aprovar BKC para o pool
             await sendTxWithRetry(
-                async () => await bkc.approve(poolAddr, LIQUIDITY_CONFIG.NFT_POOL_BKC_EACH),
+                async () => await bkc.approve(poolAddr, bkcAmount),
+                "Approve BKC para bronze pool"
+            );
+            await sendTxWithRetry(
+                async () => await pool.initializePool(bronzeTokenIds, bkcAmount),
+                `initializePool bronze: ${bronzeTokenIds.length} NFTs + ${ethers.formatEther(bkcAmount)} BKC`
+            );
+            console.log("   ✅ Bronze pool inicializado!");
+        }
+
+        // Initialize Silver/Gold/Diamond pools: 0 real NFTs + BKC (virtual reserves handle pricing)
+        for (let tier = 1; tier < 4; tier++) {
+            const pool = poolContracts[tier];
+            const poolAddr = poolAddresses[tier];
+            const bkcAmount = LIQUIDITY_CONFIG.NFT_POOL_BKC[tier];
+            const tierName = tierNames[tier];
+
+            console.log(`\n   📦 Inicializando ${tierName.toUpperCase()} Pool: 0 NFTs + ${ethers.formatEther(bkcAmount)} BKC (virtualReserves=${LIQUIDITY_CONFIG.NFT_POOL_VIRTUAL_RESERVES[tier]})`);
+
+            await sendTxWithRetry(
+                async () => await bkc.approve(poolAddr, bkcAmount),
                 `Approve BKC para ${tierName} pool`
             );
-
-            // initializePool(uint256[] tokenIds, uint256 bkcAmount) — ONE-TIME
             await sendTxWithRetry(
-                async () => await pool.initializePool(tokenIds, LIQUIDITY_CONFIG.NFT_POOL_BKC_EACH),
-                `initializePool ${tierName}: ${tokenIds.length} NFTs + ${ethers.formatEther(LIQUIDITY_CONFIG.NFT_POOL_BKC_EACH)} BKC`
+                async () => await pool.initializePool([], bkcAmount),
+                `initializePool ${tierName}: 0 NFTs + ${ethers.formatEther(bkcAmount)} BKC (virtual reserves)`
             );
-
-            console.log(`   ✅ ${tierName} pool inicializado!`);
+            console.log(`   ✅ ${tierName} pool inicializado com virtual reserves!`);
         }
 
         // ══════════════════════════════════════════════════════════════════════
@@ -824,24 +876,24 @@ async function main() {
             "Ecosystem.setReferralRelayer(deployer)"
         );
 
-        // V10: Enable ecosystem-wide referral rewards (10% ETH off-the-top)
+        // V10: Enable ecosystem-wide referral rewards (5% ETH off-the-top)
         await sendTxWithRetry(
-            async () => await eco.setReferralBps(1000),
-            "Ecosystem.setReferralBps(1000 = 10%)"
+            async () => await eco.setReferralBps(500),
+            "Ecosystem.setReferralBps(500 = 5%)"
         );
 
-        // 9b. registerModuleBatch — registrar todos os 7 módulos
+        // 9b. registerModuleBatch — registrar todos os 8 módulos
         const moduleContracts = [
             stakingAddr, poolAddresses[0], fortuneAddr, agoraAddr,
-            notaryAddr, charityAddr, rentalAddr,
+            notaryAddr, charityAddr, rentalAddr, fusionAddr,
         ];
         const moduleIds = [
             ethers.id("STAKING"), ethers.id("NFT_POOL"), ethers.id("FORTUNE"), ethers.id("AGORA"),
-            ethers.id("NOTARY"), ethers.id("CHARITY"), ethers.id("RENTAL"),
+            ethers.id("NOTARY"), ethers.id("CHARITY"), ethers.id("RENTAL"), ethers.id("NFT_FUSION"),
         ];
         const moduleConfigs = [
-            MODULE_CONFIGS.STAKING, MODULE_CONFIGS.NFT_POOL, MODULE_CONFIGS.FORTUNE, MODULE_CONFIGS.AGORA,
-            MODULE_CONFIGS.NOTARY, MODULE_CONFIGS.CHARITY, MODULE_CONFIGS.RENTAL,
+            MODULE_CONFIGS.STANDARD, MODULE_CONFIGS.STANDARD, MODULE_CONFIGS.STANDARD, MODULE_CONFIGS.AGORA,
+            MODULE_CONFIGS.STANDARD, MODULE_CONFIGS.CHARITY, MODULE_CONFIGS.RENTAL, MODULE_CONFIGS.STANDARD,
         ];
 
         // Converter para o formato do struct: [active, customBps, operatorBps, treasuryBps, buybackBps]
@@ -851,7 +903,7 @@ async function main() {
 
         await sendTxWithRetry(
             async () => await eco.registerModuleBatch(moduleContracts, moduleIds, moduleConfigsTuples),
-            "Ecosystem.registerModuleBatch() — 7 módulos"
+            "Ecosystem.registerModuleBatch() — 8 módulos"
         );
 
         // Registrar os outros 3 NFT pools individualmente (mesmo MODULE_ID = NFT_POOL)
@@ -860,9 +912,9 @@ async function main() {
                 async () => await eco.registerModule(
                     poolAddresses[i],
                     ethers.id("NFT_POOL"),
-                    [MODULE_CONFIGS.NFT_POOL.active, MODULE_CONFIGS.NFT_POOL.customBps,
-                     MODULE_CONFIGS.NFT_POOL.operatorBps, MODULE_CONFIGS.NFT_POOL.treasuryBps,
-                     MODULE_CONFIGS.NFT_POOL.buybackBps]
+                    [MODULE_CONFIGS.STANDARD.active, MODULE_CONFIGS.STANDARD.customBps,
+                     MODULE_CONFIGS.STANDARD.operatorBps, MODULE_CONFIGS.STANDARD.treasuryBps,
+                     MODULE_CONFIGS.STANDARD.buybackBps]
                 ),
                 `Ecosystem.registerModule(pool_${tierNames[i]}, NFT_POOL)`
             );
@@ -917,15 +969,16 @@ async function main() {
             `Ecosystem.setFeeConfigBatch() — ${actionIds.length} ações`
         );
 
-        // 4) BKC Distribution (burn / stakers / treasury)
-        // Defaults no contrato já são 500/7500/2000, mas configurar explicitamente
+        // 4) BKC Distribution (burn / operator / stakers / treasury)
+        // Contract defaults match, but configure explicitly for clarity
         await sendTxWithRetry(
             async () => await eco.setBkcDistribution(
                 BKC_DISTRIBUTION.burnBps,
+                BKC_DISTRIBUTION.operatorBps,
                 BKC_DISTRIBUTION.stakerBps,
                 BKC_DISTRIBUTION.treasuryBps
             ),
-            `Ecosystem.setBkcDistribution(${BKC_DISTRIBUTION.burnBps}/${BKC_DISTRIBUTION.stakerBps}/${BKC_DISTRIBUTION.treasuryBps})`
+            `Ecosystem.setBkcDistribution(${BKC_DISTRIBUTION.burnBps}/${BKC_DISTRIBUTION.operatorBps}/${BKC_DISTRIBUTION.stakerBps}/${BKC_DISTRIBUTION.treasuryBps})`
         );
 
         console.log("   ✅ Todas as taxas configuradas!");
@@ -935,7 +988,9 @@ async function main() {
         updateRulesJSON("feeConfigs", "gasBased", Object.keys(ACTION_FEE_CONFIGS).length.toString());
         updateRulesJSON("feeConfigs", "valueBased", Object.keys(VALUE_FEE_CONFIGS).length.toString());
         updateRulesJSON("feeConfigs", "nftActions", "8");
+        updateRulesJSON("feeConfigs", "fusionActions", "6");
         updateRulesJSON("bkcDistribution", "burnBps", BKC_DISTRIBUTION.burnBps.toString());
+        updateRulesJSON("bkcDistribution", "operatorBps", BKC_DISTRIBUTION.operatorBps.toString());
         updateRulesJSON("bkcDistribution", "stakerBps", BKC_DISTRIBUTION.stakerBps.toString());
         updateRulesJSON("bkcDistribution", "treasuryBps", BKC_DISTRIBUTION.treasuryBps.toString());
 
@@ -963,10 +1018,10 @@ async function main() {
             "StakingPool.setRewardBooster(RewardBooster)"
         );
 
-        // StakingPool: configurar penalidade de force unstake (50%)
+        // StakingPool: configurar penalidade de force unstake (10%)
         await sendTxWithRetry(
-            async () => await staking.setForceUnstakePenalty(5000),
-            "StakingPool.setForceUnstakePenalty(5000 = 50%)"
+            async () => await staking.setForceUnstakePenalty(1000),
+            "StakingPool.setForceUnstakePenalty(1000 = 10%)"
         );
 
         // BKCToken: autorizar BuybackMiner como minter
@@ -1006,6 +1061,17 @@ async function main() {
         await sendTxWithRetry(
             async () => await lp.addLiquidity(lpBkcAmount, 0, { value: lpEthAmount }),
             `LiquidityPool: ${ethers.formatEther(lpBkcAmount)} BKC + ${LIQUIDITY_CONFIG.LIQUIDITY_POOL_ETH} ETH`
+        );
+
+        // Fund Referral Bonus Pool (100K BKC welcome gifts for referred users)
+        const refBonusBkc = LIQUIDITY_CONFIG.REFERRAL_BONUS_BKC;
+        await sendTxWithRetry(
+            async () => await bkc.approve(ecoAddr, refBonusBkc),
+            "Approve BKC para Referral Bonus Pool"
+        );
+        await sendTxWithRetry(
+            async () => await eco.fundReferralBonus(refBonusBkc),
+            `Ecosystem.fundReferralBonus(${ethers.formatEther(refBonusBkc)} BKC)`
         );
 
         // ══════════════════════════════════════════════════════════════════════
@@ -1137,11 +1203,13 @@ async function main() {
         console.log(`   BuybackMiner → minter autorizado no BKCToken`);
         console.log(`   BuybackMiner + Ecosystem → reward notifiers no StakingPool`);
         console.log(`   RewardBooster → configurado no StakingPool`);
-        console.log(`   7 módulos registrados no Ecosystem`);
-        console.log(`   4 NFT pools registrados individualmente`);
-        console.log(`   ${actionIds.length} action fees configuradas (gas-based + value-based)`);
-        console.log(`   BKC Distribution: ${BKC_DISTRIBUTION.burnBps/100}% burn / ${BKC_DISTRIBUTION.stakerBps/100}% stakers / ${BKC_DISTRIBUTION.treasuryBps/100}% treasury`);
-        console.log(`   Referral: 10% ETH off-the-top (ecosystem-wide)`);
+        console.log(`   NFTFusion → authorized in RewardBooster`);
+        console.log(`   8 módulos registrados no Ecosystem + 3 NFT pools extras`);
+        console.log(`   ${actionIds.length} action fees configuradas (gas-based + value-based + fusion)`);
+        console.log(`   ETH Distribution: 5% referral | 15% operator | 30% treasury | 55% buyback`);
+        console.log(`   BKC Distribution: ${BKC_DISTRIBUTION.operatorBps/100}% operator / ${BKC_DISTRIBUTION.stakerBps/100}% stakers / ${BKC_DISTRIBUTION.treasuryBps/100}% treasury`);
+        console.log(`   Staking Burn: 20%→10% (reduced by NFT tier, referral bonus from burn)`);
+        console.log(`   Referral Bonus Pool: ${ethers.formatEther(LIQUIDITY_CONFIG.REFERRAL_BONUS_BKC)} BKC`);
 
         printTransactionSummary();
 
