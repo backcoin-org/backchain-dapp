@@ -538,8 +538,8 @@ export const StorePage = {
                         <div class="nft-header-left">
                             <div class="nft-header-icon"><i class="fa-solid fa-gem"></i></div>
                             <div>
-                                <div class="nft-header-title">NFT Market</div>
-                                <div class="nft-header-sub">Buy NFTs to keep more staking rewards. NFT + Tutor = max earnings</div>
+                                <div class="nft-header-title">Booster Market</div>
+                                <div class="nft-header-sub">Buy Booster NFTs to keep more staking rewards. Higher tier = higher keep rate</div>
                             </div>
                         </div>
                         <button id="nft-refresh-btn" class="nft-refresh-btn"><i class="fa-solid fa-rotate"></i></button>
@@ -830,17 +830,34 @@ function renderTierCards() {
         const insufficientBuy = buyPrice > 0n && buyPrice > balance;
 
         const buyPriceStr = buyPrice > 0n ? formatBigNumber(buyPrice).toFixed(1) : '--';
-        const sellPriceStr = netSell > 0n ? formatBigNumber(netSell).toFixed(1) : '--';
+        const sellPriceStr = (netSell > 0n && userOwned > 0) ? formatBigNumber(netSell).toFixed(1) : '--';
 
         // Buy button state
         let buyDisabled = !State.isConnected || soldOut || insufficientBuy || buyPrice === 0n;
         let buyLabel = soldOut ? 'Sold Out' : (insufficientBuy ? 'Low BKC' : 'Buy');
+        let buyIcon = 'fa-cart-plus';
         if (!State.isConnected) buyLabel = 'Connect';
 
         // Sell button state
         let sellDisabled = !State.isConnected || noSellable;
-        let sellLabel = noSellable ? (userOwned > 0 ? 'Rented' : 'No NFT') : 'Sell';
-        if (!State.isConnected) sellLabel = '--';
+        let sellLabel = 'Sell';
+        if (!State.isConnected) { sellLabel = '--'; }
+        else if (userOwned === 0) { sellLabel = 'No NFT'; }
+        else if (noSellable) { sellLabel = 'Rented'; }
+
+        // Fusion hint for sold-out tiers (Bronze can't be fused TO, Diamond can't be fused FROM)
+        const tierIndex = boosterTiers.indexOf(tier);
+        let fusionHint = '';
+        if (soldOut && tierIndex > 0) {
+            const lowerTier = boosterTiers[tierIndex - 1];
+            if (lowerTier) {
+                const lowerStyle = getTierStyle(lowerTier.name);
+                fusionHint = `<div style="text-align:center;padding:4px 0 2px;font-size:9px;color:var(--nft-text-3)">
+                    <i class="fa-solid fa-fire" style="color:#f59e0b;font-size:8px"></i>
+                    Fuse 2x ${lowerStyle.icon} ${lowerTier.name} to get ${style.icon} ${tier.name}
+                </div>`;
+            }
+        }
 
         return `
             <div class="nft-tier-card ${isUserTier ? 'nft-user-tier' : ''}" style="border-color:${isUserTier ? style.color : 'var(--nft-border)'}" data-boost="${tier.boostBips}">
@@ -858,11 +875,11 @@ function renderTierCards() {
                 <div class="nft-tier-prices">
                     <div class="nft-price-row">
                         <span class="nft-price-label"><i class="fa-solid fa-cart-plus" style="color:var(--nft-green)"></i> Buy</span>
-                        <span class="nft-price-val" style="color:var(--nft-text)">${buyPriceStr} BKC</span>
+                        <span class="nft-price-val" style="color:${soldOut ? 'var(--nft-text-3)' : 'var(--nft-text)'}">${soldOut ? 'Sold Out' : `${buyPriceStr} BKC`}</span>
                     </div>
                     <div class="nft-price-row">
                         <span class="nft-price-label"><i class="fa-solid fa-money-bill-transfer" style="color:var(--nft-accent)"></i> Sell</span>
-                        <span class="nft-price-val" style="color:var(--nft-text)">${sellPriceStr} BKC</span>
+                        <span class="nft-price-val" style="color:${userOwned > 0 ? 'var(--nft-text)' : 'var(--nft-text-3)'}">${userOwned > 0 ? `${sellPriceStr} BKC` : (soldOut ? '--' : 'Buy first')}</span>
                     </div>
                 </div>
 
@@ -878,13 +895,22 @@ function renderTierCards() {
                 </div>
 
                 <div class="nft-tier-actions">
-                    <button class="nft-action-btn nft-buy-btn" data-action="buy" data-boost="${tier.boostBips}" ${buyDisabled ? 'disabled' : ''}>
-                        <i class="fa-solid fa-cart-plus" style="font-size:10px"></i> ${buyLabel}
-                    </button>
-                    <button class="nft-action-btn nft-sell-btn" data-action="sell" data-boost="${tier.boostBips}" ${sellDisabled ? 'disabled' : ''}>
-                        <i class="fa-solid fa-money-bill-transfer" style="font-size:10px"></i> ${sellLabel}
-                    </button>
+                    ${soldOut ? `
+                        <button class="nft-action-btn" style="flex:1;background:var(--nft-surface-2);color:var(--nft-text-3);cursor:default" disabled>
+                            <i class="fa-solid fa-store-slash" style="font-size:10px"></i> Sold Out
+                        </button>
+                    ` : `
+                        <button class="nft-action-btn nft-buy-btn" data-action="buy" data-boost="${tier.boostBips}" ${buyDisabled ? 'disabled' : ''}>
+                            <i class="fa-solid fa-cart-plus" style="font-size:10px"></i> ${buyLabel}
+                        </button>
+                    `}
+                    ${userOwned > 0 ? `
+                        <button class="nft-action-btn nft-sell-btn" data-action="sell" data-boost="${tier.boostBips}" ${sellDisabled ? 'disabled' : ''}>
+                            <i class="fa-solid fa-money-bill-transfer" style="font-size:10px"></i> ${sellLabel}
+                        </button>
+                    ` : ''}
                 </div>
+                ${fusionHint}
             </div>
         `;
     }).join('');
