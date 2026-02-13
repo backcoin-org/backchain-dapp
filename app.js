@@ -700,8 +700,9 @@ window.addEventListener('load', async () => {
         showWelcomeModal();
     }
 
-    const preloader = document.getElementById('preloader');
-    if(preloader) preloader.style.display = 'none';
+    // Remove initial loader placeholder once app is ready
+    const initLoader = document.getElementById('initial-loader-container');
+    if (initLoader) initLoader.remove();
 
     // ✅ FIX: Navigate to the page specified in URL hash, or dashboard if none
     const initialPage = getInitialPageFromHash();

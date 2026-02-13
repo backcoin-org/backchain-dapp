@@ -336,10 +336,12 @@ function injectSplashStyles() {
         @keyframes splash-out { 0% { opacity:1; transform:scale(1); } 100% { opacity:0; transform:scale(0.95) translateY(-8px); } }
         @keyframes quote-line { 0% { width:0; } 100% { width:100%; } }
         @keyframes letter-in { 0% { opacity:0; transform:translateY(6px); } 100% { opacity:1; transform:translateY(0); } }
+        @keyframes splash-progress { 0% { width:0; } 100% { width:100%; } }
         .splash-enter { animation: splash-in 0.6s cubic-bezier(0.16,1,0.3,1) forwards; }
         .splash-exit  { animation: splash-out 0.4s ease-in forwards; }
         .quote-line   { animation: quote-line 2s ease-out 0.4s both; }
         .letter-stagger span { display:inline-block; opacity:0; animation: letter-in 0.3s ease-out both; }
+        .splash-bar { height:2px; background:linear-gradient(90deg,#b45309,#f59e0b,#b45309); border-radius:9999px; animation: splash-progress 6s linear forwards; }
     `;
     document.head.appendChild(s);
 }
@@ -393,6 +395,10 @@ export function showWelcomeModal() {
             <p class="text-zinc-600 text-[10px] uppercase tracking-widest">
                 No admin keys &bull; No pause &bull; No blacklists
             </p>
+
+            <div class="w-48 mt-8 mx-auto bg-zinc-800/60 rounded-full overflow-hidden">
+                <div class="splash-bar"></div>
+            </div>
         </div>
     `;
 
@@ -401,7 +407,7 @@ export function showWelcomeModal() {
     // Fade in
     requestAnimationFrame(() => { overlay.style.opacity = '1'; });
 
-    // Auto-close after 4s or on tap
+    // Auto-close after 6.5s or on tap
     overlay.addEventListener('click', () => dismissSplash());
-    setTimeout(() => dismissSplash(), 4000);
+    setTimeout(() => dismissSplash(), 6500);
 }
