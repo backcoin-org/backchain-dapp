@@ -582,7 +582,7 @@ describe("Backchain V10 — Integration Tests", function () {
       const f = await loadFixture(deployAllFixture);
 
       // Alice sets Bob as referrer
-      await f.ecosystem.connect(f.alice).setReferrer(f.bob.address);
+      await f.ecosystem.connect(f.alice).setReferrer(f.bob.address, { value: ethers.parseEther("0.00002") });
       expect(await f.ecosystem.referredBy(f.alice.address)).to.equal(f.bob.address);
       expect(await f.ecosystem.referralCount(f.bob.address)).to.equal(1);
     });
@@ -590,15 +590,15 @@ describe("Backchain V10 — Integration Tests", function () {
     it("referrer cannot be self", async function () {
       const f = await loadFixture(deployAllFixture);
       await expect(
-        f.ecosystem.connect(f.alice).setReferrer(f.alice.address)
+        f.ecosystem.connect(f.alice).setReferrer(f.alice.address, { value: ethers.parseEther("0.00002") })
       ).to.be.revertedWithCustomError(f.ecosystem, "CannotReferSelf");
     });
 
     it("referrer can only be set once", async function () {
       const f = await loadFixture(deployAllFixture);
-      await f.ecosystem.connect(f.alice).setReferrer(f.bob.address);
+      await f.ecosystem.connect(f.alice).setReferrer(f.bob.address, { value: ethers.parseEther("0.00002") });
       await expect(
-        f.ecosystem.connect(f.alice).setReferrer(f.charlie.address)
+        f.ecosystem.connect(f.alice).setReferrer(f.charlie.address, { value: ethers.parseEther("0.00002") })
       ).to.be.revertedWithCustomError(f.ecosystem, "ReferrerAlreadySet");
     });
 
@@ -933,7 +933,7 @@ describe("Backchain V10 — Integration Tests", function () {
       const f = await loadFixture(deployAllFixture);
 
       // Set Bob as Alice's referrer
-      await f.ecosystem.connect(f.alice).setReferrer(f.bob.address);
+      await f.ecosystem.connect(f.alice).setReferrer(f.bob.address, { value: ethers.parseEther("0.00002") });
 
       // Stake
       const stakeAmt = ethers.parseEther("1000");
@@ -1880,7 +1880,7 @@ describe("Backchain V10 — Integration Tests", function () {
       const f = await loadFixture(deployAllFixture);
 
       // 1. Set referrer
-      await f.ecosystem.connect(f.alice).setReferrer(f.charlie.address);
+      await f.ecosystem.connect(f.alice).setReferrer(f.charlie.address, { value: ethers.parseEther("0.00002") });
 
       // 2. Stake
       const stakeAmt = ethers.parseEther("2000");
@@ -1980,7 +1980,7 @@ describe("Backchain V10 — Integration Tests", function () {
       const f = await loadFixture(deployAllFixture);
 
       // Set Charlie as Alice's referrer
-      await f.ecosystem.connect(f.alice).setReferrer(f.charlie.address);
+      await f.ecosystem.connect(f.alice).setReferrer(f.charlie.address, { value: ethers.parseEther("0.00002") });
 
       const charliePendingBefore = await f.ecosystem.pendingEth(f.charlie.address);
 
@@ -2028,7 +2028,7 @@ describe("Backchain V10 — Integration Tests", function () {
     it("referrer earns on Notary certification", async function () {
       const f = await loadFixture(deployAllFixture);
 
-      await f.ecosystem.connect(f.alice).setReferrer(f.bob.address);
+      await f.ecosystem.connect(f.alice).setReferrer(f.bob.address, { value: ethers.parseEther("0.00002") });
 
       const bobPendingBefore = await f.ecosystem.pendingEth(f.bob.address);
 
@@ -2071,7 +2071,7 @@ describe("Backchain V10 — Integration Tests", function () {
       const f = await loadFixture(deployAllFixture);
 
       // Charlie is Alice's referrer
-      await f.ecosystem.connect(f.alice).setReferrer(f.charlie.address);
+      await f.ecosystem.connect(f.alice).setReferrer(f.charlie.address, { value: ethers.parseEther("0.00002") });
 
       // 1. Alice creates Agora post → Charlie earns ETH referral
       const charlieEthBefore = await f.ecosystem.pendingEth(f.charlie.address);

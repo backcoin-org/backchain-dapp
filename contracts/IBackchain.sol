@@ -54,8 +54,8 @@ interface IBackchainEcosystem {
         uint256 txValue
     ) external view returns (uint256 fee);
 
-    /// @notice Set referrer (once, global, permanent)
-    function setReferrer(address _referrer) external;
+    /// @notice Set referrer (once, global, permanent). Requires ETH fee.
+    function setReferrer(address _referrer) external payable;
 
     /// @notice Relayer sets referrer on behalf of user (gasless)
     function setReferrerFor(address _user, address _referrer) external;
