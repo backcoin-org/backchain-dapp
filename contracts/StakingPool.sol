@@ -89,6 +89,9 @@ contract StakingPool is IStakingPool {
     ///         Default 1000 = 10%. Penalty is burned.
     uint256 public forceUnstakePenaltyBps = 1000;
 
+    /// @notice Authorized contracts that can call delegateFor (AirdropVesting)
+    mapping(address => bool) public isDelegateForAuthorized;
+
     // ════════════════════════════════════════════════════════════════════════
     // REWARD TRACKING (global, MasterChef-style)
     // ════════════════════════════════════════════════════════════════════════
@@ -189,6 +192,7 @@ contract StakingPool is IStakingPool {
     event RewardNotifierSet(address indexed notifier, bool authorized);
     event RewardBoosterUpdated(address indexed oldBooster, address indexed newBooster);
     event ForceUnstakePenaltyUpdated(uint256 oldBps, uint256 newBps);
+    event DelegateForAuthorizationSet(address indexed contractAddr, bool authorized);
 
     // ════════════════════════════════════════════════════════════════════════
     // ERRORS
@@ -240,6 +244,13 @@ contract StakingPool is IStakingPool {
         if (_penaltyBps > 5000) revert InvalidPenalty();
         emit ForceUnstakePenaltyUpdated(forceUnstakePenaltyBps, _penaltyBps);
         forceUnstakePenaltyBps = _penaltyBps;
+    }
+
+    /// @notice Authorize a contract to call delegateFor (e.g., AirdropVesting)
+    function setDelegateForAuthorized(address _contract, bool _authorized) external {
+        if (msg.sender != deployer) revert NotAuthorized();
+        isDelegateForAuthorized[_contract] = _authorized;
+        emit DelegateForAuthorizationSet(_contract, _authorized);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -295,6 +306,47 @@ contract StakingPool is IStakingPool {
         totalBkcDelegated += amount;
 
         emit Delegated(msg.sender, idx, amount, pStake, lockDays, operator);
+    }
+
+    /// @notice Delegate BKC on behalf of a beneficiary. Only callable by authorized
+    ///         contracts (e.g., AirdropVesting). Pulls BKC from msg.sender,
+    ///         creates delegation for beneficiary.
+    ///
+    /// @param beneficiary Address who owns the delegation and earns rewards
+    /// @param amount      BKC amount to delegate (must be approved for this contract)
+    /// @param lockDays    Lock duration in days
+    function delegateFor(
+        address beneficiary,
+        uint256 amount,
+        uint256 lockDays
+    ) external override {
+        if (!isDelegateForAuthorized[msg.sender]) revert NotAuthorized();
+        if (amount == 0) revert ZeroAmount();
+        if (lockDays < MIN_LOCK_DAYS) revert LockTooShort();
+        if (lockDays > MAX_LOCK_DAYS) revert LockTooLong();
+
+        // Pull BKC from caller (e.g., AirdropVesting contract)
+        bkcToken.transferFrom(msg.sender, address(this), amount);
+
+        // Calculate pStake
+        uint256 pStake = _calculatePStake(amount, lockDays);
+        uint256 idx = _delegations[beneficiary].length;
+
+        // Store delegation under beneficiary
+        _delegations[beneficiary].push(Delegation({
+            amount:     uint128(amount),
+            pStake:     uint128(pStake),
+            lockEnd:    uint64(block.timestamp + (lockDays * 1 days)),
+            lockDays:   uint64(lockDays),
+            rewardDebt: pStake * accRewardPerShare / PRECISION
+        }));
+
+        // Update totals
+        userTotalPStake[beneficiary] += pStake;
+        totalPStake += pStake;
+        totalBkcDelegated += amount;
+
+        emit Delegated(beneficiary, idx, amount, pStake, lockDays, address(0));
     }
 
     // ════════════════════════════════════════════════════════════════════════

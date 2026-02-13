@@ -4,39 +4,38 @@ pragma solidity ^0.8.28;
 import "./IBackchain.sol";
 
 // ============================================================================
-// NFT POOL — IMMUTABLE (Bonding Curve AMM, Tier 1: ETH only)
+// NFT POOL V2 — IMMUTABLE (Bonding Curve AMM with Virtual Reserves)
 // ============================================================================
 //
 // Constant-product bonding curve (XY=K) for trading RewardBooster NFTs.
 // Deploy one pool per tier: Bronze (0), Silver (1), Gold (2), Diamond (3).
 //
-//   K = NFT_COUNT × BKC_BALANCE
+// V2: Virtual Reserves
+//   Higher-tier pools start with 0 real NFTs but have virtual reserves.
+//   effectiveNftCount = realNftCount + virtualReserves
+//   This prevents the first seller from draining the entire BKC balance.
 //
-//   Buy Price  = K / (NFT_COUNT - 1) - BKC_BALANCE   (scarcity → price up)
-//   Sell Price = BKC_BALANCE - K / (NFT_COUNT + 1)    (abundance → price down)
+//   Bronze:  600 real NFTs + 3M BKC   (virtualReserves = 0)
+//   Silver:  0 real NFTs   + 750K BKC (virtualReserves = 10)
+//   Gold:    0 real NFTs   + 750K BKC (virtualReserves = 10)
+//   Diamond: 0 real NFTs   + 500K BKC (virtualReserves = 10)
+//
+//   K = effectiveNftCount × BKC_BALANCE
+//
+//   Buy Price  = K / (effectiveNftCount - 1) - BKC_BALANCE
+//   Sell Price = BKC_BALANCE - K / (effectiveNftCount + 1)
 //
 // Fee Structure (ETH only — Tier 1):
 //   Buy:  ETH fee → ecosystem (operator/treasury/buyback)
 //   Sell: ETH fee → ecosystem
 //   BKC liquidity stays in the pool — no BKC taxes.
-//   Natural spread between buy/sell provides organic pool growth.
-//
-// Each tier has its own ACTION IDs (NFT_BUY_T0..T3, NFT_SELL_T0..T3),
-// allowing the ecosystem to configure different ETH fees per tier.
-// Diamond trades can cost more ETH than Bronze, reflecting tier value.
 //
 // Safety:
-//   - Last NFT can never be bought (nftCount ≤ 1 blocks buys)
+//   - Virtual reserves prevent first-seller draining pool
+//   - Last effective NFT can never be bought (effectiveNftCount ≤ 1 blocks buys)
 //   - Slippage protection on buy (maxPrice) and sell (minPayout)
 //   - CEI pattern on all transfers
 //   - Reentrancy guard on all mutations
-//
-// Setup:
-//   1. Deploy RewardBooster, mintBatch NFTs to deployer
-//   2. Deploy 4 NFTPools (one per tier)
-//   3. Deployer approves each pool: setApprovalForAll (NFTs) + approve (BKC)
-//   4. Call initializePool(tokenIds, bkcAmount) on each — one-time, locks
-//   5. Call RewardBooster.configurePools([pool0, pool1, pool2, pool3])
 //
 // No admin. No pause. No liquidity removal. Fully immutable.
 //
@@ -71,8 +70,12 @@ contract NFTPool {
     address             public immutable deployer;
     uint8               public immutable tier;
 
+    /// @notice Virtual reserves — phantom NFTs that never leave pool.
+    ///         Used for higher-tier pools that start empty.
+    ///         Bronze = 0, Silver/Gold/Diamond = 10.
+    uint256             public immutable virtualReserves;
+
     /// @dev Per-tier action IDs for configurable ETH fees.
-    ///      Tier 0 → keccak256("NFT_BUY_T0"), Tier 3 → keccak256("NFT_BUY_T3"), etc.
     bytes32 public immutable ACTION_BUY;
     bytes32 public immutable ACTION_SELL;
 
@@ -81,7 +84,7 @@ contract NFTPool {
     // ════════════════════════════════════════════════════════════════════════
 
     uint256 public bkcBalance;
-    uint256 public nftCount;
+    uint256 public nftCount;     // Real NFTs in the pool
     uint256 public k;
     bool    public initialized;
 
@@ -109,7 +112,8 @@ contract NFTPool {
     // ════════════════════════════════════════════════════════════════════════
 
     event PoolInitialized(
-        uint8 tier, uint256 nftCount, uint256 bkcAmount, uint256 initialK
+        uint8 tier, uint256 nftCount, uint256 bkcAmount,
+        uint256 virtualReserves, uint256 initialK
     );
 
     event NFTPurchased(
@@ -156,23 +160,26 @@ contract NFTPool {
     // CONSTRUCTOR
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @param _ecosystem  BackchainEcosystem address
-    /// @param _bkcToken   BKC ERC-20 address
-    /// @param _rewardBooster RewardBooster ERC-721 address
-    /// @param _tier       Pool tier: 0=Bronze, 1=Silver, 2=Gold, 3=Diamond
+    /// @param _ecosystem      BackchainEcosystem address
+    /// @param _bkcToken       BKC ERC-20 address
+    /// @param _rewardBooster  RewardBooster ERC-721 address
+    /// @param _tier           Pool tier: 0=Bronze, 1=Silver, 2=Gold, 3=Diamond
+    /// @param _virtualReserves Virtual NFT count (0 for Bronze, 10 for others)
     constructor(
         address _ecosystem,
         address _bkcToken,
         address _rewardBooster,
-        uint8   _tier
+        uint8   _tier,
+        uint256 _virtualReserves
     ) {
-        ecosystem     = IBackchainEcosystem(_ecosystem);
-        bkcToken      = IBKCToken(_bkcToken);
-        rewardBooster = _rewardBooster;
-        deployer      = msg.sender;
-        tier          = _tier;
+        ecosystem       = IBackchainEcosystem(_ecosystem);
+        bkcToken        = IBKCToken(_bkcToken);
+        rewardBooster   = _rewardBooster;
+        deployer        = msg.sender;
+        tier            = _tier;
+        virtualReserves = _virtualReserves;
 
-        // Per-tier action IDs → ecosystem can set different ETH fees per tier
+        // Per-tier action IDs
         ACTION_BUY  = keccak256(abi.encode("NFT_BUY_T", _tier));
         ACTION_SELL = keccak256(abi.encode("NFT_SELL_T", _tier));
     }
@@ -181,11 +188,12 @@ contract NFTPool {
     // SETUP (one-time, locks forever)
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Initialize pool with NFT inventory and BKC liquidity.
-    ///         Deployer must pre-approve this contract for all NFTs and BKC.
+    /// @notice Initialize pool with optional NFT inventory and BKC liquidity.
+    ///         For Bronze: pass real tokenIds + BKC.
+    ///         For Silver/Gold/Diamond: pass empty tokenIds + BKC only.
     ///         After this call, trading is live and no further admin is possible.
     ///
-    /// @param tokenIds  NFT token IDs to seed the pool (must match pool tier)
+    /// @param tokenIds  NFT token IDs to seed (can be empty for virtual-only pools)
     /// @param bkcAmount BKC liquidity to pair against NFTs
     function initializePool(
         uint256[] calldata tokenIds,
@@ -193,28 +201,36 @@ contract NFTPool {
     ) external {
         if (msg.sender != deployer) revert NotDeployer();
         if (initialized) revert AlreadyInitialized();
-        if (tokenIds.length == 0) revert ZeroAmount();
         if (bkcAmount == 0) revert ZeroAmount();
+
+        // At least virtual reserves or real NFTs must exist
+        uint256 realCount = tokenIds.length;
+        uint256 effectiveCount = realCount + virtualReserves;
+        if (effectiveCount == 0) revert ZeroAmount();
 
         initialized = true;
 
-        IBoosterTier booster = IBoosterTier(rewardBooster);
-        IERC721Pool nft = IERC721Pool(rewardBooster);
+        // Transfer real NFTs if any
+        if (realCount > 0) {
+            IBoosterTier booster = IBoosterTier(rewardBooster);
+            IERC721Pool nft = IERC721Pool(rewardBooster);
 
-        for (uint256 i; i < tokenIds.length;) {
-            if (booster.tokenTier(tokenIds[i]) != tier) revert TierMismatch();
-            nft.transferFrom(msg.sender, address(this), tokenIds[i]);
-            _addToken(tokenIds[i]);
-            unchecked { ++i; }
+            for (uint256 i; i < realCount;) {
+                if (booster.tokenTier(tokenIds[i]) != tier) revert TierMismatch();
+                nft.transferFrom(msg.sender, address(this), tokenIds[i]);
+                _addToken(tokenIds[i]);
+                unchecked { ++i; }
+            }
         }
 
+        // Transfer BKC
         bkcToken.transferFrom(msg.sender, address(this), bkcAmount);
 
-        nftCount   = tokenIds.length;
+        nftCount   = realCount;
         bkcBalance = bkcAmount;
-        k          = nftCount * bkcBalance;
+        k          = effectiveCount * bkcBalance;
 
-        emit PoolInitialized(tier, nftCount, bkcAmount, k);
+        emit PoolInitialized(tier, realCount, bkcAmount, virtualReserves, k);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -222,18 +238,16 @@ contract NFTPool {
     // ════════════════════════════════════════════════════════════════════════
 
     /// @notice Buy the next available NFT from the bonding curve.
-    ///         User pays BKC (bonding curve price) + ETH fee as msg.value.
-    ///         BKC must be pre-approved for this contract.
-    ///
-    /// @param maxBkcPrice Max BKC willing to pay. 0 = no slippage check.
-    /// @param operator    Frontend operator earning commission
-    /// @return tokenId    The purchased NFT
     function buyNFT(
         uint256 maxBkcPrice,
         address operator
     ) external payable nonReentrant returns (uint256 tokenId) {
         if (!initialized) revert NotInitialized();
-        if (nftCount <= 1) revert NoNFTsAvailable();
+        if (nftCount == 0) revert NoNFTsAvailable();
+
+        // Effective count must be > 1 for buy (protect last virtual+real)
+        uint256 effectiveCount = nftCount + virtualReserves;
+        if (effectiveCount <= 1) revert NoNFTsAvailable();
 
         tokenId = _tokenIds[_tokenIds.length - 1];
         _executeBuy(tokenId, maxBkcPrice, operator);
@@ -246,7 +260,10 @@ contract NFTPool {
         address operator
     ) external payable nonReentrant {
         if (!initialized) revert NotInitialized();
-        if (nftCount <= 1) revert NoNFTsAvailable();
+        if (nftCount == 0) revert NoNFTsAvailable();
+
+        uint256 effectiveCount = nftCount + virtualReserves;
+        if (effectiveCount <= 1) revert NoNFTsAvailable();
         if (!_isInPool(tokenId)) revert NFTNotInPool();
 
         _executeBuy(tokenId, maxBkcPrice, operator);
@@ -257,12 +274,6 @@ contract NFTPool {
     // ════════════════════════════════════════════════════════════════════════
 
     /// @notice Sell an NFT back to the bonding curve.
-    ///         Receives full BKC payout (no BKC tax). Pays ETH fee as msg.value.
-    ///         NFT must be approved for this contract.
-    ///
-    /// @param tokenId   NFT to sell (must match pool tier)
-    /// @param minPayout Minimum BKC to receive (slippage protection)
-    /// @param operator  Frontend operator
     function sellNFT(
         uint256 tokenId,
         uint256 minPayout,
@@ -270,7 +281,6 @@ contract NFTPool {
     ) external payable nonReentrant {
         if (!initialized) revert NotInitialized();
 
-        // Verify ownership and tier
         IERC721Pool nft = IERC721Pool(rewardBooster);
         if (nft.ownerOf(tokenId) != msg.sender) revert NotNFTOwner();
         if (IBoosterTier(rewardBooster).tokenTier(tokenId) != tier)
@@ -280,30 +290,31 @@ contract NFTPool {
         uint256 ethFee = ecosystem.calculateFee(ACTION_SELL, 0);
         if (msg.value < ethFee) revert InsufficientETHFee();
 
-        // Bonding curve sell price — full payout, no BKC tax
+        // Bonding curve sell price
         uint256 payout = _sellPrice();
         if (payout < minPayout) revert SlippageExceeded();
         if (bkcBalance < payout) revert InsufficientLiquidity();
 
-        // ── Pull NFT from seller ──
+        // Pull NFT from seller
         nft.transferFrom(msg.sender, address(this), tokenId);
         _addToken(tokenId);
 
-        // ── Effects ──
+        // Effects
         bkcBalance -= payout;
         nftCount++;
-        k = bkcBalance * nftCount;
+        uint256 effectiveCount = nftCount + virtualReserves;
+        k = bkcBalance * effectiveCount;
 
         totalVolume  += payout;
         totalEthFees += msg.value;
         totalSells++;
 
-        // ── Push BKC to seller ──
+        // Push BKC to seller
         if (payout > 0) {
             bkcToken.transfer(msg.sender, payout);
         }
 
-        // ── ETH fee to ecosystem ──
+        // ETH fee to ecosystem
         ecosystem.collectFee{value: msg.value}(
             msg.sender, operator, address(0), MODULE_ID, 0
         );
@@ -318,12 +329,12 @@ contract NFTPool {
     // VIEWS — PRICES
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Current BKC price to buy an NFT (bonding curve)
+    /// @notice Current BKC price to buy an NFT
     function getBuyPrice() external view returns (uint256) {
         return _buyPrice();
     }
 
-    /// @notice Current BKC payout for selling an NFT (bonding curve)
+    /// @notice Current BKC payout for selling an NFT
     function getSellPrice() external view returns (uint256) {
         return _sellPrice();
     }
@@ -344,7 +355,7 @@ contract NFTPool {
         ethCost = ecosystem.calculateFee(ACTION_SELL, 0);
     }
 
-    /// @notice ETH fee for buy and sell
+    /// @notice ETH fees
     function getEthFees() external view returns (
         uint256 buyFee, uint256 sellFee
     ) {
@@ -358,10 +369,13 @@ contract NFTPool {
 
     /// @notice Pool state summary
     function getPoolInfo() external view returns (
-        uint256 _bkcBalance, uint256 _nftCount, uint256 _k,
-        bool _initialized, uint8 _tier
+        uint256 _bkcBalance, uint256 _nftCount, uint256 _effectiveNftCount,
+        uint256 _virtualReserves, uint256 _k, bool _initialized, uint8 _tier
     ) {
-        return (bkcBalance, nftCount, k, initialized, tier);
+        return (
+            bkcBalance, nftCount, nftCount + virtualReserves,
+            virtualReserves, k, initialized, tier
+        );
     }
 
     /// @notice All NFT token IDs currently in the pool
@@ -402,7 +416,7 @@ contract NFTPool {
     }
 
     function version() external pure returns (string memory) {
-        return "1.0.0";
+        return "2.0.0";
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -418,30 +432,31 @@ contract NFTPool {
         uint256 ethFee = ecosystem.calculateFee(ACTION_BUY, 0);
         if (msg.value < ethFee) revert InsufficientETHFee();
 
-        // Bonding curve price — no BKC tax, just the curve price
+        // Bonding curve price
         uint256 price = _buyPrice();
         if (price == type(uint256).max) revert NoNFTsAvailable();
         if (maxBkcPrice > 0 && price > maxBkcPrice) revert SlippageExceeded();
 
-        // ── Pull BKC from buyer (exact curve price) ──
+        // Pull BKC from buyer
         bkcToken.transferFrom(msg.sender, address(this), price);
 
-        // ── Effects ──
+        // Effects
         bkcBalance += price;
         nftCount--;
-        k = nftCount > 0 ? bkcBalance * nftCount : 0;
+        uint256 effectiveCount = nftCount + virtualReserves;
+        k = effectiveCount > 0 ? bkcBalance * effectiveCount : 0;
         _removeToken(tokenId);
 
         totalVolume  += price;
         totalEthFees += msg.value;
         totalBuys++;
 
-        // ── Push NFT to buyer ──
+        // Push NFT to buyer
         IERC721Pool(rewardBooster).transferFrom(
             address(this), msg.sender, tokenId
         );
 
-        // ── ETH fee to ecosystem ──
+        // ETH fee to ecosystem
         ecosystem.collectFee{value: msg.value}(
             msg.sender, operator, address(0), MODULE_ID, 0
         );
@@ -453,22 +468,26 @@ contract NFTPool {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // INTERNAL — BONDING CURVE
+    // INTERNAL — BONDING CURVE (with virtual reserves)
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @dev Buy price = K / (nftCount - 1) - bkcBalance
-    ///      Returns max uint if ≤ 1 NFT remains (last NFT is reserved)
+    /// @dev Buy price = K / (effectiveNftCount - 1) - bkcBalance
+    ///      Returns max uint if ≤ 1 effective NFT or 0 real NFTs
     function _buyPrice() internal view returns (uint256) {
-        if (!initialized || nftCount <= 1) return type(uint256).max;
-        uint256 newBal = k / (nftCount - 1);
+        if (!initialized) return type(uint256).max;
+        uint256 effectiveCount = nftCount + virtualReserves;
+        if (effectiveCount <= 1 || nftCount == 0) return type(uint256).max;
+        uint256 newBal = k / (effectiveCount - 1);
         return newBal > bkcBalance ? newBal - bkcBalance : 0;
     }
 
-    /// @dev Sell price = bkcBalance - K / (nftCount + 1)
-    ///      Returns 0 if pool has 0 NFTs
+    /// @dev Sell price = bkcBalance - K / (effectiveNftCount + 1)
+    ///      Returns 0 if pool not initialized
     function _sellPrice() internal view returns (uint256) {
-        if (!initialized || nftCount == 0) return 0;
-        uint256 newBal = k / (nftCount + 1);
+        if (!initialized) return 0;
+        uint256 effectiveCount = nftCount + virtualReserves;
+        if (effectiveCount == 0) return 0;
+        uint256 newBal = k / (effectiveCount + 1);
         return bkcBalance > newBal ? bkcBalance - newBal : 0;
     }
 

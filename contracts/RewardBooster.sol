@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 import "./IBackchain.sol";
 
 // ============================================================================
-// REWARD BOOSTER — ERC721 NFT (Immutable)
+// REWARD BOOSTER V2 — ERC721 NFT (Immutable + Fusion)
 // ============================================================================
 //
 // 4-tier utility NFT that boosts staking rewards by reducing burn rate.
@@ -16,17 +16,24 @@ import "./IBackchain.sol";
 //   Diamond     50%      0%           100%
 //   No NFT      0%       50%          50%
 //
+// V2 Changes:
+//   - Only Bronze minted initially (1000 total)
+//   - Higher tiers created ONLY via fusion (burn 2 → mint 1 higher)
+//   - fusionMint() and fusionBurn() callable by authorized fusion contract
+//   - Supply tracking per tier
+//
 // Minimal ERC721 implementation (no OpenZeppelin dependency).
 // Traded via NFTPool bonding curve contracts.
 // getUserBestBoost() called by StakingPool on every claim.
 //
 // Setup:
 //   1. Deploy RewardBooster
-//   2. Deploy 4 NFTPools
-//   3. Call configurePools() (one-time, locks forever)
-//   4. Call mintBatch() for initial inventory (only before configure)
+//   2. Call mintBatch() for initial Bronze inventory (only before configure)
+//   3. Deploy NFTPools and NFTFusion
+//   4. Call configurePools() (one-time, locks initial minting)
+//   5. Call setFusionContract() to authorize NFTFusion
 //
-// No admin. No pause. Fixed supply after configuration.
+// No admin. No pause. Fixed initial supply, fusion creates higher tiers.
 //
 // ============================================================================
 
@@ -37,7 +44,7 @@ interface IERC721Receiver {
     ) external returns (bytes4);
 }
 
-contract RewardBooster is IRewardBooster {
+contract RewardBooster is IRewardBoosterV2 {
 
     // ════════════════════════════════════════════════════════════════════════
     // CONSTANTS
@@ -60,7 +67,6 @@ contract RewardBooster is IRewardBooster {
     // ERC165 interface IDs
     bytes4 private constant ERC165_ID     = 0x01ffc9a7;
     bytes4 private constant ERC721_ID     = 0x80ac58cd;
-    bytes4 private constant ERC721META_ID = 0x5b5e139f;
 
     // ════════════════════════════════════════════════════════════════════════
     // STATE — ERC721
@@ -76,7 +82,16 @@ contract RewardBooster is IRewardBooster {
     // ════════════════════════════════════════════════════════════════════════
 
     uint256 public totalSupply;
-    mapping(uint256 => uint8) public tokenTier;
+    mapping(uint256 => uint8) public override tokenTier;
+
+    /// @notice Supply per tier (Bronze, Silver, Gold, Diamond)
+    mapping(uint8 => uint256) public tierSupply;
+
+    /// @notice Total ever minted per tier (includes burned)
+    mapping(uint8 => uint256) public tierTotalMinted;
+
+    /// @notice Total burned per tier
+    mapping(uint8 => uint256) public tierTotalBurned;
 
     /// @dev Per-user token tracking for getUserBestBoost enumeration
     mapping(address => uint256[]) internal _userTokens;
@@ -93,6 +108,9 @@ contract RewardBooster is IRewardBooster {
     mapping(address => bool) public authorizedPool;
     bool public configured;
 
+    /// @notice Authorized fusion contract (can mint/burn for fusion)
+    address public fusionContract;
+
     // ════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ════════════════════════════════════════════════════════════════════════
@@ -101,6 +119,9 @@ contract RewardBooster is IRewardBooster {
     event Approval(address indexed owner, address indexed approved, uint256 indexed tokenId);
     event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
     event PoolsConfigured(address[4] pools);
+    event FusionContractSet(address indexed fusionAddr);
+    event FusionMinted(address indexed to, uint256 indexed tokenId, uint8 tier);
+    event FusionBurned(address indexed from, uint256 indexed tokenId, uint8 tier);
 
     // ════════════════════════════════════════════════════════════════════════
     // ERRORS
@@ -113,6 +134,7 @@ contract RewardBooster is IRewardBooster {
     error NotAuthorized();
     error AlreadyConfigured();
     error NonERC721Receiver();
+    error FusionAlreadySet();
 
     // ════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -127,7 +149,7 @@ contract RewardBooster is IRewardBooster {
     // ════════════════════════════════════════════════════════════════════════
 
     /// @notice Register the 4 NFTPool addresses. Can only be called once.
-    ///         After this, no more minting is possible — fixed supply forever.
+    ///         After this, no more initial minting is possible.
     function configurePools(address[4] calldata pools) external {
         if (msg.sender != deployer) revert NotAuthorized();
         if (configured) revert AlreadyConfigured();
@@ -137,6 +159,15 @@ contract RewardBooster is IRewardBooster {
             unchecked { ++i; }
         }
         emit PoolsConfigured(pools);
+    }
+
+    /// @notice Set the NFTFusion contract address. Can only be called once.
+    function setFusionContract(address _fusion) external {
+        if (msg.sender != deployer) revert NotAuthorized();
+        if (fusionContract != address(0)) revert FusionAlreadySet();
+        if (_fusion == address(0)) revert ZeroAddress();
+        fusionContract = _fusion;
+        emit FusionContractSet(_fusion);
     }
 
     /// @notice Mint initial NFT inventory. Only deployer, only before configure.
@@ -153,9 +184,58 @@ contract RewardBooster is IRewardBooster {
         for (uint256 i; i < count;) {
             uint256 tokenId = ++totalSupply;
             tokenTier[tokenId] = tier;
+            tierSupply[tier]++;
+            tierTotalMinted[tier]++;
             _mint(to, tokenId);
             unchecked { ++i; }
         }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // FUSION — MINT & BURN (only fusion contract)
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Mint an NFT via fusion. Only callable by authorized fusion contract.
+    /// @param to   Recipient address
+    /// @param tier Tier of the new NFT (1=Silver, 2=Gold, 3=Diamond)
+    /// @return tokenId The newly minted token ID
+    function fusionMint(address to, uint8 tier) external override returns (uint256 tokenId) {
+        if (msg.sender != fusionContract) revert NotAuthorized();
+        if (tier == 0 || tier >= TIER_COUNT) revert InvalidTier();
+
+        tokenId = ++totalSupply;
+        tokenTier[tokenId] = tier;
+        tierSupply[tier]++;
+        tierTotalMinted[tier]++;
+        _mint(to, tokenId);
+
+        emit FusionMinted(to, tokenId, tier);
+    }
+
+    /// @notice Burn an NFT for fusion. Only callable by authorized fusion contract.
+    ///         The NFT must be owned by fusion contract (transferred before calling).
+    /// @param tokenId Token to burn
+    function fusionBurn(uint256 tokenId) external override {
+        if (msg.sender != fusionContract) revert NotAuthorized();
+        address owner = _owners[tokenId];
+        if (owner == address(0)) revert TokenNotFound();
+
+        uint8 tier = tokenTier[tokenId];
+        tierSupply[tier]--;
+        tierTotalBurned[tier]++;
+
+        // Remove from user tracking
+        _removeFromUser(owner, tokenId);
+        _updateBoostRemove(owner, tokenId);
+
+        // Clear ERC721 state
+        delete _tokenApprovals[tokenId];
+        _balances[owner]--;
+        delete _owners[tokenId];
+        // Keep tokenTier for historical queries
+
+        emit FusionBurned(owner, tokenId, tier);
+        emit Transfer(owner, address(0), tokenId);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -236,7 +316,7 @@ contract RewardBooster is IRewardBooster {
         boostBips = _tierBoost(tier);
     }
 
-    function getUserTokens(address user) external view returns (uint256[] memory) {
+    function getUserTokens(address user) external view override returns (uint256[] memory) {
         return _userTokens[user];
     }
 
@@ -252,8 +332,22 @@ contract RewardBooster is IRewardBooster {
         return "None";
     }
 
+    /// @notice Get supply info for all tiers
+    function getTierStats() external view returns (
+        uint256[4] memory supply,
+        uint256[4] memory minted,
+        uint256[4] memory burned
+    ) {
+        for (uint8 i; i < TIER_COUNT;) {
+            supply[i] = tierSupply[i];
+            minted[i] = tierTotalMinted[i];
+            burned[i] = tierTotalBurned[i];
+            unchecked { ++i; }
+        }
+    }
+
     function version() external pure returns (string memory) {
-        return "1.0.0";
+        return "2.0.0";
     }
 
     // ════════════════════════════════════════════════════════════════════════

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 
 // ============================================================================
-// BACKCHAIN ECOSYSTEM — INTERFACES
+// BACKCHAIN ECOSYSTEM — INTERFACES (V2)
 // ============================================================================
 // All module contracts reference these interfaces.
 // Logic is immutable. Parameters are configurable via BackchainEcosystem.
@@ -97,6 +97,9 @@ interface IStakingPool {
     /// @notice Delegate BKC with time lock
     function delegate(uint256 amount, uint256 lockDays, address operator) external payable;
 
+    /// @notice Delegate BKC on behalf of a beneficiary (for vesting contracts)
+    function delegateFor(address beneficiary, uint256 amount, uint256 lockDays) external;
+
     /// @notice Claim accumulated staking rewards
     function claimRewards() external;
 
@@ -159,6 +162,56 @@ interface IRewardBooster {
     /// @return boostBips Boost in basis points:
     ///         0 = none, 1000 = Bronze, 2500 = Silver, 4000 = Gold, 5000 = Diamond
     function getUserBestBoost(address user) external view returns (uint256 boostBips);
+}
+
+// ─── Reward Booster V2 (with Fusion support) ──────────────────────────────
+
+interface IRewardBoosterV2 is IRewardBooster {
+    /// @notice Mint an NFT via fusion (only callable by authorized fusion contract)
+    function fusionMint(address to, uint8 tier) external returns (uint256 tokenId);
+
+    /// @notice Burn an NFT for fusion (only callable by authorized fusion contract)
+    function fusionBurn(uint256 tokenId) external;
+
+    /// @notice Get token tier
+    function tokenTier(uint256 tokenId) external view returns (uint8);
+
+    /// @notice Get all tokens owned by user
+    function getUserTokens(address user) external view returns (uint256[] memory);
+}
+
+// ─── NFT Fusion ────────────────────────────────────────────────────────────
+
+interface INFTFusion {
+    /// @notice Fuse 2 NFTs of the same tier into 1 of the next tier
+    /// @param tokenId1 First NFT to burn
+    /// @param tokenId2 Second NFT to burn
+    /// @param operator Frontend operator earning commission
+    /// @return newTokenId The newly minted higher-tier NFT
+    function fuse(uint256 tokenId1, uint256 tokenId2, address operator)
+        external payable returns (uint256 newTokenId);
+}
+
+// ─── Airdrop Vesting ───────────────────────────────────────────────────────
+
+interface IAirdropVesting {
+    /// @notice Claim airdrop with instant release (auto-stakes for 6 months)
+    function claimAndStake(address operator) external payable;
+
+    /// @notice Claim airdrop with vested release (10% per month, 10 months)
+    function claimVested() external;
+
+    /// @notice Withdraw available vested tokens
+    function withdrawVested() external;
+
+    /// @notice Check claimable amount for a beneficiary
+    function getClaimInfo(address beneficiary) external view returns (
+        uint256 totalAllocation,
+        bool claimed,
+        bool stakedOption,
+        uint256 vestedWithdrawn,
+        uint256 withdrawableNow
+    );
 }
 
 // ─── Buyback Miner ─────────────────────────────────────────────────────────

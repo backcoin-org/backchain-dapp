@@ -4,10 +4,10 @@ pragma solidity ^0.8.28;
 import "./IBackchain.sol";
 
 // ============================================================================
-// FORTUNE POOL — IMMUTABLE (Tier 2: ETH + BKC)
+// FORTUNE POOL V2 — IMMUTABLE (Tier 2: ETH + BKC)
 // ============================================================================
 //
-// Provably fair commit-reveal game with 3 prize tiers.
+// Provably fair commit-reveal game with 3 prize tiers + Activity Pool.
 //
 // How it works:
 //   1. COMMIT: Player picks tiers (1, 2, or 3), submits hash + BKC wager + ETH
@@ -19,28 +19,21 @@ import "./IBackchain.sol";
 //   Tier 1 — range 1-20,  pays  15x  (5% chance)
 //   Tier 2 — range 1-100, pays  75x  (1% chance)
 //
-// The player chooses which tiers to play (any combination).
-// Each winning tier pays: grossWager × multiplier.
-// Multiple wins in a single game stack.
+// V2: Activity Pool
+//   - Excess BKC above POOL_CAP → Activity Pool (instead of burn)
+//   - When Activity Pool reaches ACTIVITY_THRESHOLD (10K BKC):
+//     → Distributes equally to top 10 players by game count in current cycle
+//     → If < 10 players: unclaimed portions are burned
+//     → Cycle resets after distribution
+//   - Incentivizes more games → more ETH fees → more ecosystem revenue
 //
 // Economics:
 //   - 20% BKC fee on wager → ecosystem (burn/stakers/treasury/operator)
 //   - ETH fee per tier played → ecosystem (operator/treasury/buyback)
 //   - 80% of wager enters the prize pool
 //   - Max payout per game: 10% of prize pool
-//   - Pool capped at 1M BKC — excess burned automatically
+//   - Pool capped at 1M BKC — excess → Activity Pool
 //   - Expired games forfeit wager to pool
-//
-// Burn flywheel:
-//   Uniform EV 0.75 across all tiers → pool retains ~5% per wager.
-//   Growth above 1M BKC is burned permanently.
-//   The more people play, the more BKC gets burned.
-//
-// Security:
-//   - Commit-reveal: guesses hidden until blockhash exists
-//   - Per-tier entropy: keccak256(blockhash, gameId, tierIndex)
-//   - 10% payout cap prevents pool drainage
-//   - CEI pattern on all payouts
 //
 // No admin. No pause. Fully immutable and permissionless.
 //
@@ -54,17 +47,18 @@ contract FortunePool {
 
     bytes32 public constant MODULE_ID = keccak256("FORTUNE");
 
-    /// @notice Per-tier ETH fee action IDs (configurable in ecosystem)
     bytes32 public constant ACTION_TIER0 = keccak256("FORTUNE_TIER0");
     bytes32 public constant ACTION_TIER1 = keccak256("FORTUNE_TIER1");
     bytes32 public constant ACTION_TIER2 = keccak256("FORTUNE_TIER2");
 
-    uint8   public constant TIER_COUNT     = 3;
-    uint256 public constant BKC_FEE_BPS    = 2000;       // 20% BKC fee
-    uint256 public constant MAX_PAYOUT_BPS = 1000;        // 10% of pool max
-    uint256 public constant REVEAL_DELAY   = 5;           // blocks to wait
-    uint256 public constant REVEAL_WINDOW  = 200;         // blocks to reveal
-    uint256 public constant POOL_CAP       = 1_000_000e18; // 1M BKC auto-burn
+    uint8   public constant TIER_COUNT          = 3;
+    uint256 public constant BKC_FEE_BPS         = 2000;          // 20% BKC fee
+    uint256 public constant MAX_PAYOUT_BPS      = 1000;          // 10% of pool max
+    uint256 public constant REVEAL_DELAY        = 5;             // blocks to wait
+    uint256 public constant REVEAL_WINDOW       = 200;           // blocks to reveal
+    uint256 public constant POOL_CAP            = 1_000_000e18;  // 1M BKC
+    uint256 public constant ACTIVITY_THRESHOLD  = 10_000e18;     // 10K BKC
+    uint256 public constant TOP_PLAYERS         = 10;            // top 10 per cycle
 
     uint256 private constant BPS = 10_000;
 
@@ -81,24 +75,20 @@ contract FortunePool {
     IBKCToken public immutable bkcToken;
 
     // ════════════════════════════════════════════════════════════════════════
-    // STATE
+    // STATE — GAME
     // ════════════════════════════════════════════════════════════════════════
 
     uint256 public gameCounter;
     uint256 public prizePool;
 
-    /// @dev 3 storage slots per game
-    ///      Slot 1: hash (32 bytes)
-    ///      Slot 2: player(20) + commitBlock(6) + tierMask(1) + status(1) = 28
-    ///      Slot 3: operator(20) + wagerAmount(12) = 32
     struct Commitment {
         bytes32 hash;
         address player;
         uint48  commitBlock;
-        uint8   tierMask;       // bitmask: bit0=tier0, bit1=tier1, bit2=tier2
+        uint8   tierMask;
         uint8   status;
         address operator;
-        uint96  wagerAmount;    // gross wager (before 20% fee)
+        uint96  wagerAmount;
     }
 
     struct GameResult {
@@ -122,6 +112,32 @@ contract FortunePool {
     uint256 public totalBkcBurned;
 
     // ════════════════════════════════════════════════════════════════════════
+    // STATE — ACTIVITY POOL
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice BKC accumulated in the activity pool (from excess above cap)
+    uint256 public activityPool;
+
+    /// @notice Current cycle number (incremented after each distribution)
+    uint256 public currentCycle;
+
+    /// @notice Game count per player in current cycle
+    mapping(address => uint256) public cycleGameCount;
+
+    /// @notice All players who played in current cycle (for enumeration)
+    address[] internal _cyclePlayers;
+    mapping(address => bool) internal _cyclePlayerExists;
+
+    /// @notice Total distributions completed
+    uint256 public totalDistributions;
+
+    /// @notice Total BKC distributed via activity pool
+    uint256 public totalActivityDistributed;
+
+    /// @notice Total BKC burned from activity pool (unclaimed portions)
+    uint256 public totalActivityBurned;
+
+    // ════════════════════════════════════════════════════════════════════════
     // EVENTS
     // ════════════════════════════════════════════════════════════════════════
 
@@ -142,7 +158,15 @@ contract FortunePool {
         uint256 indexed gameId, address indexed player, uint256 forfeitedAmount
     );
     event PrizePoolFunded(address indexed funder, uint256 amount);
-    event PoolExcessBurned(uint256 amount, uint256 newTotalBurned);
+    event PoolExcessToActivity(uint256 amount, uint256 newActivityPool);
+    event ActivityDistributed(
+        uint256 indexed cycle,
+        uint256 totalAmount,
+        uint256 burnedAmount,
+        uint256 playerCount,
+        address[10] topPlayers,
+        uint256[10] gameCounts
+    );
 
     // ════════════════════════════════════════════════════════════════════════
     // ERRORS
@@ -164,6 +188,7 @@ contract FortunePool {
     error BlockhashUnavailable();
     error InvalidTier();
     error WagerTooLarge();
+    error ActivityThresholdNotReached();
 
     // ════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -179,24 +204,6 @@ contract FortunePool {
     // ════════════════════════════════════════════════════════════════════════
 
     /// @notice Commit a bet. Player chooses which tiers to play.
-    ///
-    ///         tierMask is a bitmask:
-    ///           1 (0b001) = tier 0 only
-    ///           2 (0b010) = tier 1 only
-    ///           4 (0b100) = tier 2 only
-    ///           3 (0b011) = tier 0 + tier 1
-    ///           5 (0b101) = tier 0 + tier 2
-    ///           6 (0b110) = tier 1 + tier 2
-    ///           7 (0b111) = all three tiers
-    ///
-    ///         commitHash = keccak256(abi.encode(guesses[], userSecret))
-    ///         guesses array has one entry per selected tier, in ascending order.
-    ///
-    /// @param commitHash  Hash of guesses + secret
-    /// @param wagerAmount BKC to wager (gross, before 20% fee)
-    /// @param tierMask    Which tiers to play (1-7)
-    /// @param operator    Frontend operator address
-    /// @return gameId     Assigned game ID
     function commitPlay(
         bytes32 commitHash,
         uint256 wagerAmount,
@@ -243,7 +250,7 @@ contract FortunePool {
         uint256 newPool = prizePool + netWager;
         prizePool = newPool;
 
-        // Store commitment (bounds check for uint96 packing)
+        // Store commitment
         if (wagerAmount > type(uint96).max) revert WagerTooLarge();
         gameId = ++gameCounter;
         games[gameId] = Commitment({
@@ -260,8 +267,11 @@ contract FortunePool {
         totalGamesPlayed++;
         totalBkcWagered += wagerAmount;
 
-        // Burn excess if pool > 1M (pass cached value to avoid re-read)
-        _checkBurn(newPool);
+        // Track player in current cycle
+        _trackCyclePlayer(msg.sender);
+
+        // Redirect excess to activity pool
+        _checkExcess(newPool);
 
         emit GameCommitted(gameId, msg.sender, wagerAmount, tierMask, operator);
     }
@@ -271,14 +281,6 @@ contract FortunePool {
     // ════════════════════════════════════════════════════════════════════════
 
     /// @notice Reveal guesses and resolve the game.
-    ///
-    ///         guesses[] has one entry per selected tier, in ascending tier order.
-    ///         Example: tierMask=5 (tier 0 + tier 2) → guesses = [guess_t0, guess_t2]
-    ///
-    /// @param gameId    Game ID from commitPlay
-    /// @param guesses   Guesses for each selected tier (ascending order)
-    /// @param userSecret Secret used in commit hash
-    /// @return prizeWon Total prize won (0 if no match)
     function revealPlay(
         uint256 gameId,
         uint256[] calldata guesses,
@@ -297,7 +299,7 @@ contract FortunePool {
         bytes32 expected = keccak256(abi.encode(guesses, userSecret));
         if (expected != g.hash) revert HashMismatch();
 
-        // Validate guess count matches selected tiers
+        // Validate guess count
         uint8 tierMask = g.tierMask;
         uint8 tierCount = _popcount(tierMask);
         if (guesses.length != tierCount) revert InvalidGuessCount();
@@ -306,21 +308,21 @@ contract FortunePool {
         bytes32 entropy = blockhash(revealBlock);
         if (entropy == bytes32(0)) revert BlockhashUnavailable();
 
-        // ── EVALUATE ──
+        // Evaluate
         uint256 grossWager = uint256(g.wagerAmount);
         uint8 matchCount;
         uint256[] memory rolls = new uint256[](tierCount);
         bool[] memory matches = new bool[](tierCount);
         uint8 guessIdx;
 
-        for (uint8 tier; tier < TIER_COUNT;) {
-            if (tierMask & (1 << tier) != 0) {
-                (uint256 range, uint256 mult) = _tierData(tier);
+        for (uint8 tier_; tier_ < TIER_COUNT;) {
+            if (tierMask & (1 << tier_) != 0) {
+                (uint256 range, uint256 mult) = _tierData(tier_);
 
                 if (guesses[guessIdx] < 1 || guesses[guessIdx] > range)
                     revert InvalidGuessRange();
 
-                uint256 roll = _roll(entropy, gameId, tier, range);
+                uint256 roll = _roll(entropy, gameId, tier_, range);
                 rolls[guessIdx] = roll;
 
                 if (guesses[guessIdx] == roll) {
@@ -331,14 +333,14 @@ contract FortunePool {
 
                 unchecked { ++guessIdx; }
             }
-            unchecked { ++tier; }
+            unchecked { ++tier_; }
         }
 
         // Cap at 10% of pool
         uint256 maxPayout = prizePool * MAX_PAYOUT_BPS / BPS;
         if (prizeWon > maxPayout) prizeWon = maxPayout;
 
-        // ── EFFECTS (CEI) ──
+        // Effects (CEI)
         g.status = S_REVEALED;
         delete activeGame[msg.sender];
 
@@ -356,7 +358,7 @@ contract FortunePool {
             revealBlock: uint48(block.number)
         });
 
-        // ── INTERACTIONS ──
+        // Interactions
         if (prizeWon > 0) {
             bkcToken.transfer(msg.sender, prizeWon);
         }
@@ -384,6 +386,52 @@ contract FortunePool {
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    // ACTIVITY POOL — DISTRIBUTE
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Distribute activity pool to top 10 players. Permissionless.
+    ///         Called when activity pool reaches threshold (10K BKC).
+    ///         Top 10 by game count in current cycle split the pool equally.
+    ///         If fewer than 10 players, unclaimed portions are burned.
+    function distributeActivityPool() external {
+        if (activityPool < ACTIVITY_THRESHOLD) revert ActivityThresholdNotReached();
+
+        uint256 amount = activityPool;
+        activityPool = 0;
+
+        // Find top 10 players by game count
+        (address[10] memory topAddrs, uint256[10] memory topCounts, uint256 validCount) = _getTopPlayers();
+
+        uint256 sharePerPlayer = amount / TOP_PLAYERS;
+        uint256 distributed;
+
+        for (uint256 i; i < validCount;) {
+            bkcToken.transfer(topAddrs[i], sharePerPlayer);
+            distributed += sharePerPlayer;
+            unchecked { ++i; }
+        }
+
+        // Burn unclaimed portions (if < 10 players)
+        uint256 toBurn = amount - distributed;
+        if (toBurn > 0) {
+            bkcToken.burn(toBurn);
+            totalBkcBurned += toBurn;
+            totalActivityBurned += toBurn;
+        }
+
+        totalDistributions++;
+        totalActivityDistributed += distributed;
+
+        emit ActivityDistributed(
+            currentCycle, amount, toBurn, validCount,
+            topAddrs, topCounts
+        );
+
+        // Reset cycle
+        _resetCycle();
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     // FUND PRIZE POOL
     // ════════════════════════════════════════════════════════════════════════
 
@@ -393,7 +441,7 @@ contract FortunePool {
         bkcToken.transferFrom(msg.sender, address(this), amount);
         uint256 newPool = prizePool + amount;
         prizePool = newPool;
-        _checkBurn(newPool);
+        _checkExcess(newPool);
         emit PrizePoolFunded(msg.sender, amount);
     }
 
@@ -401,15 +449,13 @@ contract FortunePool {
     // VIEWS: TIERS
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Get tier info
-    function getTierInfo(uint8 tier) external pure returns (
+    function getTierInfo(uint8 tier_) external pure returns (
         uint256 range, uint256 multiplier, uint256 winChanceBps
     ) {
-        (range, multiplier) = _tierData(tier);
+        (range, multiplier) = _tierData(tier_);
         winChanceBps = BPS / range;
     }
 
-    /// @notice Get all 3 tiers
     function getAllTiers() external pure returns (
         uint256[3] memory ranges,
         uint256[3] memory multipliers,
@@ -463,7 +509,6 @@ contract FortunePool {
     // VIEWS: CALCULATIONS
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Calculate potential winnings for a wager and tier selection
     function calculatePotentialWinnings(
         uint256 wagerAmount,
         uint8 tierMask
@@ -488,14 +533,13 @@ contract FortunePool {
         maxPrizeAfterCap = maxPrize > poolCap ? poolCap : maxPrize;
     }
 
-    /// @notice Get total ETH fee for selected tiers
     function getRequiredFee(uint8 tierMask) external view returns (uint256 fee) {
         fee = _calculateEthFee(tierMask);
     }
 
-    /// @notice Pool and game statistics
     function getPoolStats() external view returns (
         uint256 _prizePool,
+        uint256 _activityPool,
         uint256 _totalGamesPlayed,
         uint256 _totalBkcWagered,
         uint256 _totalBkcWon,
@@ -504,9 +548,59 @@ contract FortunePool {
         uint256 _maxPayoutNow
     ) {
         return (
-            prizePool, totalGamesPlayed, totalBkcWagered,
+            prizePool, activityPool, totalGamesPlayed, totalBkcWagered,
             totalBkcWon, totalBkcForfeited, totalBkcBurned,
             prizePool * MAX_PAYOUT_BPS / BPS
+        );
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // VIEWS: ACTIVITY POOL
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Get activity pool state
+    function getActivityPoolInfo() external view returns (
+        uint256 poolBalance,
+        uint256 threshold,
+        uint256 cycle,
+        uint256 playerCount,
+        bool canDistribute
+    ) {
+        return (
+            activityPool,
+            ACTIVITY_THRESHOLD,
+            currentCycle,
+            _cyclePlayers.length,
+            activityPool >= ACTIVITY_THRESHOLD
+        );
+    }
+
+    /// @notice Get top 10 players in current cycle (view only)
+    function getTopPlayersView() external view returns (
+        address[10] memory topAddrs,
+        uint256[10] memory topCounts,
+        uint256 validCount
+    ) {
+        return _getTopPlayers();
+    }
+
+    /// @notice Get a player's game count in current cycle
+    function getPlayerCycleGames(address player) external view returns (uint256) {
+        return cycleGameCount[player];
+    }
+
+    /// @notice Get activity pool stats
+    function getActivityStats() external view returns (
+        uint256 _totalDistributions,
+        uint256 _totalActivityDistributed,
+        uint256 _totalActivityBurned,
+        uint256 _currentCycle
+    ) {
+        return (
+            totalDistributions,
+            totalActivityDistributed,
+            totalActivityBurned,
+            currentCycle
         );
     }
 
@@ -514,7 +608,6 @@ contract FortunePool {
     // HELPERS
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Generate commit hash for frontend
     function generateCommitHash(
         uint256[] calldata guesses,
         bytes32 userSecret
@@ -530,59 +623,113 @@ contract FortunePool {
     // INTERNAL
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @dev Tier data — hardcoded, immutable, compiled into bytecode.
-    ///      Tier 0: range 4,   3x   (25% chance)    — EV 0.75, pool +5%
-    ///      Tier 1: range 20,  15x  (5% chance)     — EV 0.75, pool +5%
-    ///      Tier 2: range 100, 75x  (1% chance)     — EV 0.75, pool +5%
-    function _tierData(uint8 tier) internal pure returns (uint256 range, uint256 multiplierBps) {
-        if (tier == 0) return (4,   30_000);       // 3x
-        if (tier == 1) return (20,  150_000);      // 15x
-        if (tier == 2) return (100, 750_000);      // 75x
+    function _tierData(uint8 tier_) internal pure returns (uint256 range, uint256 multiplierBps) {
+        if (tier_ == 0) return (4,   30_000);    // 3x
+        if (tier_ == 1) return (20,  150_000);   // 15x
+        if (tier_ == 2) return (100, 750_000);   // 75x
         revert InvalidTier();
     }
 
-    /// @dev Deterministic roll: [1, maxRange] inclusive
     function _roll(
         bytes32 entropy, uint256 gameId, uint8 tierIndex, uint256 maxRange
     ) internal pure returns (uint256) {
         return (uint256(keccak256(abi.encodePacked(entropy, gameId, tierIndex))) % maxRange) + 1;
     }
 
-    /// @dev Sum ETH fees for selected tiers (fully gas-based via ecosystem)
     function _calculateEthFee(uint8 tierMask) internal view returns (uint256 fee) {
         if (tierMask & 1 != 0) fee += ecosystem.calculateFee(ACTION_TIER0, 0);
         if (tierMask & 2 != 0) fee += ecosystem.calculateFee(ACTION_TIER1, 0);
         if (tierMask & 4 != 0) fee += ecosystem.calculateFee(ACTION_TIER2, 0);
     }
 
-    /// @dev Count set bits in tier mask (max 3 bits)
     function _popcount(uint8 mask) internal pure returns (uint8 count) {
         if (mask & 1 != 0) count++;
         if (mask & 2 != 0) count++;
         if (mask & 4 != 0) count++;
     }
 
-    /// @dev Expire a game, forfeit wager to pool
     function _expireGame(uint256 gameId, Commitment storage g) internal {
         g.status = S_EXPIRED;
         delete activeGame[g.player];
 
-        // Net wager already in pool from commit — just track the stat
         uint256 netWager = uint256(g.wagerAmount) * (BPS - BKC_FEE_BPS) / BPS;
         totalBkcForfeited += netWager;
 
         emit GameExpired(gameId, g.player, netWager);
     }
 
-    /// @dev Burn excess BKC when pool exceeds 1M cap
-    /// @param currentPool Cached prizePool value (avoids extra SLOAD)
-    function _checkBurn(uint256 currentPool) internal {
+    /// @dev Redirect excess BKC above cap to activity pool (instead of burning)
+    function _checkExcess(uint256 currentPool) internal {
         if (currentPool > POOL_CAP) {
             uint256 excess = currentPool - POOL_CAP;
             prizePool = POOL_CAP;
-            bkcToken.burn(excess);
-            totalBkcBurned += excess;
-            emit PoolExcessBurned(excess, totalBkcBurned);
+            activityPool += excess;
+            emit PoolExcessToActivity(excess, activityPool);
         }
+    }
+
+    /// @dev Track a player's game count in the current cycle
+    function _trackCyclePlayer(address player) internal {
+        cycleGameCount[player]++;
+        if (!_cyclePlayerExists[player]) {
+            _cyclePlayerExists[player] = true;
+            _cyclePlayers.push(player);
+        }
+    }
+
+    /// @dev Find top 10 players by game count (insertion sort on small array)
+    function _getTopPlayers() internal view returns (
+        address[10] memory topAddrs,
+        uint256[10] memory topCounts,
+        uint256 validCount
+    ) {
+        uint256 playerLen = _cyclePlayers.length;
+
+        for (uint256 i; i < playerLen;) {
+            address player = _cyclePlayers[i];
+            uint256 count = cycleGameCount[player];
+
+            // Check if this player qualifies for top 10
+            if (validCount < TOP_PLAYERS || count > topCounts[TOP_PLAYERS - 1]) {
+                // Find insertion position (descending)
+                uint256 pos = validCount < TOP_PLAYERS ? validCount : TOP_PLAYERS - 1;
+                for (uint256 j; j < validCount && j < TOP_PLAYERS;) {
+                    if (count > topCounts[j]) {
+                        pos = j;
+                        break;
+                    }
+                    unchecked { ++j; }
+                }
+
+                // Shift down
+                if (pos < TOP_PLAYERS - 1) {
+                    uint256 end = validCount < TOP_PLAYERS - 1 ? validCount : TOP_PLAYERS - 1;
+                    for (uint256 j = end; j > pos;) {
+                        topAddrs[j] = topAddrs[j - 1];
+                        topCounts[j] = topCounts[j - 1];
+                        unchecked { --j; }
+                    }
+                }
+
+                topAddrs[pos] = player;
+                topCounts[pos] = count;
+                if (validCount < TOP_PLAYERS) validCount++;
+            }
+
+            unchecked { ++i; }
+        }
+    }
+
+    /// @dev Reset cycle data for next round
+    function _resetCycle() internal {
+        uint256 len = _cyclePlayers.length;
+        for (uint256 i; i < len;) {
+            address player = _cyclePlayers[i];
+            delete cycleGameCount[player];
+            delete _cyclePlayerExists[player];
+            unchecked { ++i; }
+        }
+        delete _cyclePlayers;
+        currentCycle++;
     }
 }

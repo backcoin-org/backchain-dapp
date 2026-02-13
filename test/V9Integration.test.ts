@@ -101,7 +101,9 @@ async function deployAllFixture() {
   const nftPools: any[] = [];
   const nftPoolAddrs: string[] = [];
   for (let t = 0; t < 4; t++) {
-    const pool = await NFTPool.deploy(ecosystemAddr, bkcAddr, boosterAddr, t);
+    // V2: virtualReserves — 0 for Bronze (has real NFTs), 10 for higher tiers
+    const virtualReserves = t === 0 ? 0 : 10;
+    const pool = await NFTPool.deploy(ecosystemAddr, bkcAddr, boosterAddr, t, virtualReserves);
     await pool.waitForDeployment();
     nftPools.push(pool);
     nftPoolAddrs.push(await pool.getAddress());
@@ -1183,19 +1185,18 @@ describe("Backchain V10 — Integration Tests", function () {
         const tokens = await f.rewardBooster.getUserTokens(f.alice.address);
         const tokenId = tokens[0];
 
-        // Alice lists NFT for rent
+        // Alice lists NFT for rent (V2: pricePerDay, fixed 1-day rental)
         await f.rewardBooster.connect(f.alice).approve(f.rentalAddr, tokenId);
-        const pricePerHour = ethers.parseEther("0.001"); // 0.001 ETH/hour
-        await f.rentalManager.connect(f.alice).listNFT(tokenId, pricePerHour, 1, 720);
+        const pricePerDay = ethers.parseEther("0.01"); // 0.01 ETH/day
+        await f.rentalManager.connect(f.alice).listNFT(tokenId, pricePerDay);
 
         // Verify listing
         const listing = await f.rentalManager.getListing(tokenId);
         expect(listing.owner).to.equal(f.alice.address);
 
-        // Bob rents for 10 hours
-        const rentalCost = pricePerHour * 10n;
-        await f.rentalManager.connect(f.bob).rentNFT(tokenId, 10, ethers.ZeroAddress, {
-          value: rentalCost, // no ecosystem fee configured for this action
+        // Bob rents for 1 day (V2: fixed duration, no hours arg)
+        await f.rentalManager.connect(f.bob).rentNFT(tokenId, ethers.ZeroAddress, {
+          value: pricePerDay, // no ecosystem fee configured for this action
         });
 
         // Bob should have active rental
@@ -1228,18 +1229,19 @@ describe("Backchain V10 — Integration Tests", function () {
         const tokens = await f.rewardBooster.getUserTokens(f.alice.address);
         const tokenId = tokens[0];
 
+        // V2: listNFT(tokenId, pricePerDay)
         await f.rewardBooster.connect(f.alice).approve(f.rentalAddr, tokenId);
-        await f.rentalManager.connect(f.alice).listNFT(tokenId, ethers.parseEther("0.001"), 1, 24);
+        await f.rentalManager.connect(f.alice).listNFT(tokenId, ethers.parseEther("0.01"));
 
-        // Bob rents for 1 hour
-        await f.rentalManager.connect(f.bob).rentNFT(tokenId, 1, ethers.ZeroAddress, {
-          value: ethers.parseEther("0.001"),
+        // Bob rents for 1 day (V2: fixed 24h duration)
+        await f.rentalManager.connect(f.bob).rentNFT(tokenId, ethers.ZeroAddress, {
+          value: ethers.parseEther("0.01"),
         });
 
         expect(await f.rentalManager.isRented(tokenId)).to.be.true;
 
-        // Advance time past rental
-        await time.increase(3601);
+        // Advance time past 1-day rental (86400 + 1 seconds)
+        await time.increase(86401);
 
         expect(await f.rentalManager.isRented(tokenId)).to.be.false;
 
@@ -1931,22 +1933,19 @@ describe("Backchain V10 — Integration Tests", function () {
       expect(await f.ecosystem.owner()).to.equal(f.alice.address);
     });
 
-    it("fortune pool auto-burns excess above 1M cap", async function () {
+    it("fortune pool redirects excess above 1M cap to activity pool", async function () {
       const f = await loadFixture(deployAllFixture);
 
       // Fund with more than 1M BKC
-      // Alice needs more BKC — transfer from treasury
       const extraBkc = ethers.parseEther("1100000"); // 1.1M
       await f.bkcToken.connect(f.treasury).transfer(f.alice.address, extraBkc);
       await f.bkcToken.connect(f.alice).approve(f.fortuneAddr, extraBkc);
 
-      const burnBefore = await f.bkcToken.totalBurned();
       await f.fortunePool.connect(f.alice).fundPrizePool(extraBkc);
-      const burnAfter = await f.bkcToken.totalBurned();
 
-      // Pool should be capped at 1M, excess burned
+      // V2: Prize pool capped at 1M, excess goes to activity pool (not burned)
       expect(await f.fortunePool.prizePool()).to.equal(ethers.parseEther("1000000"));
-      expect(burnAfter).to.be.gt(burnBefore);
+      expect(await f.fortunePool.activityPool()).to.equal(ethers.parseEther("100000"));
     });
 
     it("operator earns from multiple modules", async function () {

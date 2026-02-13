@@ -4,25 +4,27 @@ pragma solidity ^0.8.28;
 import "./IBackchain.sol";
 
 // ============================================================================
-// RENTAL MANAGER — IMMUTABLE (Tier 1: ETH only)
+// RENTAL MANAGER V2 — IMMUTABLE (Tier 1: ETH only)
 // ============================================================================
 //
 // NFT rental marketplace for RewardBooster NFTs.
 // Rent an NFT to reduce burn rate on staking reward claims.
 //
-//   Without NFT:  50% burned on claim
-//   Bronze rent:  40% burned (user keeps 60%)
-//   Silver rent:  25% burned (user keeps 75%)
-//   Gold rent:    10% burned (user keeps 90%)
-//   Diamond rent:  0% burned (user keeps 100%)
+// V2 Changes:
+//   - Fixed 1-day rental (24 hours). No variable duration.
+//   - Daily pricing (pricePerDay instead of pricePerHour)
+//   - Passive income: list once, auto re-list after rental expires (no withdraw needed)
+//   - Boost feature: owners pay ETH/day for listing visibility (like Agora profile boost)
+//   - Rented NFTs hidden from marketplace (isAvailable view returns false)
+//   - Owner can delist ONLY when not currently rented
 //
 // Flow:
-//   1. Owner lists NFT → NFT escrowed in this contract
-//   2. Tenant rents → pays ETH (rental to owner + fee to ecosystem)
-//   3. Tenant enjoys boost for rental duration
-//   4. Rental expires → NFT available for next rental
-//   5. Owner withdraws NFT (if not rented) → NFT returned
-//   6. Owner claims accumulated ETH earnings
+//   1. Owner lists NFT with pricePerDay → NFT escrowed
+//   2. Tenant rents for 1 day → pays ETH (rental to owner + fee to ecosystem)
+//   3. Rental expires after 24h → NFT auto-available for next rental
+//   4. Owner claims accumulated ETH earnings anytime
+//   5. Owner boosts listing for visibility (optional, pays ETH/day)
+//   6. Owner delists (withdraws NFT) only when not rented
 //
 // Implements IRewardBooster so StakingPool can query rented boost.
 // One active rental per user (best tier wins — rent wisely).
@@ -48,8 +50,11 @@ contract RentalManager is IRewardBooster {
     // CONSTANTS
     // ════════════════════════════════════════════════════════════════════════
 
-    bytes32 public constant MODULE_ID    = keccak256("RENTAL");
-    bytes32 public constant ACTION_RENT  = keccak256("RENTAL_RENT");
+    bytes32 public constant MODULE_ID     = keccak256("RENTAL");
+    bytes32 public constant ACTION_RENT   = keccak256("RENTAL_RENT");
+    bytes32 public constant ACTION_BOOST  = keccak256("RENTAL_BOOST");
+
+    uint256 public constant RENTAL_DURATION = 1 days;  // Fixed 24-hour rental
 
     uint256 private constant BOOST_BRONZE  = 1000;
     uint256 private constant BOOST_SILVER  = 2500;
@@ -71,11 +76,10 @@ contract RentalManager is IRewardBooster {
     struct Listing {
         // Slot 1 (28 bytes)
         address owner;          // 20 bytes
-        uint16  minHours;       // 2 bytes — minimum rental duration
-        uint16  maxHours;       // 2 bytes — maximum rental duration
-        uint32  rentalCount;    // 4 bytes — supports up to 4B rentals
+        uint32  rentalCount;    // 4 bytes
+        uint32  boostExpiry;    // 4 bytes — unix timestamp (boost visibility end)
         // Slot 2 (24 bytes)
-        uint96  pricePerHour;   // 12 bytes — ETH per hour (wei)
+        uint96  pricePerDay;    // 12 bytes — ETH per day (wei)
         uint96  totalEarnings;  // 12 bytes — lifetime ETH earned
     }
 
@@ -107,6 +111,7 @@ contract RentalManager is IRewardBooster {
     uint256 public totalRentals;
     uint256 public totalEthFees;
     uint256 public totalEarningsWithdrawn;
+    uint256 public totalBoostRevenue;
 
     // Reentrancy guard
     uint8 private _locked;
@@ -117,12 +122,11 @@ contract RentalManager is IRewardBooster {
 
     event NFTListed(
         uint256 indexed tokenId, address indexed owner,
-        uint96 pricePerHour, uint16 minHours, uint16 maxHours
+        uint96 pricePerDay
     );
 
     event ListingUpdated(
-        uint256 indexed tokenId,
-        uint96 pricePerHour, uint16 minHours, uint16 maxHours
+        uint256 indexed tokenId, uint96 pricePerDay
     );
 
     event NFTWithdrawn(
@@ -131,9 +135,15 @@ contract RentalManager is IRewardBooster {
 
     event NFTRented(
         uint256 indexed tokenId, address indexed tenant,
-        address indexed owner, uint256 hours_,
+        address indexed owner,
         uint256 rentalCost, uint256 ethFee,
         uint48 endTime, address operator
+    );
+
+    event ListingBoosted(
+        uint256 indexed tokenId, address indexed owner,
+        uint256 days_, uint256 boostCost,
+        uint32 newBoostExpiry
     );
 
     event EarningsWithdrawn(
@@ -149,9 +159,8 @@ contract RentalManager is IRewardBooster {
     error AlreadyListed();
     error RentalStillActive();
     error UserAlreadyRenting();
-    error InvalidDuration();
-    error InvalidHoursRange();
     error ZeroPrice();
+    error ZeroDays();
     error InsufficientPayment();
     error NothingToWithdraw();
     error TransferFailed();
@@ -181,22 +190,17 @@ contract RentalManager is IRewardBooster {
     // LIST NFT
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice List an NFT for rent. NFT is escrowed in this contract.
+    /// @notice List an NFT for rent. NFT is escrowed. Fixed 1-day rentals.
+    ///         List once → passive income (auto re-lists after each rental).
     ///         Must approve this contract for the NFT first.
     ///
-    /// @param tokenId      NFT to list
-    /// @param pricePerHour ETH rental price per hour (wei)
-    /// @param minHours     Minimum rental duration (hours)
-    /// @param maxHours     Maximum rental duration (hours)
+    /// @param tokenId    NFT to list
+    /// @param pricePerDay ETH rental price per day (wei)
     function listNFT(
         uint256 tokenId,
-        uint96  pricePerHour,
-        uint16  minHours,
-        uint16  maxHours
+        uint96  pricePerDay
     ) external nonReentrant {
-        if (pricePerHour == 0) revert ZeroPrice();
-        if (minHours == 0 || maxHours == 0) revert InvalidDuration();
-        if (minHours > maxHours) revert InvalidHoursRange();
+        if (pricePerDay == 0) revert ZeroPrice();
         if (listings[tokenId].owner != address(0)) revert AlreadyListed();
 
         // Escrow NFT
@@ -206,36 +210,29 @@ contract RentalManager is IRewardBooster {
 
         listings[tokenId] = Listing({
             owner: msg.sender,
-            minHours: minHours,
-            maxHours: maxHours,
             rentalCount: 0,
-            pricePerHour: pricePerHour,
+            boostExpiry: 0,
+            pricePerDay: pricePerDay,
             totalEarnings: 0
         });
 
         _addListed(tokenId);
 
-        emit NFTListed(tokenId, msg.sender, pricePerHour, minHours, maxHours);
+        emit NFTListed(tokenId, msg.sender, pricePerDay);
     }
 
-    /// @notice Update listing parameters. Only when not currently rented.
+    /// @notice Update listing price. Only when not currently rented.
     function updateListing(
         uint256 tokenId,
-        uint96  pricePerHour,
-        uint16  minHours,
-        uint16  maxHours
+        uint96  pricePerDay
     ) external {
         Listing storage l = listings[tokenId];
         if (l.owner != msg.sender) revert NotListingOwner();
-        if (pricePerHour == 0) revert ZeroPrice();
-        if (minHours == 0 || maxHours == 0) revert InvalidDuration();
-        if (minHours > maxHours) revert InvalidHoursRange();
+        if (pricePerDay == 0) revert ZeroPrice();
 
-        l.pricePerHour = pricePerHour;
-        l.minHours     = minHours;
-        l.maxHours     = maxHours;
+        l.pricePerDay = pricePerDay;
 
-        emit ListingUpdated(tokenId, pricePerHour, minHours, maxHours);
+        emit ListingUpdated(tokenId, pricePerDay);
     }
 
     /// @notice Withdraw NFT from escrow. Only if not currently rented.
@@ -260,25 +257,21 @@ contract RentalManager is IRewardBooster {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // RENT NFT
+    // RENT NFT (fixed 1-day)
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Rent an NFT for a specified duration.
+    /// @notice Rent an NFT for 1 day (24 hours).
     ///         msg.value must cover rentalCost + ecosystem ETH fee.
     ///         One active rental per user at a time.
     ///
     /// @param tokenId  NFT to rent
-    /// @param hours_   Duration in hours (within listing min/max)
     /// @param operator Frontend operator earning commission
     function rentNFT(
         uint256 tokenId,
-        uint256 hours_,
         address operator
     ) external payable nonReentrant {
         Listing storage l = listings[tokenId];
         if (l.owner == address(0)) revert NFTNotListed();
-        if (hours_ < l.minHours || hours_ > l.maxHours)
-            revert InvalidHoursRange();
 
         // NFT must not be currently rented
         if (activeRentals[tokenId].endTime > block.timestamp)
@@ -294,14 +287,14 @@ contract RentalManager is IRewardBooster {
         }
 
         // Calculate costs
-        uint256 rentalCost = uint256(l.pricePerHour) * hours_;
+        uint256 rentalCost = uint256(l.pricePerDay);
         uint256 ethFee     = ecosystem.calculateFee(ACTION_RENT, rentalCost);
         uint256 required   = rentalCost + ethFee;
         if (msg.value < required) revert InsufficientPayment();
 
-        uint48 endTime = uint48(block.timestamp + hours_ * 1 hours);
+        uint48 endTime = uint48(block.timestamp + RENTAL_DURATION);
 
-        // ── Effects ──
+        // Effects
         activeRentals[tokenId] = Rental({
             tenant: msg.sender,
             endTime: endTime
@@ -317,7 +310,7 @@ contract RentalManager is IRewardBooster {
         totalEthFees += ethFee;
         totalRentals++;
 
-        // ── Fee to ecosystem ──
+        // Fee to ecosystem
         if (ethFee > 0) {
             ecosystem.collectFee{value: ethFee}(
                 msg.sender, operator, l.owner, MODULE_ID, 0
@@ -325,9 +318,49 @@ contract RentalManager is IRewardBooster {
         }
 
         emit NFTRented(
-            tokenId, msg.sender, l.owner, hours_,
+            tokenId, msg.sender, l.owner,
             rentalCost, ethFee, endTime, operator
         );
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // BOOST LISTING (pay for visibility)
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Boost a listing's visibility for X days. Pays ETH fee.
+    ///         Similar to Agora profile boost. Stacks with existing boost.
+    ///
+    /// @param tokenId NFT listing to boost
+    /// @param days_   Number of days to boost
+    function boostListing(
+        uint256 tokenId,
+        uint256 days_
+    ) external payable nonReentrant {
+        Listing storage l = listings[tokenId];
+        if (l.owner != msg.sender) revert NotListingOwner();
+        if (days_ == 0) revert ZeroDays();
+
+        // Fee = ecosystem fee per boost action × days
+        uint256 feePerDay = ecosystem.calculateFee(ACTION_BOOST, 0);
+        uint256 totalFee = feePerDay * days_;
+        if (msg.value < totalFee) revert InsufficientPayment();
+
+        // Extend boost: from now or from current expiry, whichever is later
+        uint256 baseTime = block.timestamp;
+        if (l.boostExpiry > block.timestamp) {
+            baseTime = l.boostExpiry;
+        }
+        uint32 newExpiry = uint32(baseTime + days_ * 1 days);
+        l.boostExpiry = newExpiry;
+
+        totalBoostRevenue += msg.value;
+
+        // ETH fee to ecosystem
+        ecosystem.collectFee{value: msg.value}(
+            msg.sender, address(0), address(0), MODULE_ID, 0
+        );
+
+        emit ListingBoosted(tokenId, msg.sender, days_, msg.value, newExpiry);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -339,11 +372,11 @@ contract RentalManager is IRewardBooster {
         uint256 amount = pendingEarnings[msg.sender];
         if (amount == 0) revert NothingToWithdraw();
 
-        // ── Effects (CEI) ──
+        // Effects (CEI)
         pendingEarnings[msg.sender] = 0;
         totalEarningsWithdrawn += amount;
 
-        // ── Interaction ──
+        // Interaction
         (bool ok, ) = payable(msg.sender).call{value: amount}("");
         if (!ok) revert TransferFailed();
 
@@ -355,8 +388,6 @@ contract RentalManager is IRewardBooster {
     // ════════════════════════════════════════════════════════════════════════
 
     /// @notice Get the user's best rented boost. O(1).
-    ///         StakingPool calls this alongside RewardBooster.getUserBestBoost()
-    ///         and takes the max of owned vs rented boost.
     function getUserBestBoost(address user) external view override returns (uint256) {
         uint256 tokenId = userActiveRental[user];
         if (tokenId == 0) return 0;
@@ -373,21 +404,28 @@ contract RentalManager is IRewardBooster {
 
     /// @notice Full listing details
     function getListing(uint256 tokenId) external view returns (
-        address owner, uint96 pricePerHour,
-        uint16 minHours, uint16 maxHours,
-        uint96 totalEarnings, uint32 rentalCount,
-        bool currentlyRented, uint48 rentalEndTime
+        address owner, uint96 pricePerDay,
+        uint96 totalEarnings_, uint32 rentalCount,
+        bool currentlyRented, uint48 rentalEndTime,
+        bool isBoosted, uint32 boostExpiry
     ) {
         Listing memory l = listings[tokenId];
         Rental memory r = activeRentals[tokenId];
         bool rented = r.endTime > block.timestamp;
 
         return (
-            l.owner, l.pricePerHour,
-            l.minHours, l.maxHours,
+            l.owner, l.pricePerDay,
             l.totalEarnings, l.rentalCount,
-            rented, r.endTime
+            rented, r.endTime,
+            l.boostExpiry > block.timestamp, l.boostExpiry
         );
+    }
+
+    /// @notice Check if NFT is available for rent (listed and not currently rented)
+    function isAvailable(uint256 tokenId) external view returns (bool) {
+        Listing memory l = listings[tokenId];
+        if (l.owner == address(0)) return false;
+        return activeRentals[tokenId].endTime <= block.timestamp;
     }
 
     /// @notice Current rental details
@@ -420,11 +458,11 @@ contract RentalManager is IRewardBooster {
     }
 
     /// @notice Preview rental cost: rentalETH + ecosystemFee
-    function getRentalCost(uint256 tokenId, uint256 hours_) external view returns (
+    function getRentalCost(uint256 tokenId) external view returns (
         uint256 rentalCost, uint256 ethFee, uint256 totalCost
     ) {
         Listing memory l = listings[tokenId];
-        rentalCost = uint256(l.pricePerHour) * hours_;
+        rentalCost = uint256(l.pricePerDay);
         ethFee     = ecosystem.calculateFee(ACTION_RENT, rentalCost);
         totalCost  = rentalCost + ethFee;
     }
@@ -443,25 +481,58 @@ contract RentalManager is IRewardBooster {
         return _listedTokens.length;
     }
 
+    /// @notice Get available (not rented) listings, with boosted first
+    function getAvailableListings() external view returns (
+        uint256[] memory tokenIds,
+        bool[] memory boosted
+    ) {
+        uint256 len = _listedTokens.length;
+        uint256 count;
+
+        // Count available
+        for (uint256 i; i < len;) {
+            if (activeRentals[_listedTokens[i]].endTime <= block.timestamp) {
+                count++;
+            }
+            unchecked { ++i; }
+        }
+
+        tokenIds = new uint256[](count);
+        boosted = new bool[](count);
+        uint256 idx;
+
+        for (uint256 i; i < len;) {
+            uint256 tid = _listedTokens[i];
+            if (activeRentals[tid].endTime <= block.timestamp) {
+                tokenIds[idx] = tid;
+                boosted[idx] = listings[tid].boostExpiry > block.timestamp;
+                idx++;
+            }
+            unchecked { ++i; }
+        }
+    }
+
     /// @notice Marketplace statistics
     function getStats() external view returns (
         uint256 activeListings,
         uint256 volume,
         uint256 rentals,
         uint256 ethFees,
-        uint256 earningsWithdrawn
+        uint256 earningsWithdrawn,
+        uint256 boostRevenue
     ) {
         return (
             _listedTokens.length,
             totalVolume,
             totalRentals,
             totalEthFees,
-            totalEarningsWithdrawn
+            totalEarningsWithdrawn,
+            totalBoostRevenue
         );
     }
 
     function version() external pure returns (string memory) {
-        return "1.0.0";
+        return "2.0.0";
     }
 
     // ════════════════════════════════════════════════════════════════════════
