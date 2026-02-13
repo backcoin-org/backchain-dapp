@@ -993,11 +993,11 @@ function renderFusionSection() {
     if (!State.isConnected) { container.innerHTML = ''; return; }
 
     const boosters = State.myBoosters || [];
-    if (boosters.length === 0) { container.innerHTML = ''; return; }
-
     const nftsByTier = getAvailableNftsByTier();
     const totalAvailable = Object.values(nftsByTier).reduce((s, arr) => s + arr.length, 0);
-    if (totalAvailable === 0) { container.innerHTML = ''; return; }
+
+    // Always show the card — even with 0 NFTs, show the upgrade path explanation
+    const hasNfts = totalAvailable > 0;
 
     container.innerHTML = `
         <div class="nft-fusion-card">
@@ -1010,7 +1010,10 @@ function renderFusionSection() {
                 </button>
             </div>
             <div class="nft-fusion-body">
-                ${fusionActiveTab === 'fuse' ? renderFuseTab(nftsByTier) : renderSplitTab(nftsByTier)}
+                ${hasNfts
+                    ? (fusionActiveTab === 'fuse' ? renderFuseTab(nftsByTier) : renderSplitTab(nftsByTier))
+                    : renderFusionExplainer()
+                }
             </div>
             <div class="nft-fusion-stats" id="nft-fusion-stats"></div>
         </div>
@@ -1026,6 +1029,50 @@ function renderFusionSection() {
         if (parts.length === 0) { el.style.display = 'none'; return; }
         el.innerHTML = `<i class="fa-solid fa-chart-simple" style="font-size:8px;opacity:0.5"></i> ${parts.join(' &middot; ')} on the platform`;
     }).catch(() => {});
+}
+
+function renderFusionExplainer() {
+    return `
+        <div style="text-align:center;padding:16px 10px">
+            <div style="font-size:13px;font-weight:800;color:var(--nft-text);margin-bottom:10px">
+                <i class="fa-solid fa-fire" style="color:#f59e0b"></i> NFT Fusion System
+            </div>
+            <div style="font-size:10px;color:var(--nft-text-3);margin-bottom:14px;line-height:1.5">
+                Combine 2 NFTs of the same tier into 1 higher-tier NFT.<br>
+                Even when pools are sold out, you can reach Diamond through fusion!
+            </div>
+            <div style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+                <span style="display:inline-flex;align-items:center;gap:3px;padding:4px 10px;border-radius:8px;background:${TIER_CONFIG.Bronze.bg};border:1px solid ${TIER_CONFIG.Bronze.border};font-size:10px;font-weight:700;color:${TIER_CONFIG.Bronze.color}">
+                    2x ${TIER_CONFIG.Bronze.icon} Bronze
+                </span>
+                <i class="fa-solid fa-arrow-right" style="font-size:9px;color:var(--nft-accent)"></i>
+                <span style="display:inline-flex;align-items:center;gap:3px;padding:4px 10px;border-radius:8px;background:${TIER_CONFIG.Silver.bg};border:1px solid ${TIER_CONFIG.Silver.border};font-size:10px;font-weight:700;color:${TIER_CONFIG.Silver.color}">
+                    1x ${TIER_CONFIG.Silver.icon} Silver
+                </span>
+                <i class="fa-solid fa-arrow-right" style="font-size:9px;color:var(--nft-accent)"></i>
+                <span style="display:inline-flex;align-items:center;gap:3px;padding:4px 10px;border-radius:8px;background:${TIER_CONFIG.Gold.bg};border:1px solid ${TIER_CONFIG.Gold.border};font-size:10px;font-weight:700;color:${TIER_CONFIG.Gold.color}">
+                    ${TIER_CONFIG.Gold.icon} Gold
+                </span>
+                <i class="fa-solid fa-arrow-right" style="font-size:9px;color:var(--nft-accent)"></i>
+                <span style="display:inline-flex;align-items:center;gap:3px;padding:4px 10px;border-radius:8px;background:${TIER_CONFIG.Diamond.bg};border:1px solid ${TIER_CONFIG.Diamond.border};font-size:10px;font-weight:700;color:${TIER_CONFIG.Diamond.color}">
+                    ${TIER_CONFIG.Diamond.icon} Diamond
+                </span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:320px;margin:0 auto 12px">
+                <div style="padding:8px;border-radius:8px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15)">
+                    <div style="font-size:10px;font-weight:800;color:#f59e0b;margin-bottom:2px"><i class="fa-solid fa-fire"></i> Fuse</div>
+                    <div style="font-size:9px;color:var(--nft-text-3)">2 same-tier NFTs &rarr; 1 higher tier</div>
+                </div>
+                <div style="padding:8px;border-radius:8px;background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.15)">
+                    <div style="font-size:10px;font-weight:800;color:#a78bfa;margin-bottom:2px"><i class="fa-solid fa-scissors"></i> Split</div>
+                    <div style="font-size:9px;color:var(--nft-text-3)">1 NFT &rarr; 2 lower-tier NFTs</div>
+                </div>
+            </div>
+            <div style="font-size:10px;color:var(--nft-accent);font-weight:700">
+                <i class="fa-solid fa-arrow-up"></i> Buy Bronze NFTs above to start fusing!
+            </div>
+        </div>
+    `;
 }
 
 function renderFuseTab(nftsByTier) {
