@@ -11,7 +11,7 @@ const ethers = window.ethers;
 import { DOMElements } from './dom-elements.js';
 import { State } from './state.js';
 import { initPublicProvider, initWalletSubscriptions, disconnectWallet, openConnectModal } from './modules/wallet.js';
-import { showToast, showShareModal, showWelcomeModal, openModal, closeModal } from './ui-feedback.js';
+import { showToast, showShareModal, showWelcomeModal, dismissSplash, openModal, closeModal } from './ui-feedback.js';
 import { formatBigNumber } from './utils.js'; 
 import { loadAddresses } from './config.js'; 
 
@@ -516,40 +516,80 @@ function captureReferralParam() {
 function showReferralWelcomeOverlay(referrerAddress) {
     const shortAddr = `${referrerAddress.slice(0, 6)}...${referrerAddress.slice(-4)}`;
 
-    const content = `
-        <div class="text-center py-4">
-            <div style="width:64px;height:64px;border-radius:16px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
-                <i class="fa-solid fa-gift text-3xl" style="color:#f59e0b;"></i>
+    // Inject shared splash styles
+    if (!document.getElementById('splash-styles')) {
+        const s = document.createElement('style');
+        s.id = 'splash-styles';
+        s.textContent = `
+            @keyframes splash-in { 0% { opacity:0; transform:scale(0.92) translateY(12px); } 100% { opacity:1; transform:scale(1) translateY(0); } }
+            @keyframes splash-out { 0% { opacity:1; transform:scale(1); } 100% { opacity:0; transform:scale(0.95) translateY(-8px); } }
+            @keyframes quote-line { 0% { width:0; } 100% { width:100%; } }
+            @keyframes letter-in { 0% { opacity:0; transform:translateY(6px); } 100% { opacity:1; transform:translateY(0); } }
+            .splash-enter { animation: splash-in 0.6s cubic-bezier(0.16,1,0.3,1) forwards; }
+            .splash-exit  { animation: splash-out 0.4s ease-in forwards; }
+            .quote-line   { animation: quote-line 2s ease-out 0.4s both; }
+            .letter-stagger span { display:inline-block; opacity:0; animation: letter-in 0.3s ease-out both; }
+        `;
+        document.head.appendChild(s);
+    }
+
+    const title = 'Backchain';
+    const letters = [...title].map((ch, i) =>
+        `<span style="animation-delay:${0.6 + i * 0.05}s">${ch}</span>`
+    ).join('');
+
+    const overlay = document.createElement('div');
+    overlay.id = 'welcome-splash';
+    overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm';
+    overlay.style.opacity = '0';
+    overlay.style.transition = 'opacity 0.3s ease';
+
+    overlay.innerHTML = `
+        <div class="splash-enter text-center px-8 max-w-sm">
+            <img src="/assets/bkc_logo_3d.png" alt="" class="h-16 w-16 mx-auto rounded-full mb-5 ring-1 ring-amber-500/30 shadow-lg shadow-amber-500/20">
+
+            <p class="text-3xl font-black text-white tracking-wide letter-stagger mb-1">${letters}</p>
+            <p class="text-zinc-500 text-[11px] uppercase tracking-[0.25em] mb-5">Unstoppable DeFi</p>
+
+            <div class="relative mb-5">
+                <div class="h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent quote-line"></div>
+                <p class="text-zinc-400 text-sm italic mt-3 leading-relaxed">
+                    "I may not agree with what you say, but I will defend to the death your right to say it."
+                </p>
+                <p class="text-amber-500/70 text-xs font-semibold mt-1.5">— Voltaire</p>
+                <div class="h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent mt-3 quote-line"></div>
             </div>
-            <h2 class="text-2xl font-extrabold text-white mb-2">Welcome to Backchain!</h2>
-            <p class="text-zinc-400 mb-2">You've been invited by</p>
-            <div class="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-4" style="background:rgba(39,39,42,0.8);border:1px solid rgba(63,63,70,0.5);">
-                <span class="font-mono text-sm" style="color:#f59e0b;">${shortAddr}</span>
+
+            <!-- Referral info -->
+            <div class="mb-4">
+                <p class="text-zinc-500 text-xs mb-1.5">Invited by</p>
+                <span class="inline-flex items-center gap-1.5 bg-zinc-800/80 border border-zinc-700/50 rounded-full px-3 py-1">
+                    <i class="fa-solid fa-user-plus text-amber-400 text-[10px]"></i>
+                    <span class="font-mono text-sm text-amber-400">${shortAddr}</span>
+                </span>
             </div>
-            <p class="text-zinc-400 text-sm mb-6">Connect your wallet to receive <strong style="color:#f59e0b;">free BKC tokens</strong> and start earning!</p>
 
             <div id="referral-overlay-state">
-                <button id="referral-overlay-connect" class="w-full font-bold py-3 px-6 rounded-xl transition-colors text-lg" style="background:#f59e0b;color:#000;">
-                    <i class="fa-solid fa-wallet mr-2"></i> Get Started
+                <button id="referral-overlay-connect" class="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl text-base hover:shadow-lg hover:shadow-amber-500/30 transition-all">
+                    <i class="fa-solid fa-wallet mr-2"></i>Get Started
                 </button>
             </div>
 
-            <button id="referral-overlay-skip" class="mt-3 text-zinc-500 hover:text-zinc-300 text-sm transition-colors cursor-pointer">
+            <button id="referral-overlay-skip" class="mt-3 text-zinc-600 hover:text-zinc-400 text-xs transition-colors">
                 Skip for now
             </button>
         </div>
     `;
 
-    openModal(content, 'max-w-md', false);
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => { overlay.style.opacity = '1'; });
 
-    setTimeout(() => {
-        document.getElementById('referral-overlay-connect')?.addEventListener('click', () => {
-            openConnectModal();
-        });
-        document.getElementById('referral-overlay-skip')?.addEventListener('click', () => {
-            closeModal();
-        });
-    }, 100);
+    document.getElementById('referral-overlay-connect')?.addEventListener('click', () => {
+        openConnectModal();
+    });
+    document.getElementById('referral-overlay-skip')?.addEventListener('click', () => {
+        dismissSplash();
+    });
 }
 
 async function processReferralAfterConnect() {
@@ -563,9 +603,9 @@ async function processReferralAfterConnect() {
     const stateEl = document.getElementById('referral-overlay-state');
     if (stateEl) {
         stateEl.innerHTML = `
-            <div class="flex flex-col items-center gap-3 py-2">
-                <div class="loader"></div>
-                <p class="text-zinc-400 text-sm">Setting up your account...</p>
+            <div class="flex flex-col items-center gap-2 py-2">
+                <i class="fa-solid fa-spinner fa-spin text-amber-400 text-xl"></i>
+                <p class="text-zinc-400 text-xs">Setting up your account...</p>
             </div>
         `;
         const skipBtn = document.getElementById('referral-overlay-skip');
@@ -590,26 +630,25 @@ async function processReferralAfterConnect() {
             if (stateEl) {
                 let successMsg = '';
                 if (data.faucetClaimed && data.bonusBkc !== '0') {
-                    successMsg = `<p class="text-lg font-bold mb-1" style="color:#f59e0b;">You received ${data.bonusBkc} BKC!</p>`;
+                    successMsg = `<p class="text-amber-400 font-bold mb-1">You received ${data.bonusBkc} BKC!</p>`;
                 }
-                if (data.referrerSet) {
-                    successMsg += `<p class="text-sm text-zinc-400">Your referrer has been set on-chain.</p>`;
-                } else {
-                    successMsg += `<p class="text-sm text-zinc-400">Welcome to Backchain!</p>`;
-                }
+                successMsg += data.referrerSet
+                    ? `<p class="text-zinc-500 text-xs">Referrer set on-chain</p>`
+                    : `<p class="text-zinc-500 text-xs">Welcome to Backchain!</p>`;
+
                 stateEl.innerHTML = `
                     <div class="flex flex-col items-center gap-3">
-                        <div class="w-12 h-12 rounded-full flex items-center justify-center" style="background:rgba(34,197,94,0.2);">
-                            <i class="fa-solid fa-check text-2xl" style="color:#22c55e;"></i>
+                        <div class="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                            <i class="fa-solid fa-check text-emerald-400 text-lg"></i>
                         </div>
                         ${successMsg}
-                        <button id="referral-overlay-done" class="w-full font-bold py-3 px-6 rounded-xl transition-colors" style="background:#f59e0b;color:#000;">
+                        <button id="referral-overlay-done" class="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl transition-all">
                             Start Exploring
                         </button>
                     </div>
                 `;
                 document.getElementById('referral-overlay-done')?.addEventListener('click', () => {
-                    closeModal();
+                    dismissSplash();
                     updateUIState(true);
                 });
             }
@@ -619,12 +658,12 @@ async function processReferralAfterConnect() {
             }
         } else {
             localStorage.removeItem('backchain_referrer');
-            closeModal();
+            dismissSplash();
             if (data.error) showToast(data.error, 'warning');
         }
     } catch (e) {
         console.warn('[Referral] API call failed:', e.message);
-        closeModal();
+        dismissSplash();
         showToast('Referral setup failed. You can set it manually on the Invite page.', 'warning');
     }
 }

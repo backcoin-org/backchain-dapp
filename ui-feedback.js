@@ -326,32 +326,46 @@ const navigateAndClose = (target) => {
     closeModal();
 };
 
+// Shared splash overlay styles + helpers (used by welcome + referral)
+function injectSplashStyles() {
+    if (document.getElementById('splash-styles')) return;
+    const s = document.createElement('style');
+    s.id = 'splash-styles';
+    s.textContent = `
+        @keyframes splash-in { 0% { opacity:0; transform:scale(0.92) translateY(12px); } 100% { opacity:1; transform:scale(1) translateY(0); } }
+        @keyframes splash-out { 0% { opacity:1; transform:scale(1); } 100% { opacity:0; transform:scale(0.95) translateY(-8px); } }
+        @keyframes quote-line { 0% { width:0; } 100% { width:100%; } }
+        @keyframes letter-in { 0% { opacity:0; transform:translateY(6px); } 100% { opacity:1; transform:translateY(0); } }
+        .splash-enter { animation: splash-in 0.6s cubic-bezier(0.16,1,0.3,1) forwards; }
+        .splash-exit  { animation: splash-out 0.4s ease-in forwards; }
+        .quote-line   { animation: quote-line 2s ease-out 0.4s both; }
+        .letter-stagger span { display:inline-block; opacity:0; animation: letter-in 0.3s ease-out both; }
+    `;
+    document.head.appendChild(s);
+}
+
+function buildStaggeredTitle(text = 'Backchain') {
+    return [...text].map((ch, i) =>
+        `<span style="animation-delay:${0.6 + i * 0.05}s">${ch}</span>`
+    ).join('');
+}
+
+export function dismissSplash(id = 'welcome-splash') {
+    const overlay = document.getElementById(id);
+    if (!overlay || overlay._dismissed) return;
+    overlay._dismissed = true;
+    const inner = overlay.querySelector('.splash-enter,.splash-content');
+    if (inner) { inner.classList.remove('splash-enter'); inner.classList.add('splash-exit'); }
+    overlay.style.opacity = '0';
+    setTimeout(() => overlay.remove(), 500);
+}
+
 export function showWelcomeModal() {
     if (hasShownWelcomeModal) return;
     hasShownWelcomeModal = true;
 
-    // Inject splash-specific keyframes
-    if (!document.getElementById('splash-styles')) {
-        const s = document.createElement('style');
-        s.id = 'splash-styles';
-        s.textContent = `
-            @keyframes splash-in { 0% { opacity:0; transform:scale(0.92) translateY(12px); } 100% { opacity:1; transform:scale(1) translateY(0); } }
-            @keyframes splash-out { 0% { opacity:1; transform:scale(1); } 100% { opacity:0; transform:scale(0.95) translateY(-8px); } }
-            @keyframes quote-line { 0% { width:0; } 100% { width:100%; } }
-            @keyframes letter-in { 0% { opacity:0; transform:translateY(6px); } 100% { opacity:1; transform:translateY(0); } }
-            .splash-enter { animation: splash-in 0.6s cubic-bezier(0.16,1,0.3,1) forwards; }
-            .splash-exit  { animation: splash-out 0.4s ease-in forwards; }
-            .quote-line   { animation: quote-line 2s ease-out 0.4s both; }
-            .letter-stagger span { display:inline-block; opacity:0; animation: letter-in 0.3s ease-out both; }
-        `;
-        document.head.appendChild(s);
-    }
-
-    // Build staggered title letters
-    const title = 'Backchain';
-    const letters = [...title].map((ch, i) =>
-        `<span style="animation-delay:${0.6 + i * 0.05}s">${ch}</span>`
-    ).join('');
+    injectSplashStyles();
+    const letters = buildStaggeredTitle();
 
     // Create full-screen overlay (not using openModal — custom lighter overlay)
     const overlay = document.createElement('div');
@@ -388,15 +402,6 @@ export function showWelcomeModal() {
     requestAnimationFrame(() => { overlay.style.opacity = '1'; });
 
     // Auto-close after 4s or on tap
-    const dismiss = () => {
-        if (overlay._dismissed) return;
-        overlay._dismissed = true;
-        const inner = overlay.querySelector('.splash-enter');
-        if (inner) { inner.classList.remove('splash-enter'); inner.classList.add('splash-exit'); }
-        overlay.style.opacity = '0';
-        setTimeout(() => overlay.remove(), 500);
-    };
-
-    overlay.addEventListener('click', dismiss);
-    setTimeout(dismiss, 4000);
+    overlay.addEventListener('click', () => dismissSplash());
+    setTimeout(() => dismissSplash(), 4000);
 }
