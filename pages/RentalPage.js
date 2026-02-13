@@ -972,12 +972,12 @@ function openBoostModal(tokenId) {
                 ${isBoosted ? 'New days will extend from current expiry.' : ''}
             </p>
             <label class="text-xs font-bold text-zinc-400 uppercase block mb-2">Boost Duration (days)</label>
-            <input type="range" id="bm-boost-days" min="1" max="30" value="7"
+            <input type="range" id="bm-boost-days" min="1" max="90" value="30"
                 class="w-full accent-amber-500 cursor-pointer">
             <div class="flex justify-between text-xs text-zinc-500 mt-1">
                 <span>1 day</span>
-                <span id="bm-boost-days-label" class="text-amber-400 font-bold">7 days</span>
-                <span>30 days</span>
+                <span id="bm-boost-days-label" class="text-amber-400 font-bold">30 days</span>
+                <span>90 days</span>
             </div>
         </div>
 

@@ -509,7 +509,8 @@ function renderIntro(container) {
 
     container.innerHTML = `
         <div id="intro-splash" class="flex flex-col items-center justify-center min-h-[65vh] text-center cursor-pointer">
-            <div class="text-7xl mb-5 intro-pop">🐯</div>
+            <img src="./assets/fortune.png" alt="Fortune Pool" class="w-40 h-40 object-contain mb-4 intro-pop drop-shadow-[0_0_30px_rgba(245,158,11,0.3)]"
+                 onerror="this.outerHTML='<div class=\\'text-7xl mb-5 intro-pop\\'>🐯</div>'">
             <p class="text-zinc-500 text-xs uppercase tracking-[0.3em] mb-2 intro-fade">Accumulated Prize</p>
             <p class="text-4xl font-black text-amber-400 intro-fade intro-pulse" id="intro-prize">${prizeText}</p>
             <p class="text-zinc-400 text-sm mt-3 intro-fade">Win up to <span class="text-amber-400 font-bold">${JACKPOT_MULTIPLIER}x</span> your bet</p>
@@ -552,17 +553,20 @@ function renderTierSelect(container) {
                     </button>
                 `).join('')}
 
-                <button class="tier-card w-full flex items-center gap-4 p-4 bg-gradient-to-r from-violet-900/30 via-purple-900/20 to-violet-900/30 border border-violet-500/40 rounded-2xl hover:scale-[1.02] active:scale-[0.98] transition-all text-left" data-mode="combo">
+                <button class="tier-card w-full flex items-center gap-4 p-5 bg-gradient-to-r from-violet-900/30 via-purple-900/20 to-amber-900/20 border-2 border-violet-500/50 rounded-2xl hover:scale-[1.02] active:scale-[0.98] transition-all text-left relative overflow-hidden" data-mode="combo">
+                    <div class="absolute top-0 right-0 px-2.5 py-1 bg-amber-500 text-black text-[9px] font-black rounded-bl-lg">RECOMMENDED</div>
                     <div class="text-3xl flex-shrink-0">🎰</div>
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2">
                             <p class="text-violet-300 font-bold">Combo</p>
-                            <span class="px-1.5 py-0.5 bg-emerald-500/20 border border-emerald-500/40 rounded text-[9px] text-emerald-400 font-bold">BEST ODDS</span>
+                            <span class="px-1.5 py-0.5 bg-emerald-500/20 border border-emerald-500/40 rounded text-[9px] text-emerald-400 font-bold">BEST VALUE</span>
                         </div>
-                        <p class="text-zinc-400 text-xs">All 3 tiers &bull; ~${COMBO_WIN_PCT}% chance</p>
+                        <p class="text-zinc-400 text-xs">All 3 tiers &bull; ~${COMBO_WIN_PCT}% win chance</p>
+                        <p class="text-amber-400 text-[10px] mt-0.5">3 chances to win &bull; Up to ${COMBO_MAX_MULTIPLIER}x your bet</p>
                     </div>
                     <div class="text-right flex-shrink-0">
                         <p class="text-violet-400 font-black text-2xl">${COMBO_MAX_MULTIPLIER}x</p>
+                        <p class="text-emerald-400 text-[10px] font-bold">max</p>
                     </div>
                 </button>
             </div>
