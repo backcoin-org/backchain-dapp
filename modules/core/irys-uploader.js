@@ -293,14 +293,33 @@ export function isArweaveContent(uri) {
 }
 
 // ============================================================================
-// MANUAL FUNDING (Arbitrum EIP-1559 fix)
+// MANUAL FUNDING (Arbitrum EIP-1559 fix + concurrency lock)
 // ============================================================================
 // The Irys SDK's fund() uses legacy gasPrice which fails on Arbitrum with:
 //   "max fee per gas less than block base fee"
-// This bypass sends ETH directly via ethers v6 (proper EIP-1559 gas handling)
+// This bypass sends ETH directly via ethers v6 with explicit gas buffer,
 // then notifies the Irys node about the funding transaction.
+// Mutex prevents concurrent fund calls (race condition when multiple uploads start).
+
+let _fundingPromise = null;
 
 async function _manualFund(irys, amount) {
+    // If a funding operation is already in-flight, wait for it instead of double-funding
+    if (_fundingPromise) {
+        console.log('[Irys] Fund already in progress, waiting...');
+        await _fundingPromise;
+        return;
+    }
+
+    _fundingPromise = _doManualFund(irys, amount);
+    try {
+        await _fundingPromise;
+    } finally {
+        _fundingPromise = null;
+    }
+}
+
+async function _doManualFund(irys, amount) {
     const ethers = window.ethers;
     const provider = new ethers.BrowserProvider(window.ethereum);
     const signer = await provider.getSigner();
@@ -309,10 +328,16 @@ async function _manualFund(irys, amount) {
     const nodeAddress = await irys.utils.getBundlerAddress(irys.token);
     console.log(`[Irys] Manual fund: sending ${_formatEth(amount)} to node ${nodeAddress.slice(0, 10)}...`);
 
-    // Send ETH using ethers v6 — handles EIP-1559 gas automatically
+    // Fetch current fee data and apply 3x buffer to avoid "baseFee > maxFeePerGas" on Arbitrum
+    const feeData = await provider.getFeeData();
+    const maxFeePerGas = (feeData.maxFeePerGas || 30000000n) * 3n;
+    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || 100000n;
+
     const tx = await signer.sendTransaction({
         to: nodeAddress,
         value: amount,
+        maxFeePerGas,
+        maxPriorityFeePerGas,
     });
 
     console.log(`[Irys] Fund tx sent: ${tx.hash}`);
