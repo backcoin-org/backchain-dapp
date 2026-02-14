@@ -178,6 +178,9 @@ interface IRewardBoosterV2 is IRewardBooster {
 
     /// @notice Get all tokens owned by user
     function getUserTokens(address user) external view returns (uint256[] memory);
+
+    /// @notice Mint an NFT for a pool buy (only callable by authorized pools)
+    function poolMint(address to, uint8 tier) external returns (uint256 tokenId);
 }
 
 // ─── NFT Fusion ────────────────────────────────────────────────────────────

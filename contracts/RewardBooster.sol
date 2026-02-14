@@ -150,12 +150,15 @@ contract RewardBooster is IRewardBoosterV2 {
 
     /// @notice Register the 4 NFTPool addresses. Can only be called once.
     ///         After this, no more initial minting is possible.
+    ///         Pass address(0) for unused pool slots.
     function configurePools(address[4] calldata pools) external {
         if (msg.sender != deployer) revert NotAuthorized();
         if (configured) revert AlreadyConfigured();
         configured = true;
         for (uint256 i; i < 4;) {
-            authorizedPool[pools[i]] = true;
+            if (pools[i] != address(0)) {
+                authorizedPool[pools[i]] = true;
+            }
             unchecked { ++i; }
         }
         emit PoolsConfigured(pools);
@@ -236,6 +239,26 @@ contract RewardBooster is IRewardBoosterV2 {
 
         emit FusionBurned(owner, tokenId, tier);
         emit Transfer(owner, address(0), tokenId);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // POOL MINT — ON-DEMAND (only authorized pools)
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Mint an NFT on-demand when a user buys from pool.
+    ///         Only callable by authorized pools (set via configurePools).
+    /// @param to   Buyer address
+    /// @param _tier Tier of the NFT to mint
+    /// @return tokenId The newly minted token ID
+    function poolMint(address to, uint8 _tier) external override returns (uint256 tokenId) {
+        if (!authorizedPool[msg.sender]) revert NotAuthorized();
+        if (_tier >= TIER_COUNT) revert InvalidTier();
+
+        tokenId = ++totalSupply;
+        tokenTier[tokenId] = _tier;
+        tierSupply[_tier]++;
+        tierTotalMinted[_tier]++;
+        _mint(to, tokenId);
     }
 
     // ════════════════════════════════════════════════════════════════════════

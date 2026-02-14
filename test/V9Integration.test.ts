@@ -101,9 +101,10 @@ async function deployAllFixture() {
   const nftPools: any[] = [];
   const nftPoolAddrs: string[] = [];
   for (let t = 0; t < 4; t++) {
-    // V2: virtualReserves — 0 for Bronze (has real NFTs), 10 for higher tiers
+    // V3: virtualReserves + mintableReserves — Bronze: 0 virtual, 0 mintable (tests use real NFTs); others: 10 virtual
     const virtualReserves = t === 0 ? 0 : 10;
-    const pool = await NFTPool.deploy(ecosystemAddr, bkcAddr, boosterAddr, t, virtualReserves);
+    const mintableReserves = 0; // Tests use pre-minted real NFTs
+    const pool = await NFTPool.deploy(ecosystemAddr, bkcAddr, boosterAddr, t, virtualReserves, mintableReserves);
     await pool.waitForDeployment();
     nftPools.push(pool);
     nftPoolAddrs.push(await pool.getAddress());
