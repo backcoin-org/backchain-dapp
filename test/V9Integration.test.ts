@@ -1598,7 +1598,7 @@ describe("Backchain V10 — Integration Tests", function () {
 
         await f.notary.connect(f.alice).certify(docHash, "", 0, ethers.ZeroAddress);
 
-        await f.notary.connect(f.alice).transferCertificate(docHash, f.bob.address);
+        await f.notary.connect(f.alice).transferCertificate(docHash, f.bob.address, ethers.ZeroAddress);
 
         const result = await f.notary.verify(docHash);
         expect(result.owner).to.equal(f.bob.address);

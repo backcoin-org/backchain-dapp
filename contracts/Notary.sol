@@ -4,24 +4,36 @@ pragma solidity ^0.8.28;
 import "./IBackchain.sol";
 
 // ============================================================================
-// NOTARY — IMMUTABLE (Tier 1: ETH only)
+// NOTARY V3 — IMMUTABLE (Tier 1: ETH only)
 // ============================================================================
 //
 // On-chain document certification. Hash a file, store proof forever.
 //
+// V3 Changes:
+//   - Per-docType fees (10 action IDs, different pricing per category)
+//   - Certificate boost (1-30 days, additive expiry, pay-per-day)
+//   - Transfer fee (ETH fee for ownership transfer)
+//   - getCertificatesBatch for efficient batch reads
+//   - Enhanced stats (totalBoostRevenue, totalTransfers)
+//
 // Features:
 //   - Single or batch notarization (multiple docs in one tx)
 //   - Document type classification (10 categories)
-//   - Certificate ownership transfer
+//   - Certificate ownership transfer (with fee)
+//   - Certificate visibility boost (additive, stackable)
 //   - Hash-based verification (anyone can verify, no account needed)
-//   - Operator commissions on every certification
+//   - Operator commissions on every action
+//
+// Economics:
+//   - Per-docType ETH fee on certification → ecosystem
+//   - ETH fee × days on boost → ecosystem
+//   - Small ETH fee on transfer → ecosystem
+//   - General/Other: cheapest; Legal/Property/Medical: premium
 //
 // Storage:
-//   - 1 slot per certificate (27 bytes packed)
+//   - 1 slot per certificate (31 bytes packed)
 //   - Metadata stored separately (only if provided)
 //   - Hash is the primary key (no duplication)
-//
-// Fee: ETH only (Tier 1) → ecosystem (operator/treasury/buyback)
 //
 // No admin. No pause. Fully immutable and permissionless.
 //
@@ -33,11 +45,16 @@ contract Notary {
     // CONSTANTS
     // ════════════════════════════════════════════════════════════════════════
 
-    bytes32 public constant MODULE_ID       = keccak256("NOTARY");
-    bytes32 public constant ACTION_CERTIFY  = keccak256("NOTARY_CERTIFY");
+    bytes32 public constant MODULE_ID        = keccak256("NOTARY");
+    bytes32 public constant ACTION_CERTIFY   = keccak256("NOTARY_CERTIFY"); // backward-compat (unused in V3 logic)
+    bytes32 public constant ACTION_BOOST     = keccak256("NOTARY_BOOST");
+    bytes32 public constant ACTION_TRANSFER  = keccak256("NOTARY_TRANSFER");
 
     /// @notice Maximum documents per batch transaction
     uint8 public constant MAX_BATCH_SIZE = 20;
+
+    /// @notice Maximum boost duration in days
+    uint8 public constant MAX_BOOST_DAYS = 30;
 
     // Document types
     uint8 public constant DOC_GENERAL     = 0;
@@ -63,12 +80,13 @@ contract Notary {
     // STATE
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @dev Certificate data — packed in 1 storage slot (27 bytes)
-    ///      owner(20) + timestamp(6) + docType(1) = 27 bytes
+    /// @dev Certificate data — packed in 1 storage slot (31 bytes)
+    ///      owner(20) + timestamp(6) + docType(1) + boostExpiry(4) = 31 bytes
     struct Certificate {
         address owner;
         uint48  timestamp;
         uint8   docType;
+        uint32  boostExpiry;
     }
 
     /// @notice Primary storage: document hash → certificate data (1 slot)
@@ -85,8 +103,14 @@ contract Notary {
     /// @notice Total certificates issued
     uint256 public certCount;
 
-    /// @notice Lifetime ETH collected
+    /// @notice Lifetime ETH collected from fees
     uint256 public totalEthCollected;
+
+    /// @notice Lifetime ETH collected from boosts
+    uint256 public totalBoostRevenue;
+
+    /// @notice Lifetime certificate transfers
+    uint256 public totalTransfers;
 
     // ════════════════════════════════════════════════════════════════════════
     // EVENTS
@@ -113,6 +137,13 @@ contract Notary {
         address indexed to
     );
 
+    event CertificateBoosted(
+        bytes32 indexed documentHash,
+        address indexed booster,
+        uint32  boostExpiry,
+        address operator
+    );
+
     // ════════════════════════════════════════════════════════════════════════
     // ERRORS
     // ════════════════════════════════════════════════════════════════════════
@@ -125,6 +156,9 @@ contract Notary {
     error ZeroAddress();
     error EmptyBatch();
     error BatchTooLarge();
+    error ZeroDays();
+    error TooManyDays();
+    error NotCertified();
 
     // ════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -135,6 +169,17 @@ contract Notary {
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    // INTERNAL: PER-DOCTYPE ACTION ID
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @dev Compute per-docType action ID for fee lookup.
+    ///      Pattern: keccak256(abi.encode("NOTARY_CERTIFY_T", docType))
+    ///      Each doc type can have its own fee config in ecosystem.
+    function _getCertifyAction(uint8 docType) internal pure returns (bytes32) {
+        return keccak256(abi.encode("NOTARY_CERTIFY_T", docType));
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     // CERTIFY
     // ════════════════════════════════════════════════════════════════════════
 
@@ -142,6 +187,7 @@ contract Notary {
     ///
     ///         The documentHash is the SHA-256 (or keccak256) of the file content.
     ///         Once certified, the hash can never be re-certified — proof is permanent.
+    ///         Fee depends on document type (Legal/Property > General).
     ///
     /// @param documentHash Hash of the document content
     /// @param meta         IPFS CID or description (can be empty to save gas)
@@ -158,14 +204,16 @@ contract Notary {
         if (certs[documentHash].timestamp != 0) revert AlreadyCertified();
         if (docType > MAX_DOC_TYPE) revert InvalidDocType();
 
-        uint256 fee = ecosystem.calculateFee(ACTION_CERTIFY, 0);
+        // V3: Per-docType fee
+        uint256 fee = ecosystem.calculateFee(_getCertifyAction(docType), 0);
         if (msg.value < fee) revert InsufficientFee();
 
         // Store certificate (1 slot)
         certs[documentHash] = Certificate({
             owner: msg.sender,
             timestamp: uint48(block.timestamp),
-            docType: docType
+            docType: docType,
+            boostExpiry: 0
         });
 
         // Store metadata only if provided
@@ -192,7 +240,7 @@ contract Notary {
 
     /// @notice Notarize multiple documents in one transaction.
     ///         Gas efficient: one ecosystem.collectFee() call for the entire batch.
-    ///         ETH fee = per-document fee × count.
+    ///         V3: ETH fee = sum of per-docType fees for each document.
     ///
     /// @param documentHashes Array of document hashes
     /// @param metas          Array of metadata strings (same length as hashes)
@@ -210,8 +258,14 @@ contract Notary {
         if (count > MAX_BATCH_SIZE) revert BatchTooLarge();
         if (metas.length != count || docTypes.length != count) revert EmptyBatch();
 
-        uint256 feePerDoc = ecosystem.calculateFee(ACTION_CERTIFY, 0);
-        if (msg.value < feePerDoc * count) revert InsufficientFee();
+        // V3: Sum per-docType fees
+        uint256 totalFee;
+        for (uint256 i; i < count;) {
+            if (docTypes[i] > MAX_DOC_TYPE) revert InvalidDocType();
+            totalFee += ecosystem.calculateFee(_getCertifyAction(docTypes[i]), 0);
+            unchecked { ++i; }
+        }
+        if (msg.value < totalFee) revert InsufficientFee();
 
         startId = certCount + 1;
         uint48 ts = uint48(block.timestamp);
@@ -220,12 +274,12 @@ contract Notary {
             bytes32 hash = documentHashes[i];
             if (hash == bytes32(0)) revert EmptyHash();
             if (certs[hash].timestamp != 0) revert AlreadyCertified();
-            if (docTypes[i] > MAX_DOC_TYPE) revert InvalidDocType();
 
             certs[hash] = Certificate({
                 owner: msg.sender,
                 timestamp: ts,
-                docType: docTypes[i]
+                docType: docTypes[i],
+                boostExpiry: 0
             });
 
             if (bytes(metas[i]).length > 0) {
@@ -250,21 +304,71 @@ contract Notary {
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    // BOOST
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Boost a certificate's visibility for X days. Pays ETH fee per day.
+    ///         Anyone can boost any certificate. Stacks with existing boost.
+    ///
+    /// @param documentHash Certificate to boost
+    /// @param days_        Number of days to boost (1-30)
+    /// @param operator     Frontend operator
+    function boostCertificate(bytes32 documentHash, uint256 days_, address operator) external payable {
+        Certificate storage cert = certs[documentHash];
+        if (cert.timestamp == 0) revert NotCertified();
+        if (days_ == 0) revert ZeroDays();
+        if (days_ > MAX_BOOST_DAYS) revert TooManyDays();
+
+        // Fee = ecosystem fee per boost action × days
+        uint256 feePerDay = ecosystem.calculateFee(ACTION_BOOST, 0);
+        uint256 totalFee = feePerDay * days_;
+        if (msg.value < totalFee) revert InsufficientFee();
+
+        // Additive expiry: extend from current expiry if still active
+        uint256 baseTime = block.timestamp;
+        if (cert.boostExpiry > block.timestamp) {
+            baseTime = uint256(cert.boostExpiry);
+        }
+        cert.boostExpiry = uint32(baseTime + days_ * 1 days);
+
+        totalBoostRevenue += msg.value;
+        ecosystem.collectFee{value: msg.value}(
+            msg.sender, operator, address(0), MODULE_ID, 0
+        );
+
+        emit CertificateBoosted(documentHash, msg.sender, cert.boostExpiry, operator);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     // TRANSFER
     // ════════════════════════════════════════════════════════════════════════
 
     /// @notice Transfer certificate ownership to another address.
-    ///         Useful for selling certified assets or transferring rights.
+    ///         V3: Charges a small ETH fee for the transfer.
     ///
     /// @param documentHash The certified document hash
     /// @param newOwner     New owner address
-    function transferCertificate(bytes32 documentHash, address newOwner) external {
+    /// @param operator     Frontend operator
+    function transferCertificate(bytes32 documentHash, address newOwner, address operator) external payable {
         Certificate storage cert = certs[documentHash];
         if (cert.owner != msg.sender) revert NotCertOwner();
         if (newOwner == address(0)) revert ZeroAddress();
 
+        // V3: Transfer fee
+        uint256 fee = ecosystem.calculateFee(ACTION_TRANSFER, 0);
+        if (msg.value < fee) revert InsufficientFee();
+
         address oldOwner = cert.owner;
         cert.owner = newOwner;
+        ++totalTransfers;
+
+        // Fee → ecosystem
+        if (msg.value > 0) {
+            totalEthCollected += msg.value;
+            ecosystem.collectFee{value: msg.value}(
+                msg.sender, operator, address(0), MODULE_ID, 0
+            );
+        }
 
         emit CertificateTransferred(documentHash, oldOwner, newOwner);
     }
@@ -274,50 +378,105 @@ contract Notary {
     // ════════════════════════════════════════════════════════════════════════
 
     /// @notice Verify a document hash — anyone can check, no account needed.
-    ///         Returns all certificate data if the hash was notarized.
+    ///         V3: Returns isBoosted and boostExpiry.
     function verify(bytes32 documentHash) external view returns (
         bool    exists,
         address owner,
         uint48  timestamp,
         uint8   docType,
-        string  memory meta
+        string  memory meta,
+        bool    boosted,
+        uint32  boostExpiry
     ) {
         Certificate memory cert = certs[documentHash];
-        if (cert.timestamp == 0) return (false, address(0), 0, 0, "");
+        if (cert.timestamp == 0) return (false, address(0), 0, 0, "", false, 0);
 
-        return (true, cert.owner, cert.timestamp, cert.docType, metadata[documentHash]);
+        return (
+            true, cert.owner, cert.timestamp, cert.docType,
+            metadata[documentHash],
+            block.timestamp < cert.boostExpiry,
+            cert.boostExpiry
+        );
     }
 
-    /// @notice Get certificate by sequential ID
+    /// @notice Get certificate by sequential ID. V3: includes boost data.
     function getCertificate(uint256 certId) external view returns (
         bytes32 documentHash,
         address owner,
         uint48  timestamp,
         uint8   docType,
-        string  memory meta
+        string  memory meta,
+        bool    boosted,
+        uint32  boostExpiry
     ) {
         documentHash = certById[certId];
-        if (documentHash == bytes32(0)) return (bytes32(0), address(0), 0, 0, "");
+        if (documentHash == bytes32(0)) return (bytes32(0), address(0), 0, 0, "", false, 0);
 
         Certificate memory cert = certs[documentHash];
-        return (documentHash, cert.owner, cert.timestamp, cert.docType, metadata[documentHash]);
+        return (
+            documentHash, cert.owner, cert.timestamp, cert.docType,
+            metadata[documentHash],
+            block.timestamp < cert.boostExpiry,
+            cert.boostExpiry
+        );
     }
 
-    /// @notice Get the ETH fee for certifying a document
+    /// @notice Batch read certificate data (no strings — too expensive)
+    /// @param start First cert ID (1-based)
+    /// @param count Number of certificates to read
+    function getCertificatesBatch(uint256 start, uint256 count) external view returns (
+        bytes32[] memory hashes,
+        address[] memory owners,
+        uint48[]  memory timestamps,
+        uint8[]   memory docTypes,
+        bool[]    memory boostedFlags,
+        uint32[]  memory boostExpiries
+    ) {
+        uint256 end = start + count;
+        if (end > certCount + 1) end = certCount + 1;
+        uint256 len = end > start ? end - start : 0;
+
+        hashes        = new bytes32[](len);
+        owners        = new address[](len);
+        timestamps    = new uint48[](len);
+        docTypes      = new uint8[](len);
+        boostedFlags  = new bool[](len);
+        boostExpiries = new uint32[](len);
+
+        for (uint256 i = 0; i < len; i++) {
+            bytes32 h = certById[start + i];
+            Certificate memory c = certs[h];
+            hashes[i]        = h;
+            owners[i]        = c.owner;
+            timestamps[i]    = c.timestamp;
+            docTypes[i]      = c.docType;
+            boostedFlags[i]  = block.timestamp < c.boostExpiry;
+            boostExpiries[i] = c.boostExpiry;
+        }
+    }
+
+    /// @notice Get the ETH fee for certifying a General document (backward compat)
     function getFee() external view returns (uint256) {
-        return ecosystem.calculateFee(ACTION_CERTIFY, 0);
+        return ecosystem.calculateFee(_getCertifyAction(0), 0);
     }
 
-    /// @notice Protocol statistics
+    /// @notice Check if certificate is currently boosted
+    function isBoosted(bytes32 documentHash) external view returns (bool) {
+        return block.timestamp < certs[documentHash].boostExpiry;
+    }
+
+    /// @notice Protocol statistics (V3: includes boost revenue + transfers)
     function getStats() external view returns (
         uint256 _certCount,
-        uint256 _totalEthCollected
+        uint256 _totalEthCollected,
+        uint256 _totalBoostRevenue,
+        uint256 _totalTransfers
     ) {
-        return (certCount, totalEthCollected);
+        return (certCount, totalEthCollected, totalBoostRevenue, totalTransfers);
     }
 
     /// @notice Contract version
     function version() external pure returns (string memory) {
-        return "2.0.0";
+        return "3.0.0";
     }
 }

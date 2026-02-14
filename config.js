@@ -200,7 +200,7 @@ export function getRpcStats() {
 }
 
 // ============================================================================
-// 4. IPFS GATEWAY
+// 4. IPFS & ARWEAVE GATEWAYS
 // ============================================================================
 
 export const ipfsGateway = "https://gateway.lighthouse.storage/ipfs/";
@@ -213,21 +213,53 @@ export const IPFS_GATEWAYS = [
     "https://ipfs.io/ipfs/"
 ];
 
+export const ARWEAVE_GATEWAY = "https://gateway.irys.xyz";
+
 export function getIpfsUrl(cid) {
     if (!cid) return null;
-    
-    // Se já é uma URL completa, converter para gateway preferido
-    if (cid.startsWith('http')) {
-        const cidMatch = cid.match(/ipfs\/([a-zA-Z0-9]+)/);
-        if (cidMatch) {
-            return `${IPFS_GATEWAYS[0]}${cidMatch[1]}`;
-        }
-        return cid;
+    // Delegate to universal resolver
+    return getContentUrl(cid);
+}
+
+/**
+ * Universal content URL resolver.
+ * Handles ar://, ipfs://, bare CIDs, bare Arweave TX IDs, and full HTTP URLs.
+ */
+export function getContentUrl(uri) {
+    if (!uri) return null;
+    const trimmed = uri.trim();
+
+    // Full URL
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        return trimmed;
     }
-    
-    // Remover prefixo ipfs:// se existir
-    const cleanCid = cid.replace('ipfs://', '');
-    return `${IPFS_GATEWAYS[0]}${cleanCid}`;
+
+    // ar://txId
+    if (trimmed.startsWith('ar://')) {
+        return `${ARWEAVE_GATEWAY}/${trimmed.slice(5)}`;
+    }
+
+    // ipfs://CID
+    if (trimmed.startsWith('ipfs://')) {
+        return `${IPFS_GATEWAYS[0]}${trimmed.slice(7)}`;
+    }
+
+    // IPFS CIDv0 (Qm...) or CIDv1 (bafy...)
+    if (/^Qm[1-9A-HJ-NP-Za-km-z]{44}$/.test(trimmed) || trimmed.startsWith('bafy')) {
+        return `${IPFS_GATEWAYS[0]}${trimmed}`;
+    }
+
+    // Arweave TX ID: exactly 43 chars, base64url
+    if (/^[a-zA-Z0-9_-]{43}$/.test(trimmed)) {
+        return `${ARWEAVE_GATEWAY}/${trimmed}`;
+    }
+
+    // Fallback: treat as IPFS CID
+    if (trimmed.length > 10) {
+        return `${IPFS_GATEWAYS[0]}${trimmed}`;
+    }
+
+    return null;
 }
 
 // ============================================================================

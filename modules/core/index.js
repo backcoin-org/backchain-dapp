@@ -78,6 +78,17 @@ export {
     OPERATOR_ZERO
 } from './operator.js';
 
+// Irys (Arweave) Decentralized Storage
+export {
+    uploadFile as irysUploadFile,
+    uploadData as irysUploadData,
+    getUploadPrice,
+    getBalance as irysGetBalance,
+    resolveContentUrl,
+    isArweaveContent,
+    IRYS_CONFIG
+} from './irys-uploader.js';
+
 // ============================================================================
 // CLIENT-SIDE FEE CALCULATION
 // Arbitrum doesn't support gasPrice override in eth_call, so we replicate

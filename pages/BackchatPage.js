@@ -23,10 +23,10 @@ const ethers = window.ethers;
 
 import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
-import { addresses, ipfsGateway, agoraABI } from '../config.js';
+import { addresses, agoraABI } from '../config.js';
 import { formatBigNumber } from '../utils.js';
 import { BackchatTx } from '../modules/transactions/index.js';
-import { calculateFeeClientSide } from '../modules/core/index.js';
+import { calculateFeeClientSide, resolveContentUrl, irysUploadFile } from '../modules/core/index.js';
 import { LiveStream } from '../modules/webrtc-live.js';
 
 // ============================================================================
@@ -35,7 +35,7 @@ import { LiveStream } from '../modules/webrtc-live.js';
 
 const EXPLORER_ADDRESS = "https://sepolia.arbiscan.io/address/";
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
-const IPFS_GATEWAY = ipfsGateway || "https://gateway.pinata.cloud/ipfs/";
+// Removed IPFS_GATEWAY — using resolveContentUrl() for all content URLs
 const MAX_CONTENT = 500;
 
 const TAGS = [
@@ -488,10 +488,7 @@ function formatETH(wei) {
 }
 
 function getIPFSUrl(uri) {
-    if (!uri) return '';
-    if (uri.startsWith('ipfs://')) return `https://gateway.lighthouse.storage/ipfs/${uri.slice(7)}`;
-    if (uri.startsWith('Qm') || uri.startsWith('bafy')) return `https://gateway.lighthouse.storage/ipfs/${uri}`;
-    return uri;
+    return resolveContentUrl(uri) || '';
 }
 
 function getInitials(address) {
@@ -1233,18 +1230,10 @@ async function doUpdateProfile() {
         try {
             btn && (btn.disabled = true);
             btn && (btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading avatar...');
-            const formData = new FormData();
-            formData.append('image', avatarFile);
-            const resp = await fetch('/api/upload-image', { method: 'POST', body: formData });
-            const data = await resp.json();
-            if (data.success && data.ipfsHash) {
-                avatar = `ipfs://${data.ipfsHash}`;
-            } else {
-                showToast('Avatar upload failed', 'error');
-                btn && (btn.disabled = false);
-                btn && (btn.innerHTML = '<i class="fa-solid fa-check"></i> Save Changes');
-                return;
-            }
+            const result = await irysUploadFile(avatarFile, {
+                tags: [{ name: 'Type', value: 'agora-avatar' }]
+            });
+            avatar = `ar://${result.id}`;
         } catch (e) {
             showToast('Avatar upload error: ' + e.message, 'error');
             btn && (btn.disabled = false);
@@ -1566,32 +1555,21 @@ async function _uploadVOD() {
     const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
     console.log(`[Agora] VOD size: ${sizeMB} MB`);
 
-    // Max 50MB for VOD
-    if (blob.size > 50 * 1024 * 1024) {
-        showToast(`Recording too large (${sizeMB}MB). Max 50MB.`, 'error');
+    if (blob.size > 100 * 1024 * 1024) {
+        showToast(`Recording too large (${sizeMB}MB). Max 100MB.`, 'error');
         return null;
     }
 
-    showToast(`Saving recording (${sizeMB}MB)...`, 'info');
+    showToast(`Saving recording to Arweave (${sizeMB}MB)...`, 'info');
 
     try {
-        const formData = new FormData();
-        formData.append('file', blob, `agora-live-${Date.now()}.webm`);
-
-        const resp = await fetch('/api/upload-media', {
-            method: 'POST',
-            body: formData
+        const file = new File([blob], `agora-live-${Date.now()}.webm`, { type: 'video/webm' });
+        const result = await irysUploadFile(file, {
+            tags: [{ name: 'Type', value: 'agora-vod' }]
         });
-
-        if (!resp.ok) {
-            const data = await resp.json().catch(() => ({}));
-            throw new Error(data.error || `Upload failed (${resp.status})`);
-        }
-
-        const data = await resp.json();
-        showToast('Live recording saved!', 'success');
-        console.log('[Agora] VOD uploaded:', data.ipfsHash);
-        return data.ipfsHash;
+        showToast('Live recording saved permanently!', 'success');
+        console.log('[Agora] VOD uploaded:', result.url);
+        return result.id;
     } catch (e) {
         console.error('[Agora] VOD upload failed:', e);
         showToast('Failed to save recording: ' + e.message, 'error');
@@ -1617,19 +1595,10 @@ async function loadActiveRooms() {
 // ============================================================================
 
 async function uploadImageToIPFS(file) {
-    const formData = new FormData();
-    formData.append('image', file);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60000);
-    try {
-        const resp = await fetch('/api/upload-image', { method: 'POST', body: formData, signal: controller.signal });
-        clearTimeout(timeout);
-        if (!resp.ok) {
-            const data = await resp.json().catch(() => ({}));
-            throw new Error(data.error || `Upload failed (${resp.status})`);
-        }
-        return await resp.json();
-    } catch (e) { clearTimeout(timeout); throw e; }
+    const result = await irysUploadFile(file, {
+        tags: [{ name: 'Type', value: 'agora-image' }]
+    });
+    return { success: true, ipfsHash: result.id };
 }
 
 function handleImageSelect(e) {
@@ -1908,7 +1877,7 @@ function renderPost(post, index = 0, options = {}) {
                 ${renderPostMenu(post)}
             </div>
             ${post.content ? `<div class="bc-post-body">${escapeHtml(post.content)}</div>` : ''}
-            ${post.mediaCID ? `<div class="bc-post-media"><img src="${IPFS_GATEWAY}${post.mediaCID}" alt="Media" loading="lazy" onerror="this.style.display='none'"></div>` : ''}
+            ${post.mediaCID ? `<div class="bc-post-media"><img src="${resolveContentUrl(post.mediaCID) || ''}" alt="Media" loading="lazy" onerror="this.style.display='none'"></div>` : ''}
             <div class="bc-actions" onclick="event.stopPropagation()">
                 <button class="bc-action act-reply" onclick="BackchatPage.openReply('${post.id}')" title="Reply">
                     <i class="fa-regular fa-comment"></i>${replyCount > 0 ? `<span class="count">${replyCount}</span>` : ''}

@@ -1,23 +1,21 @@
 // modules/js/transactions/notary-tx.js
-// ✅ V9.0 - Updated for Notary V9 (ETH-only, immutable)
+// ✅ V3.0 - Updated for Notary V3 (per-docType fees, boost, transfer fee, batch reads)
 //
-// CHANGES V9.0:
-// - Renamed: DecentralizedNotary → Notary
-// - notarize() → certify(bytes32, string, uint8, address) payable
-// - ETH-only fees (no BKC fee, no BKC approval)
-// - No ERC721 — certificates are mappings, not tokens
-// - certId replaces tokenId (sequential uint256)
-// - verify() replaces verifyByHash() — returns (exists, owner, timestamp, docType, meta)
-// - getCertificate() replaces getDocument() — returns different tuple
-// - getFee() returns single uint256 (ETH), not (bkcFee, ethFee) tuple
-// - getStats() returns 2-tuple (certCount, totalEthCollected)
-// - Added: batchCertify, transferCertificate
-// - Removed: ownerOf, balanceOf, tokenURI, hashToTokenId, notarizationFeeETH
+// CHANGES V3.0:
+// - Per-docType fee: keccak256(abi.encode("NOTARY_CERTIFY_T", docType)) for 10 types
+// - boostCertificate(bytes32, uint256 days_, address operator) payable
+// - transferCertificate(bytes32, address, address) payable — added operator + fee
+// - verify/getCertificate return 7 fields (added boosted, boostExpiry)
+// - getCertificatesBatch(uint256, uint256) — batch reads
+// - getStats() returns 4-tuple (certCount, totalEthCollected, totalBoostRevenue, totalTransfers)
+// - isBoosted(bytes32) view — check if cert is boosted
+// - CertificateBoosted event
 //
 // ============================================================================
-// V9 FEE STRUCTURE:
-// - ETH fee only (Tier 1) → ecosystem (operator/treasury/buyback)
-// - No BKC fee, no NFT discounts
+// V3 FEE STRUCTURE:
+// - 10 per-type certify fees (General/Identity/Other cheapest → Property/Legal/Medical premium)
+// - Boost fee (per-day, like CHARITY_BOOST)
+// - Transfer fee (small gas-based fee)
 // ============================================================================
 
 import { txEngine, calculateFeeClientSide } from '../core/index.js';
@@ -42,25 +40,31 @@ function getContracts() {
 }
 
 /**
- * Notary V9 ABI
+ * Notary V3 ABI
  */
 const NOTARY_ABI = [
     // Write functions
     'function certify(bytes32 documentHash, string calldata meta, uint8 docType, address operator) external payable returns (uint256 certId)',
     'function batchCertify(bytes32[] calldata documentHashes, string[] calldata metas, uint8[] calldata docTypes, address operator) external payable returns (uint256 startId)',
-    'function transferCertificate(bytes32 documentHash, address newOwner) external',
+    'function boostCertificate(bytes32 documentHash, uint256 days_, address operator) external payable',
+    'function transferCertificate(bytes32 documentHash, address newOwner, address operator) external payable',
 
     // Read functions
-    'function verify(bytes32 documentHash) view returns (bool exists, address owner, uint48 timestamp, uint8 docType, string memory meta)',
-    'function getCertificate(uint256 certId) view returns (bytes32 documentHash, address owner, uint48 timestamp, uint8 docType, string memory meta)',
+    'function verify(bytes32 documentHash) view returns (bool exists, address owner, uint48 timestamp, uint8 docType, string memory meta, bool boosted, uint32 boostExpiry)',
+    'function getCertificate(uint256 certId) view returns (bytes32 documentHash, address owner, uint48 timestamp, uint8 docType, string memory meta, bool boosted, uint32 boostExpiry)',
+    'function getCertificatesBatch(uint256 start, uint256 count) view returns (bytes32[] memory hashes, address[] memory owners, uint48[] memory timestamps, uint8[] memory docTypes, bool[] memory boostedFlags, uint32[] memory boostExpiries)',
     'function getFee() view returns (uint256)',
-    'function getStats() view returns (uint256 certCount, uint256 totalEthCollected)',
+    'function isBoosted(bytes32 documentHash) view returns (bool)',
+    'function getStats() view returns (uint256 certCount, uint256 totalEthCollected, uint256 totalBoostRevenue, uint256 totalTransfers)',
     'function certCount() view returns (uint256)',
     'function version() view returns (string)',
+    'function MAX_BATCH_SIZE() view returns (uint8)',
+    'function MAX_BOOST_DAYS() view returns (uint8)',
 
     // Events
     'event Certified(uint256 indexed certId, address indexed owner, bytes32 indexed documentHash, uint8 docType, address operator)',
     'event BatchCertified(address indexed owner, uint256 startId, uint256 count, address operator)',
+    'event CertificateBoosted(bytes32 indexed documentHash, address indexed booster, uint32 boostExpiry, address operator)',
     'event CertificateTransferred(bytes32 indexed documentHash, address indexed from, address indexed to)'
 ];
 
@@ -77,6 +81,11 @@ const DOC_TYPES = {
     IP: 8,
     OTHER: 9
 };
+
+const DOC_TYPE_NAMES = [
+    'General', 'Contract', 'Identity', 'Diploma', 'Property',
+    'Financial', 'Legal', 'Medical', 'IP', 'Other'
+];
 
 // ============================================================================
 // 2. HELPER FUNCTIONS
@@ -106,14 +115,29 @@ function isValidBytes32(hash) {
     return /^0x[a-fA-F0-9]{64}$/.test(cleanHash);
 }
 
+/**
+ * Compute per-docType action ID for fee calculation
+ * Must match contract: keccak256(abi.encode("NOTARY_CERTIFY_T", docType))
+ */
+function getCertifyActionId(docType) {
+    const ethers = window.ethers;
+    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+    return ethers.keccak256(
+        abiCoder.encode(['string', 'uint8'], ['NOTARY_CERTIFY_T', docType])
+    );
+}
+
+function formatHash(hash) {
+    return hash.startsWith('0x') ? hash : `0x${hash}`;
+}
+
 // ============================================================================
 // 3. TRANSACTION FUNCTIONS
 // ============================================================================
 
 /**
  * Certifies a document on the blockchain
- * V9: certify(bytes32 documentHash, string meta, uint8 docType, address operator) payable
- * ETH-only fees — no BKC
+ * V3: Per-docType fees via calculateFeeClientSide
  */
 export async function certify({
     documentHash,
@@ -126,19 +150,13 @@ export async function certify({
 }) {
     const ethers = window.ethers;
 
-    if (!documentHash) {
-        throw new Error('Document hash is required');
-    }
+    if (!documentHash) throw new Error('Document hash is required');
 
-    const formattedHash = documentHash.startsWith('0x') ? documentHash : `0x${documentHash}`;
-
+    const formattedHash = formatHash(documentHash);
     if (!isValidBytes32(formattedHash)) {
         throw new Error('Invalid document hash format. Must be a valid bytes32 (64 hex characters)');
     }
-
-    if (docType < 0 || docType > 9) {
-        throw new Error('Document type must be between 0 and 9');
-    }
+    if (docType < 0 || docType > 9) throw new Error('Document type must be between 0 and 9');
 
     let storedOperator = operator;
     let ethFee = 0n;
@@ -162,9 +180,12 @@ export async function certify({
                 throw new Error('This document hash has already been certified');
             }
 
-            // Read fee from contract (includes fixed minimum CERT_FEE)
-            ethFee = await contract.getFee();
-            console.log('[NotaryTx] Fee:', ethers.formatEther(ethFee), 'ETH');
+            // Calculate per-type fee client-side (gas-based)
+            const actionId = getCertifyActionId(docType);
+            ethFee = await calculateFeeClientSide(actionId);
+            console.log(`[NotaryTx] Certify fee (type ${DOC_TYPE_NAMES[docType]}):`, ethers.formatEther(ethFee), 'ETH');
+
+            if (ethFee === 0n) throw new Error('Could not calculate certification fee');
 
             // Check ETH balance
             const { NetworkManager } = await import('../core/index.js');
@@ -200,8 +221,124 @@ export async function certify({
     });
 }
 
-// Keep backward-compatible alias
+// Backward-compatible alias
 export const notarize = certify;
+
+/**
+ * Boosts a certificate (featured for X days)
+ * V3: boostCertificate(bytes32, uint256, address) payable
+ */
+export async function boostCertificate({
+    documentHash,
+    days = 1,
+    operator,
+    button = null,
+    onSuccess = null,
+    onError = null
+}) {
+    const ethers = window.ethers;
+    if (!documentHash) throw new Error('Document hash is required');
+    if (days < 1 || days > 30) throw new Error('Boost duration must be 1-30 days');
+
+    const formattedHash = formatHash(documentHash);
+    let storedOperator = operator;
+    let totalFee = 0n;
+
+    return await txEngine.execute({
+        name: 'BoostCertificate',
+        button,
+
+        getContract: async (signer) => getNotaryContract(signer),
+        method: 'boostCertificate',
+        args: () => [formattedHash, days, resolveOperator(storedOperator)],
+        get value() { return totalFee; },
+
+        validate: async (signer, userAddress) => {
+            const contract = await getNotaryContractReadOnly();
+
+            // Check cert exists
+            const result = await contract.verify(formattedHash);
+            if (!result.exists) throw new Error('Certificate not found');
+
+            // Calculate boost cost client-side (per-day fee × days)
+            const feePerDay = await calculateFeeClientSide(ethers.id('NOTARY_BOOST'));
+            totalFee = feePerDay * BigInt(days);
+
+            if (totalFee === 0n) throw new Error('Could not calculate boost fee');
+
+            const { NetworkManager } = await import('../core/index.js');
+            const provider = NetworkManager.getProvider();
+            const ethBalance = await provider.getBalance(userAddress);
+            if (ethBalance < totalFee + ethers.parseEther('0.001')) {
+                throw new Error(`Insufficient ETH. Need ~${ethers.formatEther(totalFee)} ETH for ${days}-day boost`);
+            }
+        },
+
+        onSuccess,
+        onError
+    });
+}
+
+/**
+ * Transfers certificate ownership
+ * V3: transferCertificate(bytes32, address, address) payable — operator + fee
+ */
+export async function transferCertificate({
+    documentHash,
+    newOwner,
+    operator,
+    button = null,
+    onSuccess = null,
+    onError = null
+}) {
+    const ethers = window.ethers;
+    if (!documentHash) throw new Error('Document hash is required');
+    if (!newOwner || newOwner === ethers.ZeroAddress) throw new Error('Valid recipient address is required');
+
+    const formattedHash = formatHash(documentHash);
+    let storedOperator = operator;
+    let ethFee = 0n;
+
+    return await txEngine.execute({
+        name: 'TransferCertificate',
+        button,
+
+        getContract: async (signer) => getNotaryContract(signer),
+        method: 'transferCertificate',
+        args: () => [formattedHash, newOwner, resolveOperator(storedOperator)],
+        get value() { return ethFee; },
+
+        validate: async (signer, userAddress) => {
+            const contract = await getNotaryContractReadOnly();
+
+            // Check cert exists and user is owner
+            const result = await contract.verify(formattedHash);
+            if (!result.exists) throw new Error('Certificate not found');
+            if (result.owner.toLowerCase() !== userAddress.toLowerCase()) {
+                throw new Error('Only the certificate owner can transfer it');
+            }
+            if (newOwner.toLowerCase() === userAddress.toLowerCase()) {
+                throw new Error('Cannot transfer to yourself');
+            }
+
+            // Calculate transfer fee client-side
+            ethFee = await calculateFeeClientSide(ethers.id('NOTARY_TRANSFER'));
+            console.log('[NotaryTx] Transfer fee:', ethers.formatEther(ethFee), 'ETH');
+
+            if (ethFee === 0n) throw new Error('Could not calculate transfer fee');
+
+            const { NetworkManager } = await import('../core/index.js');
+            const provider = NetworkManager.getProvider();
+            const ethBalance = await provider.getBalance(userAddress);
+            if (ethBalance < ethFee + ethers.parseEther('0.001')) {
+                throw new Error(`Insufficient ETH. Need ~${ethers.formatEther(ethFee)} ETH for transfer fee + gas`);
+            }
+        },
+
+        onSuccess,
+        onError
+    });
+}
 
 // ============================================================================
 // 4. READ FUNCTIONS
@@ -209,11 +346,11 @@ export const notarize = certify;
 
 /**
  * Verifies if a document hash was certified
- * V9: verify() returns (exists, owner, timestamp, docType, meta)
+ * V3: Returns 7 fields (added boosted, boostExpiry)
  */
 export async function verify(documentHash) {
     const contract = await getNotaryContractReadOnly();
-    const formattedHash = documentHash.startsWith('0x') ? documentHash : `0x${documentHash}`;
+    const formattedHash = formatHash(documentHash);
 
     try {
         const result = await contract.verify(formattedHash);
@@ -223,11 +360,13 @@ export async function verify(documentHash) {
             timestamp: result.exists ? Number(result.timestamp) : null,
             date: result.exists ? new Date(Number(result.timestamp) * 1000) : null,
             docType: result.exists ? Number(result.docType) : null,
-            meta: result.exists ? result.meta : null
+            meta: result.exists ? result.meta : null,
+            isBoosted: result.exists ? result.boosted : false,
+            boostExpiry: result.exists ? Number(result.boostExpiry) : null
         };
     } catch (error) {
         console.error('[NotaryTx] verify error:', error);
-        return { exists: false, owner: null, timestamp: null, date: null, docType: null, meta: null };
+        return { exists: false, owner: null, timestamp: null, date: null, docType: null, meta: null, isBoosted: false, boostExpiry: null };
     }
 }
 
@@ -236,7 +375,7 @@ export const verifyByHash = verify;
 
 /**
  * Gets certificate by sequential ID
- * V9: getCertificate() returns (documentHash, owner, timestamp, docType, meta)
+ * V3: Returns 7 fields (added boosted, boostExpiry)
  */
 export async function getCertificate(certId) {
     const contract = await getNotaryContractReadOnly();
@@ -252,7 +391,9 @@ export async function getCertificate(certId) {
             timestamp: Number(result.timestamp),
             date: new Date(Number(result.timestamp) * 1000),
             docType: Number(result.docType),
-            meta: result.meta
+            meta: result.meta,
+            isBoosted: result.boosted,
+            boostExpiry: Number(result.boostExpiry)
         };
     } catch {
         return null;
@@ -263,16 +404,82 @@ export async function getCertificate(certId) {
 export const getDocument = getCertificate;
 
 /**
- * Gets current certification fee (ETH only)
- * V9: getFee() returns single uint256
+ * Gets certificates in batch (V3)
+ * Returns array of certificate objects
+ */
+export async function getCertificatesBatch(start, count) {
+    const contract = await getNotaryContractReadOnly();
+
+    try {
+        const result = await contract.getCertificatesBatch(start, count);
+        const certs = [];
+        for (let i = 0; i < result.hashes.length; i++) {
+            if (result.hashes[i] === '0x' + '0'.repeat(64)) continue;
+            certs.push({
+                id: start + i,
+                documentHash: result.hashes[i],
+                owner: result.owners[i],
+                timestamp: Number(result.timestamps[i]),
+                date: new Date(Number(result.timestamps[i]) * 1000),
+                docType: Number(result.docTypes[i]),
+                isBoosted: result.boostedFlags[i],
+                boostExpiry: Number(result.boostExpiries[i])
+            });
+        }
+        return certs;
+    } catch (error) {
+        console.error('[NotaryTx] getCertificatesBatch error:', error);
+        return [];
+    }
+}
+
+/**
+ * Gets per-docType certification fee (ETH)
+ * V3: Uses calculateFeeClientSide with per-type action ID
+ */
+export async function getCertifyFee(docType = 0) {
+    const ethers = window.ethers;
+    const actionId = getCertifyActionId(docType);
+    const fee = await calculateFeeClientSide(actionId);
+    return {
+        fee,
+        formatted: ethers.formatEther(fee) + ' ETH',
+        docType,
+        typeName: DOC_TYPE_NAMES[docType] || 'Unknown'
+    };
+}
+
+/**
+ * Gets current certification fee (backward compat — returns General type fee)
  */
 export async function getFee() {
+    return getCertifyFee(0);
+}
+
+/**
+ * Gets boost cost for X days
+ */
+export async function getBoostCost(days = 1) {
     const ethers = window.ethers;
-    const contract = await getNotaryContractReadOnly();
-    const fee = await contract.getFee();
+    const feePerDay = await calculateFeeClientSide(ethers.id('NOTARY_BOOST'));
+    const totalFee = feePerDay * BigInt(days);
     return {
-        ethFee: fee,
-        ethFormatted: ethers.formatEther(fee) + ' ETH'
+        feePerDay,
+        feePerDayFormatted: ethers.formatEther(feePerDay),
+        totalFee,
+        totalFeeFormatted: ethers.formatEther(totalFee)
+    };
+}
+
+/**
+ * Gets transfer fee
+ */
+export async function getTransferFee() {
+    const ethers = window.ethers;
+    const fee = await calculateFeeClientSide(ethers.id('NOTARY_TRANSFER'));
+    return {
+        fee,
+        formatted: ethers.formatEther(fee) + ' ETH'
     };
 }
 
@@ -286,7 +493,7 @@ export async function getTotalDocuments() {
 
 /**
  * Gets certification statistics
- * V9: getStats() returns 2-tuple (certCount, totalEthCollected)
+ * V3: Returns 4-tuple (certCount, totalEthCollected, totalBoostRevenue, totalTransfers)
  */
 export async function getStats() {
     const ethers = window.ethers;
@@ -294,9 +501,12 @@ export async function getStats() {
 
     const stats = await contract.getStats();
     return {
-        totalCertifications: Number(stats.certCount || stats[0]),
-        totalETHCollected: stats.totalEthCollected || stats[1],
-        totalETHFormatted: ethers.formatEther(stats.totalEthCollected || stats[1])
+        totalCertifications: Number(stats[0]),
+        totalETHCollected: stats[1],
+        totalETHFormatted: ethers.formatEther(stats[1]),
+        totalBoostRevenue: stats[2],
+        totalBoostFormatted: ethers.formatEther(stats[2]),
+        totalTransfers: Number(stats[3])
     };
 }
 
@@ -314,6 +524,16 @@ export async function calculateFileHash(file) {
         throw new Error('Invalid file type. Expected File, Blob, or ArrayBuffer');
     }
 
+    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return '0x' + hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Hash text content via SHA-256 (for text notarization)
+ */
+export async function calculateTextHash(text) {
+    const buffer = new TextEncoder().encode(text);
     const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return '0x' + hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
@@ -341,11 +561,13 @@ export async function verifyDocumentOnChain(fileContent, expectedHash) {
         contentHash: hash,
         hashMatches,
         existsOnChain: onChainResult.exists,
-        certId: null, // V9: no tokenId, use hash as key
         owner: onChainResult.owner,
         timestamp: onChainResult.timestamp,
         date: onChainResult.date,
         docType: onChainResult.docType,
+        meta: onChainResult.meta,
+        isBoosted: onChainResult.isBoosted,
+        boostExpiry: onChainResult.boostExpiry,
         isVerified: hashMatches && onChainResult.exists
     };
 }
@@ -358,23 +580,32 @@ export const NotaryTx = {
     // Write functions
     certify,
     notarize, // backward-compatible alias
+    boostCertificate,
+    transferCertificate,
 
     // Read helpers
     verify,
     verifyByHash, // backward-compatible alias
     getCertificate,
     getDocument, // backward-compatible alias
+    getCertificatesBatch,
     getTotalDocuments,
     getFee,
+    getCertifyFee,
+    getBoostCost,
+    getTransferFee,
     getStats,
 
     // Utilities
     calculateFileHash,
+    calculateTextHash,
     verifyDocumentHash,
     verifyDocumentOnChain,
+    getCertifyActionId,
 
     // Constants
-    DOC_TYPES
+    DOC_TYPES,
+    DOC_TYPE_NAMES
 };
 
 export default NotaryTx;

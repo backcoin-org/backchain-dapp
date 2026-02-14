@@ -26,7 +26,8 @@ import { API_ENDPOINTS } from '../modules/data.js';
 import { showToast } from '../ui-feedback.js';
 import { NotaryTx } from '../modules/transactions/index.js';
 import { resolveOperator } from '../modules/core/operator.js';
-import { ipfsGateway, IPFS_GATEWAYS, addresses } from '../config.js';
+import { resolveContentUrl, irysUploadFile, getUploadPrice } from '../modules/core/index.js';
+import { addresses } from '../config.js';
 
 const ethers = window.ethers;
 
@@ -72,8 +73,8 @@ const NT = {
     wizDescription: '',
     wizDuplicateCheck: null,
     wizIsHashing: false,
-    wizIpfsCid: null,
-    wizUploadDate: null,
+    wizDocType: 0,
+    wizUploadCost: null,
 
     // Fees
     bkcFee: 0n,
@@ -165,11 +166,8 @@ function shortenHash(hash) {
     return `${hash.slice(0, 10)}...${hash.slice(-8)}`;
 }
 
-function resolveIpfsUrl(cid) {
-    if (!cid) return '';
-    if (cid.startsWith('https://')) return cid;
-    if (cid.startsWith('ipfs://')) return `${IPFS_GATEWAYS[0]}${cid.replace('ipfs://', '')}`;
-    return `${IPFS_GATEWAYS[0]}${cid}`;
+function resolveStorageUrl(uri) {
+    return resolveContentUrl(uri) || '';
 }
 
 function formatFileSize(bytes) {
@@ -777,7 +775,7 @@ function renderDocuments(el) {
 }
 
 function renderCertCard(cert) {
-    const ipfsUrl = resolveIpfsUrl(cert.ipfs);
+    const ipfsUrl = resolveStorageUrl(cert.ipfs);
     const fileInfo = getFileTypeInfo(cert.mimeType || '', cert.description || cert.fileName || '');
     const timeAgo = formatTimestamp(cert.timestamp);
     const desc = cert.description?.split('---')[0].trim().split('\n')[0].trim() || 'Notarized Document';
@@ -960,7 +958,7 @@ function renderWizStep1(panel) {
 
         <div style="display:flex;align-items:center;justify-content:center;gap:20px;margin-top:16px;font-size:11px;color:var(--nt-text-3)">
             <span><i class="fa-solid fa-shield-halved" style="color:var(--nt-green);margin-right:4px"></i>Local hash</span>
-            <span><i class="fa-solid fa-database" style="color:var(--nt-blue);margin-right:4px"></i>IPFS</span>
+            <span><i class="fa-solid fa-database" style="color:var(--nt-blue);margin-right:4px"></i>Arweave</span>
             <span><i class="fa-solid fa-infinity" style="color:var(--nt-accent);margin-right:4px"></i>Permanent</span>
         </div>
     `;
@@ -1027,14 +1025,19 @@ function renderWizStep2(panel) {
     const file = NT.wizFile;
     const fileInfo = getFileTypeInfo(file?.type || '', file?.name || '');
 
-    const bkcFmt = NT.feesLoaded ? (ethers ? ethers.formatEther(NT.bkcFee) : '1') : '...';
     const ethFmt = NT.feesLoaded ? (ethers ? ethers.formatEther(NT.ethFee) : '0.0001') : '...';
+    const uploadCostFmt = NT.wizUploadCost ? NT.wizUploadCost.costFormatted : '...';
 
-    const bkcBalance = State.currentUserBalance || 0n;
     const ethBalance = State.currentUserNativeBalance || 0n;
-    const hasBkc = NT.feesLoaded ? bkcBalance >= NT.bkcFee : true;
-    const hasEth = NT.feesLoaded ? ethBalance >= (NT.ethFee + (ethers?.parseEther('0.001') || 0n)) : true;
-    const canProceed = hasBkc && hasEth;
+    const totalEthNeeded = (NT.ethFee || 0n) + (NT.wizUploadCost?.cost || 0n) + (ethers?.parseEther('0.001') || 0n);
+    const hasEth = NT.feesLoaded ? ethBalance >= totalEthNeeded : true;
+    const canProceed = hasEth;
+
+    // Doc type options
+    const docTypeNames = ['General', 'Contract', 'Identity', 'Diploma', 'Property', 'Financial', 'Legal', 'Medical', 'IP', 'Other'];
+    const docTypeOptions = docTypeNames.map((name, i) =>
+        `<option value="${i}" ${NT.wizDocType === i ? 'selected' : ''}>${name}</option>`
+    ).join('');
 
     panel.innerHTML = `
         <div style="max-width:420px;margin:0 auto">
@@ -1055,6 +1058,17 @@ function renderWizStep2(panel) {
 
             <div style="margin-bottom:16px">
                 <label style="font-size:11px;font-weight:600;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:6px">
+                    Document Type
+                </label>
+                <select id="nt-wiz-doctype"
+                    style="width:100%;background:var(--nt-bg3);border:1px solid var(--nt-border);border-radius:var(--nt-radius-sm);padding:10px 12px;font-size:13px;color:var(--nt-text);outline:none;font-family:inherit;cursor:pointer"
+                    onchange="NotaryPage.onDocTypeChange(this.value)">
+                    ${docTypeOptions}
+                </select>
+            </div>
+
+            <div style="margin-bottom:16px">
+                <label style="font-size:11px;font-weight:600;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:6px">
                     Description <span style="font-weight:400;text-transform:none">(optional)</span>
                 </label>
                 <textarea id="nt-wiz-desc" rows="3"
@@ -1066,18 +1080,20 @@ function renderWizStep2(panel) {
 
             <div class="nt-fee-box" style="margin-bottom:16px">
                 <div style="font-size:11px;font-weight:700;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">
-                    <i class="fa-solid fa-coins" style="color:var(--nt-accent);margin-right:4px"></i>Service Fees
+                    <i class="fa-solid fa-coins" style="color:var(--nt-accent);margin-right:4px"></i>Fees
                 </div>
                 <div class="nt-fee-row">
-                    <span style="font-size:13px;color:var(--nt-text-2)">BKC Fee</span>
-                    <span style="font-size:14px;font-weight:700;color:var(--nt-accent);font-family:monospace">${bkcFmt} BKC</span>
+                    <span style="font-size:13px;color:var(--nt-text-2)">Arweave Storage</span>
+                    <span style="font-size:14px;font-weight:700;color:#22d3ee;font-family:monospace">${uploadCostFmt}</span>
                 </div>
                 <div class="nt-fee-row">
-                    <span style="font-size:13px;color:var(--nt-text-2)">ETH Fee (gas fee)</span>
+                    <span style="font-size:13px;color:var(--nt-text-2)">Certification Fee</span>
                     <span style="font-size:14px;font-weight:700;color:var(--nt-blue);font-family:monospace">${ethFmt} ETH</span>
                 </div>
-                ${!hasBkc ? `<div style="font-size:11px;color:var(--nt-red);margin-top:8px"><i class="fa-solid fa-circle-xmark" style="margin-right:4px"></i>Insufficient BKC balance (${formatBigNumber(bkcBalance)} BKC)</div>` : ''}
-                ${!hasEth ? `<div style="font-size:11px;color:var(--nt-red);margin-top:4px"><i class="fa-solid fa-circle-xmark" style="margin-right:4px"></i>Insufficient ETH for fee + gas</div>` : ''}
+                <div style="font-size:10px;color:var(--nt-text-3);margin-top:6px;font-style:italic">
+                    <i class="fa-solid fa-infinity" style="margin-right:4px"></i>Arweave = permanent, decentralized storage
+                </div>
+                ${!hasEth ? `<div style="font-size:11px;color:var(--nt-red);margin-top:8px"><i class="fa-solid fa-circle-xmark" style="margin-right:4px"></i>Insufficient ETH for fees + gas</div>` : ''}
             </div>
 
             <div style="display:flex;gap:10px">
@@ -1097,14 +1113,15 @@ function renderWizStep3(panel) {
     const file = NT.wizFile;
     const fileInfo = getFileTypeInfo(file?.type || '', file?.name || '');
     const desc = NT.wizDescription || 'No description';
+    const docTypeNames = ['General', 'Contract', 'Identity', 'Diploma', 'Property', 'Financial', 'Legal', 'Medical', 'IP', 'Other'];
 
-    const bkcFmt = ethers ? ethers.formatEther(NT.bkcFee) : '1';
     const ethFmt = ethers ? ethers.formatEther(NT.ethFee) : '0.0001';
+    const uploadCostFmt = NT.wizUploadCost ? NT.wizUploadCost.costFormatted : '~0 ETH';
 
     panel.innerHTML = `
         <div style="max-width:420px;margin:0 auto;text-align:center">
             <div style="font-size:16px;font-weight:700;color:var(--nt-text);margin-bottom:4px">Confirm & Mint</div>
-            <div style="font-size:12px;color:var(--nt-text-3);margin-bottom:20px">Review and sign to create your NFT certificate</div>
+            <div style="font-size:12px;color:var(--nt-text-3);margin-bottom:20px">Review and sign to create your certificate</div>
 
             <div style="background:var(--nt-bg3);border:1px solid var(--nt-border);border-radius:var(--nt-radius);padding:16px;text-align:left;margin-bottom:16px">
                 <div style="display:flex;align-items:center;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--nt-border);margin-bottom:12px">
@@ -1113,7 +1130,7 @@ function renderWizStep3(panel) {
                     </div>
                     <div style="flex:1;min-width:0">
                         <div style="font-size:13px;font-weight:600;color:var(--nt-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${file?.name}</div>
-                        <div style="font-size:11px;color:var(--nt-text-3)">${formatFileSize(file?.size || 0)}</div>
+                        <div style="font-size:11px;color:var(--nt-text-3)">${formatFileSize(file?.size || 0)} &middot; ${docTypeNames[NT.wizDocType] || 'General'}</div>
                     </div>
                 </div>
                 <div style="font-size:12px;color:var(--nt-text-2);font-style:italic">"${desc}"</div>
@@ -1124,11 +1141,11 @@ function renderWizStep3(panel) {
 
             <div class="nt-fee-box" style="margin-bottom:20px">
                 <div class="nt-fee-row">
-                    <span style="font-size:13px;color:var(--nt-text-2)">BKC Fee</span>
-                    <span style="font-size:14px;font-weight:700;color:var(--nt-accent);font-family:monospace">${bkcFmt} BKC</span>
+                    <span style="font-size:13px;color:var(--nt-text-2)">Arweave Storage</span>
+                    <span style="font-size:14px;font-weight:700;color:#22d3ee;font-family:monospace">${uploadCostFmt}</span>
                 </div>
                 <div class="nt-fee-row">
-                    <span style="font-size:13px;color:var(--nt-text-2)">ETH Fee</span>
+                    <span style="font-size:13px;color:var(--nt-text-2)">Certification Fee</span>
                     <span style="font-size:14px;font-weight:700;color:var(--nt-blue);font-family:monospace">${ethFmt} ETH</span>
                 </div>
             </div>
@@ -1151,62 +1168,49 @@ function renderWizStep3(panel) {
 async function handleMint() {
     if (NT.isProcessing) return;
     NT.isProcessing = true;
-    NT.processStep = 'SIGNING';
 
     const btn = document.getElementById('nt-btn-mint');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>Signing...'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>Uploading...'; }
 
-    const overlay = document.getElementById('nt-overlay');
-    showOverlay('signing');
+    showOverlay('uploading');
 
     try {
-        // 1. Sign message
-        const signer = await State.provider.getSigner();
-        const message = 'I am signing to authenticate my file for notarization on Backchain.';
-        const signature = await signer.signMessage(message);
-
-        // 2. Upload to IPFS
+        // 1. Upload to Arweave via Irys (user pays ETH directly from MetaMask)
         NT.processStep = 'UPLOADING';
-        showOverlay('uploading');
-
-        const formData = new FormData();
-        formData.append('file', NT.wizFile);
-        formData.append('signature', signature);
-        formData.append('address', State.userAddress);
-        formData.append('description', NT.wizDescription || 'No description');
-
-        const uploadUrl = API_ENDPOINTS.uploadFileToIPFS || '/api/upload';
-        const res = await fetch(uploadUrl, {
-            method: 'POST',
-            body: formData,
-            signal: AbortSignal.timeout(180000)
+        const uploadResult = await irysUploadFile(NT.wizFile, {
+            tags: [
+                { name: 'Type', value: 'notary-document' },
+                { name: 'Doc-Type', value: String(NT.wizDocType) },
+                { name: 'File-Name', value: NT.wizFile.name }
+            ],
+            onProgress: (phase, detail) => {
+                if (phase === 'funding') showOverlay('funding');
+                else if (phase === 'uploading') showOverlay('uploading');
+            }
         });
 
-        if (!res.ok) {
-            if (res.status === 413) throw new Error('File too large (max 5MB)');
-            if (res.status === 401) throw new Error('Signature verification failed');
-            throw new Error(`Upload failed (${res.status})`);
-        }
+        console.log('[NotaryPage] Arweave upload:', uploadResult.url);
 
-        const data = await res.json();
-        const ipfsCid = data.ipfsUri || data.metadataUri;
-        const contentHash = data.contentHash || NT.wizFileHash;
-
-        if (!ipfsCid) throw new Error('No IPFS URI returned');
-        if (!contentHash) throw new Error('No content hash returned');
-
-        // 3. Mint on blockchain
+        // 2. Certify on blockchain
         NT.processStep = 'MINTING';
         showOverlay('minting');
 
-        await NotaryTx.notarize({
-            ipfsCid,
-            contentHash,
-            description: NT.wizDescription || 'No description',
+        const meta = JSON.stringify({
+            uri: `ar://${uploadResult.id}`,
+            name: NT.wizFile.name,
+            size: NT.wizFile.size,
+            type: NT.wizFile.type,
+            desc: NT.wizDescription || ''
+        });
+
+        await NotaryTx.certify({
+            documentHash: NT.wizFileHash,
+            meta,
+            docType: NT.wizDocType,
             operator: resolveOperator(),
             button: btn,
 
-            onSuccess: (receipt, tokenId, feePaid) => {
+            onSuccess: (receipt, tokenId) => {
                 NT.processStep = 'SUCCESS';
                 showOverlay('success', tokenId);
 
@@ -1216,17 +1220,18 @@ async function handleMint() {
                     NT.wizFileHash = null;
                     NT.wizDescription = '';
                     NT.wizDuplicateCheck = null;
+                    NT.wizDocType = 0;
+                    NT.wizUploadCost = null;
                     NT.wizStep = 1;
                     NT.isProcessing = false;
 
-                    // Switch to documents tab and reload
                     NT.view = 'documents';
                     NT.activeTab = 'documents';
                     renderHeader();
                     renderContent();
                     loadCertificates();
 
-                    showToast('Document notarized successfully!', 'success');
+                    showToast('Document certified on Arweave + Blockchain!', 'success');
                 }, 3000);
             },
 
@@ -1247,7 +1252,7 @@ async function handleMint() {
         NT.isProcessing = false;
         if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-stamp" style="margin-right:6px"></i>Sign & Mint'; }
         if (e.code !== 4001 && e.code !== 'ACTION_REJECTED') {
-            showToast(e.message || 'Notarization failed', 'error');
+            showToast(e.message || 'Certification failed', 'error');
         }
     }
 }
@@ -1261,10 +1266,10 @@ function showOverlay(step, tokenId) {
     overlay.classList.add('active');
 
     const configs = {
-        signing: { icon: 'fa-solid fa-signature', text: 'Signing message...', sub: 'Confirm in MetaMask', pct: 10 },
-        uploading: { icon: 'fa-solid fa-cloud-arrow-up', text: 'Uploading to IPFS...', sub: 'Decentralized storage', pct: 35 },
-        minting: { icon: 'fa-solid fa-stamp', text: 'Minting on Blockchain...', sub: 'Waiting for confirmation', pct: 65, animate: true },
-        success: { icon: 'fa-solid fa-check', text: 'Notarized!', sub: tokenId ? `Token ID #${tokenId}` : 'Certificate created', pct: 100, success: true }
+        uploading: { icon: 'fa-solid fa-cloud-arrow-up', text: 'Uploading to Arweave...', sub: 'Permanent decentralized storage', pct: 20 },
+        funding: { icon: 'fa-solid fa-wallet', text: 'Funding storage...', sub: 'Confirm in MetaMask', pct: 15, animate: true },
+        minting: { icon: 'fa-solid fa-stamp', text: 'Certifying on Blockchain...', sub: 'Waiting for confirmation', pct: 65, animate: true },
+        success: { icon: 'fa-solid fa-check', text: 'Certified!', sub: tokenId ? `Certificate #${tokenId}` : 'Certificate created', pct: 100, success: true }
     };
 
     const cfg = configs[step] || configs.signing;
@@ -1562,7 +1567,7 @@ function renderCertDetail(el) {
     const cert = NT.selectedCert;
     if (!cert) { goBack(); return; }
 
-    const ipfsUrl = resolveIpfsUrl(cert.ipfs);
+    const ipfsUrl = resolveStorageUrl(cert.ipfs);
     const fileInfo = getFileTypeInfo(cert.mimeType || '', cert.description || '');
     const isImage = (cert.mimeType || '').includes('image') || /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(cert.fileName || cert.description || '');
 
@@ -1629,7 +1634,7 @@ function renderCertDetail(el) {
 
             ${cert.ipfs ? `
                 <div class="nt-card" style="margin-bottom:12px;padding:14px">
-                    <div style="font-size:10px;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">IPFS CID</div>
+                    <div style="font-size:10px;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Storage URI</div>
                     <div style="font-size:11px;font-family:monospace;color:var(--nt-text-2);word-break:break-all">${cert.ipfs}</div>
                 </div>
             ` : ''}
@@ -1638,7 +1643,7 @@ function renderCertDetail(el) {
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
                 ${ipfsUrl ? `
                     <a href="${ipfsUrl}" target="_blank" class="nt-btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:12px">
-                        <i class="fa-solid fa-download"></i>Download from IPFS
+                        <i class="fa-solid fa-download"></i>Download
                     </a>
                 ` : ''}
                 <a href="${EXPLORER_ADDR}${addresses?.notary}?a=${cert.id}" target="_blank" class="nt-btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:12px">
@@ -1657,16 +1662,24 @@ function renderCertDetail(el) {
 // ============================================================================
 // DATA LOADING
 // ============================================================================
-async function loadFees() {
+async function loadFees(docType = 0) {
     try {
-        const fees = await NotaryTx.getFee();
-        NT.bkcFee = fees.bkcFee;
-        NT.ethFee = fees.ethFee;
+        const result = await NotaryTx.getCertifyFee(docType);
+        NT.ethFee = result.fee;
         NT.feesLoaded = true;
     } catch {
-        NT.bkcFee = ethers?.parseEther('1') || 0n;
         NT.ethFee = ethers?.parseEther('0.0001') || 0n;
         NT.feesLoaded = true;
+    }
+
+    // Also calculate Arweave upload cost if file is selected
+    if (NT.wizFile?.size) {
+        try {
+            NT.wizUploadCost = await getUploadPrice(NT.wizFile.size);
+        } catch (e) {
+            console.warn('[NotaryPage] Could not estimate upload cost:', e.message);
+            NT.wizUploadCost = null;
+        }
     }
 }
 
@@ -1848,15 +1861,7 @@ async function loadRecentNotarizations() {
 // ============================================================================
 async function addToWallet(tokenId, imageUrl) {
     try {
-        const toHttpsUrl = (url) => {
-            if (!url) return '';
-            if (url.startsWith('https://') && !url.includes('/ipfs/')) return url;
-            const cid = url.startsWith('ipfs://') ? url.replace('ipfs://', '') :
-                        url.includes('/ipfs/') ? url.split('/ipfs/')[1]?.split('?')[0] : '';
-            return cid ? `${IPFS_GATEWAYS[0]}${cid}` : url;
-        };
-
-        let finalImageUrl = toHttpsUrl(imageUrl || '');
+        let finalImageUrl = resolveContentUrl(imageUrl || '') || '';
 
         // Try to get image from token URI
         if (State.notaryContract) {
@@ -1864,7 +1869,7 @@ async function addToWallet(tokenId, imageUrl) {
                 const uri = await State.notaryContract.tokenURI(tokenId);
                 if (uri?.startsWith('data:application/json;base64,')) {
                     const metadata = JSON.parse(atob(uri.replace('data:application/json;base64,', '')));
-                    if (metadata.image) finalImageUrl = toHttpsUrl(metadata.image);
+                    if (metadata.image) finalImageUrl = resolveContentUrl(metadata.image) || '';
                 }
             } catch {}
         }
@@ -1935,6 +1940,15 @@ function wizToStep3() {
     renderContent();
 }
 
+function onDocTypeChange(value) {
+    NT.wizDocType = parseInt(value) || 0;
+    // Recalculate fee for new doc type
+    loadFees(NT.wizDocType).then(() => {
+        const panel = document.getElementById('nt-wiz-panel');
+        if (panel && NT.wizStep === 2) renderWizStep2(panel);
+    });
+}
+
 function wizRemoveFile() {
     NT.wizFile = null;
     NT.wizFileHash = null;
@@ -1993,7 +2007,8 @@ export const NotaryPage = {
     wizNext,
     wizBack,
     wizToStep3,
-    wizRemoveFile
+    wizRemoveFile,
+    onDocTypeChange
 };
 
 window.NotaryPage = NotaryPage;

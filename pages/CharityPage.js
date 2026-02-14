@@ -23,6 +23,7 @@ import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
 import { addresses } from '../config.js';
 import { CharityTx } from '../modules/transactions/index.js';
+import { irysUploadFile } from '../modules/core/index.js';
 
 const ethers = window.ethers;
 
@@ -446,25 +447,10 @@ async function loadStats() {
 // ============================================================================
 
 async function uploadFile(file) {
-    const isVideo = ALLOWED_VIDEO_TYPES.includes(file.type);
-    const endpoint = isVideo ? CHARITY_API.uploadMedia : CHARITY_API.uploadImage;
-    const fieldName = isVideo ? 'media' : 'image';
-
-    const formData = new FormData();
-    formData.append(fieldName, file);
-
-    const response = await fetch(endpoint, {
-        method: 'POST',
-        body: formData,
-        signal: AbortSignal.timeout(isVideo ? 120000 : 60000)
+    const result = await irysUploadFile(file, {
+        tags: [{ name: 'Type', value: 'charity-media' }]
     });
-
-    if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || `Upload failed (${response.status})`);
-    }
-    const data = await response.json();
-    return data.mediaUrl || data.imageUrl;
+    return result.url;
 }
 
 function handleMediaSelect(event) {
@@ -1138,10 +1124,10 @@ async function wizardLaunch() {
     if (!goal || parseFloat(goal) < 0.01) return showToast('Goal must be at least 0.01 ETH', 'error');
     if (!duration || parseInt(duration) < 1 || parseInt(duration) > 365) return showToast('Duration must be 1-365 days', 'error');
 
-    // Upload media files to IPFS
+    // Upload media files to Arweave
     let mediaUrls = [];
     if (CS.createMedia.length > 0) {
-        showToast(`Uploading ${CS.createMedia.length} file(s) to IPFS...`, 'info');
+        showToast(`Uploading ${CS.createMedia.length} file(s) to Arweave...`, 'info');
         for (const m of CS.createMedia) {
             if (m.file) {
                 try {

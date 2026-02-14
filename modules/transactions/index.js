@@ -112,19 +112,26 @@ export {
     getMarketplaceStats
 } from './rental-tx.js';
 
-// Notary (V9: certify replaces notarize)
+// Notary V3 (per-docType fees, boost, transfer, batch reads)
 export {
     NotaryTx,
     certify,
     notarize, // backward-compat alias
+    boostCertificate as notaryBoostCertificate,
+    transferCertificate as notaryTransferCertificate,
     verify,
     verifyByHash, // backward-compat alias
     getCertificate,
     getDocument, // backward-compat alias
+    getCertificatesBatch,
+    getCertifyFee,
     getFee as notaryGetFee,
+    getBoostCost as notaryGetBoostCost,
+    getTransferFee as notaryGetTransferFee,
     getTotalDocuments,
     getStats as notaryGetStats,
-    calculateFileHash
+    calculateFileHash,
+    calculateTextHash
 } from './notary-tx.js';
 
 // Faucet (Testnet) - No operator needed
