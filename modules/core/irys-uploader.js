@@ -56,22 +56,46 @@ export async function getUploader() {
     if (_uploader) return _uploader;
 
     console.log('[Irys] Loading SDK...');
-    const [{ WebUploader }, { WebArbitrum }, { EthersV6Adapter }] = await Promise.all([
-        import('@irys/web-upload'),
-        import('@irys/web-upload-ethereum'),
-        import('@irys/web-upload-ethereum-ethers-v6')
-    ]);
 
-    let builder = WebUploader(WebArbitrum).withAdapter(EthersV6Adapter(provider));
-
-    if (IRYS_CONFIG.devnet) {
-        builder = builder.withRpc(sepoliaRpcUrl).devnet();
+    let WebUploader, WebArbitrum, EthersV6Adapter;
+    try {
+        const modules = await Promise.all([
+            import('@irys/web-upload'),
+            import('@irys/web-upload-ethereum'),
+            import('@irys/web-upload-ethereum-ethers-v6')
+        ]);
+        WebUploader = modules[0].WebUploader;
+        WebArbitrum = modules[1].WebArbitrum;
+        EthersV6Adapter = modules[2].EthersV6Adapter;
+        console.log('[Irys] SDK modules loaded');
+    } catch (e) {
+        console.error('[Irys] Failed to load SDK modules:', e);
+        throw new Error('Failed to load Irys SDK: ' + (e.message || e));
     }
 
-    _uploader = await builder;
-    _uploaderAddress = currentAddress;
-    console.log(`[Irys] Ready (${IRYS_CONFIG.devnet ? 'devnet' : 'mainnet'}) for ${currentAddress.slice(0, 6)}...`);
-    return _uploader;
+    try {
+        let builder = WebUploader(WebArbitrum).withAdapter(EthersV6Adapter(provider));
+
+        if (IRYS_CONFIG.devnet) {
+            builder = builder.withRpc(sepoliaRpcUrl).devnet();
+        }
+
+        console.log(`[Irys] Connecting to bundler node... (RPC: ${sepoliaRpcUrl?.slice(0, 40)}...)`);
+
+        // Timeout after 15s to prevent indefinite hang
+        const timeout = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Irys bundler connection timed out (15s). Check your network.')), 15000)
+        );
+        _uploader = await Promise.race([builder, timeout]);
+        _uploaderAddress = currentAddress;
+        console.log(`[Irys] Ready (${IRYS_CONFIG.devnet ? 'devnet' : 'mainnet'}) for ${currentAddress.slice(0, 6)}...`);
+        return _uploader;
+    } catch (e) {
+        _uploader = null;
+        _uploaderAddress = null;
+        console.error('[Irys] SDK initialization failed:', e);
+        throw new Error('Irys initialization failed: ' + (e.message || e));
+    }
 }
 
 // ============================================================================
