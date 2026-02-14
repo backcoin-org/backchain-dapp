@@ -120,7 +120,49 @@ async function getNftContractReadOnly() {
 }
 
 // ============================================================================
-// 4. TRANSACTION FUNCTIONS
+// 4. ERC-721 APPROVAL HELPER
+// ============================================================================
+
+/**
+ * Ensure the fusion contract has setApprovalForAll on the NFT contract.
+ * Called from validate() of fuse, split, and splitTo — before txEngine runs
+ * (txEngine only handles ERC-20 approvals, not ERC-721).
+ */
+async function ensureNftApproval(signer, userAddress) {
+    const ethers = window.ethers;
+    const fusionAddr = getFusionAddress();
+    const nftAddr = getNftAddress();
+    const nft = await getNftContractReadOnly();
+
+    const isApproved = await nft.isApprovedForAll(userAddress, fusionAddr);
+    if (isApproved) return;
+
+    console.log('[Fusion] Requesting ERC-721 approval for fusion contract...');
+    const { NetworkManager } = await import('../core/index.js');
+    const readProvider = NetworkManager.getProvider();
+    const feeData = await readProvider.getFeeData();
+
+    const txOpts = { gasLimit: 100000n };
+    if (feeData.maxFeePerGas) {
+        txOpts.maxFeePerGas = feeData.maxFeePerGas * 120n / 100n;
+        txOpts.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || 0n;
+    }
+
+    const nftSigner = new ethers.Contract(nftAddr, NFT_APPROVAL_ABI, signer);
+    const approveTx = await nftSigner.setApprovalForAll(fusionAddr, true, txOpts);
+
+    // Wait for confirmation via Alchemy polling (not MetaMask)
+    for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 1500));
+        const receipt = await readProvider.getTransactionReceipt(approveTx.hash);
+        if (receipt) { console.log('[Fusion] ERC-721 approval confirmed'); break; }
+        if (i === 29) console.warn('[Fusion] Approval confirmation timeout, proceeding anyway');
+    }
+    await new Promise(r => setTimeout(r, 1500));
+}
+
+// ============================================================================
+// 5. TRANSACTION FUNCTIONS
 // ============================================================================
 
 /**
@@ -190,6 +232,9 @@ export async function fuseNfts({
             const { NetworkManager } = await import('../core/index.js');
             const ethBalance = await NetworkManager.getProvider().getBalance(userAddress);
             if (ethBalance < ethFee + ethers.parseEther('0.001')) throw new Error('Insufficient ETH for fee + gas');
+
+            // ERC-721 approval (txEngine only handles ERC-20)
+            await ensureNftApproval(signer, userAddress);
         },
 
         onSuccess: async (receipt) => {
@@ -258,6 +303,8 @@ export async function splitNft({
             const { NetworkManager } = await import('../core/index.js');
             const ethBalance = await NetworkManager.getProvider().getBalance(userAddress);
             if (ethBalance < ethFee + ethers.parseEther('0.001')) throw new Error('Insufficient ETH for fee + gas');
+
+            await ensureNftApproval(signer, userAddress);
         },
 
         onSuccess: async (receipt) => {
@@ -337,6 +384,9 @@ export async function splitNftTo({
             const { NetworkManager } = await import('../core/index.js');
             const ethBalance = await NetworkManager.getProvider().getBalance(userAddress);
             if (ethBalance < ethFee + ethers.parseEther('0.001')) throw new Error('Insufficient ETH for fee + gas');
+
+            // ERC-721 approval (txEngine only handles ERC-20)
+            await ensureNftApproval(signer, userAddress);
         },
 
         onSuccess: async (receipt) => {
@@ -362,7 +412,7 @@ export async function splitNftTo({
 }
 
 // ============================================================================
-// 5. READ FUNCTIONS
+// 6. READ FUNCTIONS
 // ============================================================================
 
 /**
@@ -424,7 +474,7 @@ export async function isFusionApproved(userAddress) {
 }
 
 // ============================================================================
-// 6. NAMESPACE OBJECT
+// 7. NAMESPACE OBJECT
 // ============================================================================
 
 export const FusionTx = {
