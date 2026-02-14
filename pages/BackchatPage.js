@@ -56,6 +56,21 @@ const TAGS = [
     { id: 14, name: 'Random',    icon: 'fa-shuffle',           color: '#6b7280' }
 ];
 
+const LANGUAGES = [
+    { code: 'en', name: 'English',    flag: '\u{1F1FA}\u{1F1F8}' },
+    { code: 'pt', name: 'Portugu\u00EAs',  flag: '\u{1F1E7}\u{1F1F7}' },
+    { code: 'es', name: 'Espa\u00F1ol',    flag: '\u{1F1EA}\u{1F1F8}' },
+    { code: 'fr', name: 'Fran\u00E7ais',   flag: '\u{1F1EB}\u{1F1F7}' },
+    { code: 'de', name: 'Deutsch',    flag: '\u{1F1E9}\u{1F1EA}' },
+    { code: 'zh', name: '\u4E2D\u6587',       flag: '\u{1F1E8}\u{1F1F3}' },
+    { code: 'ja', name: '\u65E5\u672C\u8A9E',     flag: '\u{1F1EF}\u{1F1F5}' },
+    { code: 'ko', name: '\uD55C\uAD6D\uC5B4',     flag: '\u{1F1F0}\u{1F1F7}' },
+    { code: 'ru', name: '\u0420\u0443\u0441\u0441\u043A\u0438\u0439',    flag: '\u{1F1F7}\u{1F1FA}' },
+    { code: 'ar', name: '\u0627\u0644\u0639\u0631\u0628\u064A\u0629',    flag: '\u{1F1F8}\u{1F1E6}' },
+    { code: 'hi', name: '\u0939\u093F\u0928\u094D\u0926\u0940',     flag: '\u{1F1EE}\u{1F1F3}' },
+    { code: 'tr', name: 'T\u00FCrk\u00E7e',     flag: '\u{1F1F9}\u{1F1F7}' },
+];
+
 function formatExpiry(timestampSec) {
     if (!timestampSec || timestampSec === 0) return '';
     const now = Math.floor(Date.now() / 1000);
@@ -147,7 +162,9 @@ const BC = {
     badgeExpiry: 0,
     blockedAuthors: new Set(),
     selectedTag: -1,
+    selectedLanguage: null,
     composeTag: 0,
+    wizLanguage: navigator.language?.slice(0, 2) || 'en',
     globalStats: null,
     isLoading: false,
     isPosting: false,
@@ -503,12 +520,12 @@ function escapeHtml(text) {
 }
 
 function parseMetadata(metadataURI) {
-    if (!metadataURI) return { displayName: '', bio: '', avatar: '' };
+    if (!metadataURI) return { displayName: '', bio: '', avatar: '', language: '' };
     try {
         const data = JSON.parse(metadataURI);
-        return { displayName: data.displayName || '', bio: data.bio || '', avatar: data.avatar || '' };
+        return { displayName: data.displayName || '', bio: data.bio || '', avatar: data.avatar || '', language: data.language || '' };
     } catch {
-        return { displayName: '', bio: '', avatar: '' };
+        return { displayName: '', bio: '', avatar: '', language: '' };
     }
 }
 
@@ -694,6 +711,10 @@ async function loadProfiles() {
             if (myProfile) {
                 BC.userProfile = { ...myProfile, address: State.userAddress };
                 BC.hasProfile = true;
+                // Auto-set language filter to user's language on first load
+                if (BC.selectedLanguage === null && myProfile.language) {
+                    BC.selectedLanguage = myProfile.language;
+                }
             } else {
                 BC.hasProfile = false;
                 BC.userProfile = null;
@@ -1197,7 +1218,7 @@ async function doUnfollow(address) {
 }
 
 async function doCreateProfile() {
-    const metadataURI = JSON.stringify({ displayName: BC.wizDisplayName, bio: BC.wizBio });
+    const metadataURI = JSON.stringify({ displayName: BC.wizDisplayName, bio: BC.wizBio, language: BC.wizLanguage });
     const btn = document.getElementById('bc-wizard-confirm-btn');
 
     await BackchatTx.createProfile({
@@ -1208,8 +1229,9 @@ async function doCreateProfile() {
         onSuccess: async () => {
             showToast('Profile created!', 'success');
             BC.hasProfile = true;
-            BC.userProfile = { username: BC.wizUsername, displayName: BC.wizDisplayName, bio: BC.wizBio, address: State.userAddress };
-            BC.profiles.set(State.userAddress.toLowerCase(), { username: BC.wizUsername, displayName: BC.wizDisplayName, bio: BC.wizBio });
+            BC.userProfile = { username: BC.wizUsername, displayName: BC.wizDisplayName, bio: BC.wizBio, language: BC.wizLanguage, address: State.userAddress };
+            BC.profiles.set(State.userAddress.toLowerCase(), { username: BC.wizUsername, displayName: BC.wizDisplayName, bio: BC.wizBio, language: BC.wizLanguage });
+            BC.selectedLanguage = BC.wizLanguage;
             BC.wizStep = 1; BC.wizUsername = ''; BC.wizDisplayName = ''; BC.wizBio = '';
             BC.view = 'profile';
             BC.activeTab = 'profile';
@@ -1242,7 +1264,8 @@ async function doUpdateProfile() {
         }
     }
 
-    const metadataURI = JSON.stringify({ displayName, bio, avatar });
+    const language = document.getElementById('edit-language')?.value || BC.userProfile?.language || '';
+    const metadataURI = JSON.stringify({ displayName, bio, avatar, language });
 
     await BackchatTx.updateProfile({
         metadataURI,
@@ -1251,7 +1274,8 @@ async function doUpdateProfile() {
             BC.userProfile.displayName = displayName;
             BC.userProfile.bio = bio;
             BC.userProfile.avatar = avatar;
-            BC.profiles.set(State.userAddress.toLowerCase(), { ...BC.profiles.get(State.userAddress.toLowerCase()), displayName, bio, avatar });
+            BC.userProfile.language = language;
+            BC.profiles.set(State.userAddress.toLowerCase(), { ...BC.profiles.get(State.userAddress.toLowerCase()), displayName, bio, avatar, language });
             closeModal('edit-profile');
             showToast('Profile updated!', 'success');
             renderContent();
@@ -1727,6 +1751,28 @@ function renderTagBar() {
     return html;
 }
 
+function renderLanguageBar() {
+    // Collect languages from loaded profiles that have posts
+    const langCounts = {};
+    for (const post of BC.posts) {
+        const profile = BC.profiles.get(post.author?.toLowerCase());
+        const lang = profile?.language || '';
+        if (lang) langCounts[lang] = (langCounts[lang] || 0) + 1;
+    }
+    const activeLangs = LANGUAGES.filter(l => langCounts[l.code]);
+    if (activeLangs.length <= 1) return ''; // No filter needed if 0-1 languages
+
+    const allActive = !BC.selectedLanguage ? 'active' : '';
+    let html = `<div class="bc-tag-bar" style="margin-bottom:4px;">
+        <button class="bc-tag-pill ${allActive}" onclick="BackchatPage.filterLanguage(null)"><i class="fa-solid fa-globe"></i> All</button>`;
+    for (const lang of activeLangs) {
+        const active = BC.selectedLanguage === lang.code ? 'active' : '';
+        html += `<button class="bc-tag-pill ${active}" onclick="BackchatPage.filterLanguage('${lang.code}')">${lang.flag} ${lang.name} <span style="opacity:0.6;font-size:11px;">${langCounts[lang.code]}</span></button>`;
+    }
+    html += `</div>`;
+    return html;
+}
+
 function renderComposeTagPicker() {
     let html = '<div class="bc-compose-tags">';
     for (const tag of TAGS) {
@@ -1947,8 +1993,19 @@ function renderFeed() {
     }
 
     let filteredPosts = BC.posts;
+
+    // Language filter
+    if (BC.selectedLanguage) {
+        filteredPosts = filteredPosts.filter(p => {
+            const author = p.type === 'repost' ? BC.postsById.get(p.originalPostId)?.author : p.author;
+            const profile = BC.profiles.get(author?.toLowerCase());
+            return profile?.language === BC.selectedLanguage;
+        });
+    }
+
+    // Tag filter
     if (BC.selectedTag >= 0) {
-        filteredPosts = BC.posts.filter(p => {
+        filteredPosts = filteredPosts.filter(p => {
             if (p.type === 'repost') {
                 const orig = BC.postsById.get(p.originalPostId);
                 return orig && orig.tag === BC.selectedTag;
@@ -2061,7 +2118,7 @@ function renderContent() {
     let content = '';
     switch (BC.view) {
         case 'feed':
-            content = renderLiveStreamBar() + renderCompose() + renderTagBar() + renderFeed();
+            content = renderLiveStreamBar() + renderCompose() + renderLanguageBar() + renderTagBar() + renderFeed();
             break;
         case 'discover':
             content = renderDiscover();
@@ -2079,7 +2136,7 @@ function renderContent() {
             content = renderProfileSetup();
             break;
         default:
-            content = renderCompose() + renderTagBar() + renderFeed();
+            content = renderCompose() + renderLanguageBar() + renderTagBar() + renderFeed();
     }
     container.innerHTML = content;
 }
@@ -2219,13 +2276,21 @@ function renderProfileSetup() {
                         <label class="bc-label">Bio</label>
                         <textarea id="wiz-bio-input" class="bc-input" placeholder="Tell the world about yourself..." maxlength="160" rows="3" style="resize:none;">${escapeHtml(BC.wizBio)}</textarea>
                     </div>
-                    <div style="font-size:12px;color:var(--bc-text-3);">Display name and bio are stored as metadata and can be updated anytime for free.</div>
+                    <div class="bc-field">
+                        <label class="bc-label">Language</label>
+                        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                            ${LANGUAGES.map(l => `<button class="bc-compose-tag ${BC.wizLanguage === l.code ? 'active' : ''}" onclick="BackchatPage.setWizLanguage('${l.code}')" style="font-size:13px;">${l.flag} ${l.name}</button>`).join('')}
+                        </div>
+                        <div style="font-size:12px;color:var(--bc-text-3);margin-top:6px;">Your posts will be tagged with this language for filtering.</div>
+                    </div>
+                    <div style="font-size:12px;color:var(--bc-text-3);">Display name, bio, and language are stored as metadata and can be updated anytime for free.</div>
                 ` : `
                     <div style="text-align:center;">
                         <div style="font-size:48px; margin-bottom:16px;">${BC.wizUsername.charAt(0).toUpperCase()}</div>
                         <div style="font-size:18px; font-weight:700; color:var(--bc-text);">@${BC.wizUsername}</div>
                         ${BC.wizDisplayName ? `<div style="font-size:14px; color:var(--bc-text-2); margin-top:4px;">${escapeHtml(BC.wizDisplayName)}</div>` : ''}
                         ${BC.wizBio ? `<div style="font-size:13px; color:var(--bc-text-3); margin-top:8px;">${escapeHtml(BC.wizBio)}</div>` : ''}
+                        <div style="font-size:13px; color:var(--bc-text-2); margin-top:8px;">${(LANGUAGES.find(l => l.code === BC.wizLanguage) || LANGUAGES[0]).flag} ${(LANGUAGES.find(l => l.code === BC.wizLanguage) || LANGUAGES[0]).name}</div>
                         <div class="bc-fee-row" style="margin-top:20px;">
                             <span class="bc-fee-label">Username Fee</span>
                             <span class="bc-fee-val">${BC.wizFee || '0'} ETH</span>
@@ -2377,6 +2442,12 @@ function renderModals() {
                     </div>
                     <div class="bc-field"><label class="bc-label">Display Name</label><input type="text" id="edit-displayname" class="bc-input" value="${escapeHtml(BC.userProfile?.displayName || '')}" maxlength="30" placeholder="Your display name"></div>
                     <div class="bc-field"><label class="bc-label">Bio</label><textarea id="edit-bio" class="bc-input" maxlength="160" rows="3" placeholder="About you..." style="resize:none;">${escapeHtml(BC.userProfile?.bio || '')}</textarea></div>
+                    <div class="bc-field">
+                        <label class="bc-label">Language</label>
+                        <select id="edit-language" class="bc-input" style="padding:10px 12px;">
+                            ${LANGUAGES.map(l => `<option value="${l.code}" ${(BC.userProfile?.language || '') === l.code ? 'selected' : ''}>${l.flag} ${l.name}</option>`).join('')}
+                        </select>
+                    </div>
                     <p style="font-size:12px;color:var(--bc-text-3);margin-bottom:16px;">Username cannot be changed. Only gas fee applies.</p>
                     <button id="bc-edit-profile-btn" class="bc-btn bc-btn-primary" style="width:100%;justify-content:center;" onclick="BackchatPage.confirmEditProfile()"><i class="fa-solid fa-check"></i> Save Changes</button>
                 </div>
@@ -2625,6 +2696,16 @@ export const BackchatPage = {
 
     filterTag(tagId) {
         BC.selectedTag = tagId;
+        renderContent();
+    },
+
+    filterLanguage(code) {
+        BC.selectedLanguage = code;
+        renderContent();
+    },
+
+    setWizLanguage(code) {
+        BC.wizLanguage = code;
         renderContent();
     },
 
