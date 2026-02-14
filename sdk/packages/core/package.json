@@ -1,0 +1,50 @@
+{
+  "name": "@backchain/sdk",
+  "version": "0.1.0",
+  "description": "Backchain SDK — Build DeFi frontends on the Backchain ecosystem and earn operator commissions",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "peerDependencies": {
+    "ethers": "^6.0.0"
+  },
+  "devDependencies": {
+    "ethers": "^6.13.0",
+    "typescript": "^5.5.0"
+  },
+  "keywords": [
+    "backchain",
+    "bkc",
+    "defi",
+    "arbitrum",
+    "web3",
+    "sdk",
+    "nft",
+    "staking",
+    "operator"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/backcoin-org/backchain-dapp.git",
+    "directory": "sdk/packages/core"
+  },
+  "homepage": "https://backcoin.org"
+}
