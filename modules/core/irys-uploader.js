@@ -42,9 +42,16 @@ export async function getUploader() {
         throw new Error('MetaMask not available. Connect your wallet first.');
     }
 
-    const provider = new ethers.BrowserProvider(window.ethereum);
-    const signer = await provider.getSigner();
-    const currentAddress = await signer.getAddress();
+    let provider, signer, currentAddress;
+    try {
+        provider = new ethers.BrowserProvider(window.ethereum);
+        signer = await provider.getSigner();
+        currentAddress = await signer.getAddress();
+        console.log(`[Irys] Wallet connected: ${currentAddress.slice(0, 10)}...`);
+    } catch (e) {
+        console.error('[Irys] Wallet connection failed:', e);
+        throw new Error('Connect your wallet first. MetaMask error: ' + (e.message || e));
+    }
 
     // Invalidate if wallet changed
     if (_uploader && _uploaderAddress !== currentAddress) {

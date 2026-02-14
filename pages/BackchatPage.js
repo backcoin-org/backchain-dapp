@@ -975,6 +975,7 @@ async function doCreatePost() {
                 contentType = 1;
             }
         } catch (e) {
+            console.error('[Agora] Image upload failed:', e);
             showToast('Image upload failed: ' + e.message, 'error');
             BC.isPosting = false;
             BC.isUploadingImage = false;
