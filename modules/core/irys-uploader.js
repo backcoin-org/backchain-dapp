@@ -56,13 +56,13 @@ export async function getUploader() {
     if (_uploader) return _uploader;
 
     console.log('[Irys] Loading SDK...');
-    const [{ WebUploader }, { WebEthereum }, { EthersV6Adapter }] = await Promise.all([
+    const [{ WebUploader }, { WebArbitrum }, { EthersV6Adapter }] = await Promise.all([
         import('@irys/web-upload'),
         import('@irys/web-upload-ethereum'),
         import('@irys/web-upload-ethereum-ethers-v6')
     ]);
 
-    let builder = WebUploader(WebEthereum).withAdapter(EthersV6Adapter(provider));
+    let builder = WebUploader(WebArbitrum).withAdapter(EthersV6Adapter(provider));
 
     if (IRYS_CONFIG.devnet) {
         builder = builder.withRpc(sepoliaRpcUrl).devnet();
