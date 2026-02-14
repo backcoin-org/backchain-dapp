@@ -1484,8 +1484,7 @@ async function updateGlobalMetrics() {
             const contractAddresses = [
                 addresses.stakingPool, addresses.fortunePool, addresses.rentalManager,
                 addresses.buybackMiner, addresses.liquidityPool,
-                addresses.pool_diamond, addresses.pool_gold,
-                addresses.pool_silver, addresses.pool_bronze
+                addresses.pool_bronze
             ].filter(addr => addr && addr !== ethers.ZeroAddress);
             const balances = await Promise.all(contractAddresses.map(addr => safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [addr], 0n)));
             balances.forEach(bal => { totalTVL += bal; });

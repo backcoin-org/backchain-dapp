@@ -326,11 +326,8 @@ export async function loadAddresses() {
         addresses.nftFusion = json.nftFusion;
         addresses.treasuryWallet = json.treasuryWallet;
 
-        // Pool addresses (per-tier NFT liquidity pools)
+        // Pool address (single Bronze pool — V3 on-demand minting)
         addresses.pool_bronze = json.pool_bronze;
-        addresses.pool_silver = json.pool_silver;
-        addresses.pool_gold = json.pool_gold;
-        addresses.pool_diamond = json.pool_diamond;
 
         // Also update contractAddresses for compatibility
         Object.assign(contractAddresses, addresses);
