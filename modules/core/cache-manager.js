@@ -395,7 +395,39 @@ export const CacheManager = {
             ],
             'Approval': [
                 'allowance-'
-            ]
+            ],
+
+            // ─────────────────────────────────────────────────────────────
+            // AGORA (Social)
+            // ─────────────────────────────────────────────────────────────
+            'CreateProfile': ['agora-profile-'],
+            'UpdateProfile': ['agora-profile-'],
+            'CreatePost': ['agora-feed-', 'agora-profile-'],
+            'CreateReply': ['agora-feed-', 'agora-post-'],
+            'CreateRepost': ['agora-feed-'],
+            'EditPost': ['agora-feed-', 'agora-post-'],
+            'DeletePost': ['agora-feed-', 'agora-post-', 'agora-profile-'],
+            'Like': ['agora-post-'],
+            'SuperLike': ['agora-post-', 'token-balance-'],
+            'Downvote': ['agora-post-', 'token-balance-'],
+            'Follow': ['agora-profile-', 'agora-following-'],
+            'Unfollow': ['agora-profile-', 'agora-following-'],
+            'BlockUser': ['agora-profile-'],
+            'UnblockUser': ['agora-profile-'],
+            'PinPost': ['agora-profile-'],
+            'ChangeTag': ['agora-feed-', 'agora-post-'],
+            'BoostProfile': ['agora-profile-', 'token-balance-'],
+            'ObtainBadge': ['agora-profile-', 'token-balance-'],
+            'ReportPost': ['agora-post-'],
+            'BoostPost': ['agora-post-', 'token-balance-'],
+            'TipPost': ['agora-post-', 'token-balance-'],
+
+            // ─────────────────────────────────────────────────────────────
+            // NFT FUSION
+            // ─────────────────────────────────────────────────────────────
+            'FuseNFT': ['user-nfts-', 'pool-info-'],
+            'SplitNFT': ['user-nfts-', 'pool-info-'],
+            'SplitToNFT': ['user-nfts-', 'pool-info-']
         };
 
         const patterns = invalidationMap[txType];

@@ -1048,6 +1048,12 @@ async function doRepost(originalPostId) {
 
 async function doLike(postId) {
     const myAddr = State.userAddress?.toLowerCase();
+    // Prevent self-like (contract reverts with SelfAction)
+    const post = BC.postsById.get(postId);
+    if (post && post.author?.toLowerCase() === myAddr) {
+        showToast('You can\'t like your own post', 'error');
+        return;
+    }
     if (myAddr) {
         if (!BC.likesMap.has(postId)) BC.likesMap.set(postId, new Set());
         BC.likesMap.get(postId).add(myAddr);
@@ -1870,6 +1876,10 @@ function renderPostMenu(post) {
                 <button class="bc-post-dropdown-item" onclick="event.stopPropagation(); BackchatPage.openBoostPost('${post.id}')">
                     <i class="fa-solid fa-rocket"></i> Boost Post
                 </button>
+                ${post.txHash ? `
+                <button class="bc-post-dropdown-item" onclick="event.stopPropagation(); window.open('${EXPLORER_TX}' + '${post.txHash}', '_blank')">
+                    <i class="fa-solid fa-cube"></i> View on Arbiscan
+                </button>` : ''}
                 ${isOwn ? `
                 <button class="bc-post-dropdown-item danger" onclick="event.stopPropagation(); BackchatPage.deletePost('${post.id}')">
                     <i class="fa-solid fa-trash"></i> Delete
