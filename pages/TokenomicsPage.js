@@ -10,6 +10,8 @@ import { formatBigNumber } from '../utils.js';
 const MAX_SUPPLY = 200_000_000;
 const TGE_AMOUNT = 40_000_000;
 const AIRDROP_AMOUNT = 14_000_000; // 35% of TGE
+const AIRDROP_PHASE1 = 7_000_000;  // 50% of airdrop — Phase 1 (active)
+const AIRDROP_PHASE2 = 7_000_000;  // 50% of airdrop — Phase 2 (future)
 const LIQUIDITY_AMOUNT = 26_000_000; // 65% of TGE
 
 // Tier 2 BKC fee distribution
@@ -113,7 +115,7 @@ function renderTGE() {
                 <div><h2 class="text-white font-bold">TGE — Token Launch</h2><p class="text-zinc-500 text-xs">40M BKC minted at genesis</p></div>
             </div>
             <div class="flex items-center justify-center gap-6 mb-4">
-                <div class="tk-pie-ring" style="background: conic-gradient(#f59e0b 0% 35%, #10b981 35% 100%);">
+                <div class="tk-pie-ring" style="background: conic-gradient(#f59e0b 0% 17.5%, #ea580c 17.5% 35%, #10b981 35% 100%);">
                     <div class="tk-pie-center">
                         <p class="text-2xl font-black text-white">40M</p>
                         <p class="text-[10px] text-zinc-500">BKC</p>
@@ -123,32 +125,76 @@ function renderTGE() {
                     <div class="flex items-center gap-2">
                         <div class="w-3 h-3 rounded-full bg-amber-500"></div>
                         <div>
-                            <p class="text-white font-bold text-sm">35% Airdrop</p>
-                            <p class="text-zinc-500 text-[10px]">${fmt(AIRDROP_AMOUNT)} BKC to community</p>
+                            <p class="text-white font-bold text-sm">17.5% Phase 1</p>
+                            <p class="text-zinc-500 text-[10px]">${fmt(AIRDROP_PHASE1)} BKC</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-orange-600"></div>
+                        <div>
+                            <p class="text-white font-bold text-sm">17.5% Phase 2</p>
+                            <p class="text-zinc-500 text-[10px]">${fmt(AIRDROP_PHASE2)} BKC</p>
                         </div>
                     </div>
                     <div class="flex items-center gap-2">
                         <div class="w-3 h-3 rounded-full bg-emerald-500"></div>
                         <div>
                             <p class="text-white font-bold text-sm">65% Liquidity</p>
-                            <p class="text-zinc-500 text-[10px]">${fmt(LIQUIDITY_AMOUNT)} BKC to LiquidityPool</p>
+                            <p class="text-zinc-500 text-[10px]">${fmt(LIQUIDITY_AMOUNT)} BKC</p>
                         </div>
                     </div>
                 </div>
             </div>
-            <div class="tk-card" style="background:linear-gradient(135deg,rgba(245,158,11,0.08),rgba(234,88,12,0.08));border-color:rgba(245,158,11,0.3)">
-                <div class="flex items-center gap-2 mb-2">
-                    <span class="text-lg"><i class="fa-solid fa-parachute-box text-amber-400"></i></span>
-                    <p class="text-amber-400 font-bold text-sm">Airdrop — Phase 1 Active</p>
+
+            <!-- Phase 1 — Active -->
+            <div class="tk-card mb-3" style="background:linear-gradient(135deg,rgba(245,158,11,0.08),rgba(234,88,12,0.08));border-color:rgba(245,158,11,0.3)">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg"><i class="fa-solid fa-parachute-box text-amber-400"></i></span>
+                        <p class="text-amber-400 font-bold text-sm">Phase 1 — ${fmt(AIRDROP_PHASE1)} BKC</p>
+                    </div>
+                    <span class="tk-badge" style="background:rgba(34,197,94,0.2);color:#4ade80">ACTIVE</span>
                 </div>
-                <p class="text-zinc-400 text-xs">Earn points by using the protocol: staking, notarizing, playing Fortune, posting on Agora, donating to Charity. Share your referral link to earn 10% ETH on all fees + 5% BKC on staking rewards — forever.</p>
-                <div class="flex gap-2 mt-3">
+                <p class="text-zinc-400 text-xs mb-2">Earn points and climb the ranking to win NFT Boosters + BKC tokens.</p>
+                <div class="grid grid-cols-2 gap-2 mb-3 text-[10px]">
+                    <div class="rounded-lg p-2 flex items-center gap-2" style="background:rgba(39,39,42,0.5)">
+                        <i class="fa-solid fa-share-nodes text-amber-400"></i>
+                        <span class="text-zinc-400">Social media posts</span>
+                    </div>
+                    <div class="rounded-lg p-2 flex items-center gap-2" style="background:rgba(39,39,42,0.5)">
+                        <i class="fa-solid fa-gamepad text-purple-400"></i>
+                        <span class="text-zinc-400">Platform quests</span>
+                    </div>
+                    <div class="rounded-lg p-2 flex items-center gap-2" style="background:rgba(39,39,42,0.5)">
+                        <i class="fa-solid fa-trophy text-yellow-400"></i>
+                        <span class="text-zinc-400">Top 200 earn NFTs</span>
+                    </div>
+                    <div class="rounded-lg p-2 flex items-center gap-2" style="background:rgba(39,39,42,0.5)">
+                        <i class="fa-solid fa-gem text-cyan-400"></i>
+                        <span class="text-zinc-400">4 tiers: D/G/S/B</span>
+                    </div>
+                </div>
+                <div class="flex gap-2">
                     <a href="#airdrop" class="inline-flex items-center gap-1.5 text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors">
                         <i class="fa-solid fa-arrow-right"></i> Join Airdrop
                     </a>
                     <a href="#referral" class="inline-flex items-center gap-1.5 text-xs font-bold text-cyan-400 hover:text-cyan-300 transition-colors ml-4">
                         <i class="fa-solid fa-user-plus"></i> Invite Friends
                     </a>
+                </div>
+            </div>
+
+            <!-- Phase 2 — Coming Soon -->
+            <div class="tk-card" style="opacity:0.5;border-color:rgba(63,63,70,0.5)">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg"><i class="fa-solid fa-lock text-zinc-500"></i></span>
+                        <div>
+                            <p class="text-zinc-400 font-bold text-sm">Phase 2 — ${fmt(AIRDROP_PHASE2)} BKC</p>
+                            <p class="text-zinc-600 text-[10px]">Criteria to be announced</p>
+                        </div>
+                    </div>
+                    <span class="tk-badge" style="background:rgba(113,113,122,0.2);color:#a1a1aa">SOON</span>
                 </div>
             </div>
         </div>`;
