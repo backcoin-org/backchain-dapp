@@ -1,0 +1,29 @@
+{
+  "name": "create-backchain-app",
+  "version": "0.1.0",
+  "description": "Scaffold a Backchain DeFi frontend — pick modules, set operator, deploy",
+  "type": "module",
+  "bin": {
+    "create-backchain-app": "./bin/create-backchain-app.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "templates"
+  ],
+  "keywords": [
+    "backchain",
+    "bkc",
+    "defi",
+    "scaffold",
+    "create-app",
+    "arbitrum",
+    "web3"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/backcoin-org/backchain-dapp.git",
+    "directory": "sdk/packages/cli"
+  }
+}
