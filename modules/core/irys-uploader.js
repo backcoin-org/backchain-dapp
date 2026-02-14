@@ -119,7 +119,7 @@ export async function uploadFile(file, options = {}) {
         const fundAmount = (deficit * 120n) / 100n; // 20% buffer
         onProgress('funding', `Funding Irys node (${_formatEth(fundAmount)})...`);
         console.log(`[Irys] Funding ${_formatEth(fundAmount)} (balance: ${_formatEth(balanceBn)}, price: ${_formatEth(priceBn)})`);
-        await irys.fund(fundAmount);
+        await _manualFund(irys, fundAmount);
     }
 
     // Upload
@@ -168,7 +168,7 @@ export async function uploadData(data, options = {}) {
     if (balanceBn < priceBn) {
         const deficit = priceBn - balanceBn;
         const fundAmount = (deficit * 120n) / 100n;
-        await irys.fund(fundAmount);
+        await _manualFund(irys, fundAmount);
     }
 
     const receipt = await irys.upload(dataStr, { tags });
@@ -293,12 +293,43 @@ export function isArweaveContent(uri) {
 }
 
 // ============================================================================
+// MANUAL FUNDING (Arbitrum EIP-1559 fix)
+// ============================================================================
+// The Irys SDK's fund() uses legacy gasPrice which fails on Arbitrum with:
+//   "max fee per gas less than block base fee"
+// This bypass sends ETH directly via ethers v6 (proper EIP-1559 gas handling)
+// then notifies the Irys node about the funding transaction.
+
+async function _manualFund(irys, amount) {
+    const ethers = window.ethers;
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+
+    // Get the Irys bundler node address for this token
+    const nodeAddress = await irys.utils.getBundlerAddress(irys.token);
+    console.log(`[Irys] Manual fund: sending ${_formatEth(amount)} to node ${nodeAddress.slice(0, 10)}...`);
+
+    // Send ETH using ethers v6 — handles EIP-1559 gas automatically
+    const tx = await signer.sendTransaction({
+        to: nodeAddress,
+        value: amount,
+    });
+
+    console.log(`[Irys] Fund tx sent: ${tx.hash}`);
+    await tx.wait(1);
+    console.log(`[Irys] Fund tx confirmed`);
+
+    // Notify Irys node about the funding transaction
+    await irys.funder.submitFundTransaction(tx.hash);
+    console.log(`[Irys] Fund registered with Irys node`);
+}
+
+// ============================================================================
 // INTERNAL HELPERS
 // ============================================================================
 
 function _formatEth(wei) {
     if (!window.ethers) {
-        // Manual formatting: wei / 10^18 with 6 decimal places
         const eth = Number(wei) / 1e18;
         return `${eth.toFixed(6)} ETH`;
     }
