@@ -824,8 +824,8 @@ function renderCertCard(cert) {
                     <a href="${EXPLORER_ADDR}${addresses?.notary}?a=${cert.id}" target="_blank" class="nt-card-action" title="Verify on Arbiscan">
                         <i class="fa-solid fa-cube"></i> Verify
                     </a>
-                    <button class="nt-card-action" onclick="NotaryPage.addToWallet('${cert.id}', '${ipfsUrl}')" title="Add to MetaMask">
-                        <i class="fa-solid fa-wallet"></i> Wallet
+                    <button class="nt-card-action" onclick="NotaryPage.addToWallet('${cert.id}')" title="Copy certificate link">
+                        <i class="fa-solid fa-share-nodes"></i> Share
                     </button>
                 </div>
             </div>
@@ -1629,9 +1629,9 @@ function renderCertDetail(el) {
                 </div>
             `}
 
-            <!-- Add to Wallet — Primary Action -->
-            <button class="nt-btn-primary" style="width:100%;padding:14px;font-size:15px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:8px" onclick="NotaryPage.addToWallet('${cert.id}', '${ipfsUrl}')">
-                <i class="fa-solid fa-wallet"></i>Add Certificate to Wallet
+            <!-- Share Certificate — Primary Action -->
+            <button class="nt-btn-primary" style="width:100%;padding:14px;font-size:15px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:8px" onclick="NotaryPage.addToWallet('${cert.id}')">
+                <i class="fa-solid fa-share-nodes"></i>Copy Certificate Link
             </button>
 
             <!-- Description -->
@@ -1909,49 +1909,22 @@ async function loadRecentNotarizations() {
 }
 
 // ============================================================================
-// ADD TO WALLET
+// SHARE / COPY CERTIFICATE LINK
 // ============================================================================
-async function addToWallet(tokenId, imageUrl) {
-    try {
-        let finalImageUrl = resolveContentUrl(imageUrl || '') || '';
-
-        // Try to get image from token URI
-        if (State.notaryContract) {
-            try {
-                const uri = await State.notaryContract.tokenURI(tokenId);
-                if (uri?.startsWith('data:application/json;base64,')) {
-                    const metadata = JSON.parse(atob(uri.replace('data:application/json;base64,', '')));
-                    if (metadata.image) finalImageUrl = resolveContentUrl(metadata.image) || '';
-                }
-            } catch {}
-        }
-
-        const contractAddress = addresses?.notary ||
-            State.notaryContract?.target ||
-            (State.notaryContract?.getAddress ? await State.notaryContract.getAddress() : null);
-
-        if (!contractAddress) {
-            showToast('Contract address not found', 'error');
-            return;
-        }
-
-        showToast(`Adding NFT #${tokenId} to wallet...`, 'info');
-
-        const wasAdded = await window.ethereum.request({
-            method: 'wallet_watchAsset',
-            params: {
-                type: 'ERC721',
-                options: { address: contractAddress, tokenId: String(tokenId), image: finalImageUrl }
-            }
-        });
-
-        if (wasAdded) {
-            showToast(`NFT #${tokenId} added to wallet!`, 'success');
-        }
-    } catch (error) {
-        if (error.code === 4001) return;
-        showToast('Could not add NFT', 'error');
+function addToWallet(tokenId) {
+    // Notary is NOT an ERC-721, so wallet_watchAsset won't work.
+    // Instead, copy a shareable Arbiscan verification link.
+    const contractAddress = addresses?.notary;
+    if (!contractAddress) {
+        showToast('Contract address not found', 'error');
+        return;
     }
+    const url = `${EXPLORER_ADDR}${contractAddress}?a=${tokenId}`;
+    navigator.clipboard.writeText(url).then(() => {
+        showToast(`Certificate #${tokenId} link copied!`, 'success');
+    }).catch(() => {
+        window.open(url, '_blank');
+    });
 }
 
 // ============================================================================
