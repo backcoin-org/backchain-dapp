@@ -4,20 +4,28 @@ pragma solidity ^0.8.28;
 import "./IBackchain.sol";
 
 // ============================================================================
-// CHARITY POOL — IMMUTABLE (Tier 1: ETH only)
+// CHARITY POOL V2 — IMMUTABLE (Tier 1: ETH only)
 // ============================================================================
 //
 // Permissionless fundraising campaigns. Anyone can create, anyone can donate.
 //
+// V2 Changes:
+//   - Variable-day boost (1-30 days) with additive expiry (like RentalManager)
+//   - getCampaign returns boostExpiry for frontend remaining-days display
+//   - getCampaignsBatch for efficient batch reads (no more N+1 queries)
+//   - Separate totalBoostRevenue tracking
+//
 // Lifecycle:
 //   CREATE  → campaign is active, accepting donations
 //   DONATE  → ETH flows in, small fee to ecosystem, net stored for creator
+//   BOOST   → pay ETH per day for visibility boost (additive, stackable)
 //   CLOSE   → creator ends campaign early (can still withdraw raised funds)
 //   WITHDRAW→ creator claims all raised ETH after campaign ends
 //
 // Economics:
 //   - Value-based ETH fee on donations → ecosystem (operator/treasury/buyback)
 //   - Small ETH fee on creation (spam prevention) → ecosystem
+//   - Gas-based ETH fee × days on boost → ecosystem
 //   - Creator receives 100% of raised ETH (no penalty, no minimum goal)
 //   - Pure donation model: no refunds, no all-or-nothing
 //
@@ -42,7 +50,7 @@ contract CharityPool {
 
     uint256 public constant MIN_DURATION = 1 days;
     uint256 public constant MAX_DURATION = 365 days;
-    uint256 public constant BOOST_DURATION = 24 hours;
+    uint256 public constant MAX_BOOST_DAYS = 30;
 
     // Status
     uint8 private constant S_ACTIVE    = 0;
@@ -87,6 +95,7 @@ contract CharityPool {
     uint256 public totalDonated;
     uint256 public totalWithdrawn;
     uint256 public totalEthFees;
+    uint256 public totalBoostRevenue;
 
     // ════════════════════════════════════════════════════════════════════════
     // EVENTS
@@ -124,6 +133,7 @@ contract CharityPool {
     error NotCampaignOwner();
     error AlreadyWithdrawn();
     error NothingToWithdraw();
+    error ZeroDays();
     error InsufficientFee();
     error TransferFailed();
 
@@ -232,22 +242,32 @@ contract CharityPool {
     // BOOST
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Boost a campaign's visibility for 24 hours.
-    ///         Anyone can boost any active campaign. ETH fee to ecosystem.
+    /// @notice Boost a campaign's visibility for X days. Pays ETH fee per day.
+    ///         Anyone can boost any active campaign. Stacks with existing boost.
     ///
     /// @param campaignId Campaign to boost
+    /// @param days_      Number of days to boost (1-30)
     /// @param operator   Frontend operator
-    function boostCampaign(uint256 campaignId, address operator) external payable {
+    function boostCampaign(uint256 campaignId, uint256 days_, address operator) external payable {
         Campaign storage c = campaigns[campaignId];
         if (c.status != S_ACTIVE) revert CampaignNotActive();
         if (block.timestamp > c.deadline) revert CampaignNotActive();
+        if (days_ == 0) revert ZeroDays();
+        if (days_ > MAX_BOOST_DAYS) revert InvalidDuration();
 
-        uint256 fee = ecosystem.calculateFee(ACTION_BOOST, 0);
-        if (msg.value < fee) revert InsufficientFee();
+        // Fee = ecosystem fee per boost action × days
+        uint256 feePerDay = ecosystem.calculateFee(ACTION_BOOST, 0);
+        uint256 totalFee = feePerDay * days_;
+        if (msg.value < totalFee) revert InsufficientFee();
 
-        c.boostExpiry = uint48(block.timestamp + BOOST_DURATION);
+        // Additive expiry: extend from current expiry if still active
+        uint256 baseTime = block.timestamp;
+        if (c.boostExpiry > block.timestamp) {
+            baseTime = c.boostExpiry;
+        }
+        c.boostExpiry = uint48(baseTime + days_ * 1 days);
 
-        totalEthFees += msg.value;
+        totalBoostRevenue += msg.value;
         ecosystem.collectFee{value: msg.value}(
             msg.sender, operator, c.owner, MODULE_ID, 0
         );
@@ -308,7 +328,7 @@ contract CharityPool {
     // VIEWS
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Full campaign data
+    /// @notice Full campaign data (V2: includes boostExpiry)
     function getCampaign(uint256 campaignId) external view returns (
         address owner,
         uint48  deadline,
@@ -317,6 +337,7 @@ contract CharityPool {
         uint96  goal,
         uint32  donorCount,
         bool    isBoosted,
+        uint48  boostExpiry,
         string  memory title,
         string  memory metadataUri
     ) {
@@ -325,9 +346,49 @@ contract CharityPool {
             c.owner, c.deadline, c.status,
             c.raised, c.goal, c.donorCount,
             block.timestamp < c.boostExpiry,
+            c.boostExpiry,
             titles[campaignId],
             metadataUris[campaignId]
         );
+    }
+
+    /// @notice Batch read campaign data (no strings — too expensive)
+    /// @param start First campaign ID (1-based)
+    /// @param count Number of campaigns to read
+    function getCampaignsBatch(uint256 start, uint256 count) external view returns (
+        address[] memory owners,
+        uint48[]  memory deadlines,
+        uint8[]   memory statuses,
+        uint96[]  memory raiseds,
+        uint96[]  memory goals,
+        uint32[]  memory donorCounts,
+        bool[]    memory boosteds,
+        uint48[]  memory boostExpiries
+    ) {
+        uint256 end = start + count;
+        if (end > campaignCount + 1) end = campaignCount + 1;
+        uint256 len = end > start ? end - start : 0;
+
+        owners       = new address[](len);
+        deadlines    = new uint48[](len);
+        statuses     = new uint8[](len);
+        raiseds      = new uint96[](len);
+        goals        = new uint96[](len);
+        donorCounts  = new uint32[](len);
+        boosteds     = new bool[](len);
+        boostExpiries = new uint48[](len);
+
+        for (uint256 i = 0; i < len; i++) {
+            Campaign memory c = campaigns[start + i];
+            owners[i]        = c.owner;
+            deadlines[i]     = c.deadline;
+            statuses[i]      = c.status;
+            raiseds[i]       = c.raised;
+            goals[i]         = c.goal;
+            donorCounts[i]   = c.donorCount;
+            boosteds[i]      = block.timestamp < c.boostExpiry;
+            boostExpiries[i] = c.boostExpiry;
+        }
     }
 
     /// @notice Check if creator can withdraw
@@ -347,18 +408,19 @@ contract CharityPool {
         netToCampaign = amount - fee;
     }
 
-    /// @notice Protocol statistics
+    /// @notice Protocol statistics (V2: includes totalBoostRevenue)
     function getStats() external view returns (
         uint256 _campaignCount,
         uint256 _totalDonated,
         uint256 _totalWithdrawn,
-        uint256 _totalEthFees
+        uint256 _totalEthFees,
+        uint256 _totalBoostRevenue
     ) {
-        return (campaignCount, totalDonated, totalWithdrawn, totalEthFees);
+        return (campaignCount, totalDonated, totalWithdrawn, totalEthFees, totalBoostRevenue);
     }
 
     /// @notice Contract version
     function version() external pure returns (string memory) {
-        return "1.0.0";
+        return "2.0.0";
     }
 }

@@ -19,7 +19,7 @@
 //   - Pass operator: null → No operator (ZeroAddress)
 // ============================================================================
 
-// Charity Pool
+// Charity Pool V2
 export {
     CharityTx,
     createCampaign,
@@ -29,9 +29,12 @@ export {
     withdraw,
     boostCampaign,
     getCampaign,
+    getCampaignsBatch,
     getCampaignCount,
     canWithdraw,
     previewDonation,
+    getBoostCost as charityGetBoostCost,
+    getCreateFee,
     getStats as charityGetStats
 } from './charity-tx.js';
 

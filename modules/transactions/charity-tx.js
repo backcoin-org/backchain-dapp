@@ -1,28 +1,23 @@
 // modules/js/transactions/charity-tx.js
-// ✅ V9.0 - Updated for CharityPool V9 (ETH-only, immutable)
+// ✅ V2.0 - CharityPool V2: Variable-day boost + batch reads + boost revenue tracking
 //
-// CHANGES V9.0:
-// - ETH-only fees (no BKC fees for create/withdraw/boost)
-// - createCampaign() now payable (ETH fee), uses metadataUri instead of description
-// - cancelCampaign() → closeCampaign() (renamed)
-// - withdraw() no longer takes operator param
-// - getCampaign() returns V9 9-tuple (owner, deadline, status, raised, goal, donorCount, isBoosted, title, metadataUri)
-// - canWithdraw() returns just bool (not tuple with reason)
-// - previewDonation() returns (fee, netToCampaign) — reversed order
-// - getStats() returns 4-tuple (campaignCount, totalDonated, totalWithdrawn, totalEthFees)
-// - CampaignStatus: ACTIVE=0, CLOSED=1, WITHDRAWN=2 (no COMPLETED/CANCELLED)
-// - Removed: BKC approval, createCostBkc, withdrawCostBkc, boostCostBkc
-// - All fees via ecosystem.calculateFee()
+// V2.0 Changes:
+// - boostCampaign() now takes days_ param (variable 1-30 days, additive expiry)
+// - getCampaign() returns 10 fields (added boostExpiry uint48)
+// - getCampaignsBatch() for efficient batch reads (no more N+1 queries)
+// - getStats() returns 5-tuple (added totalBoostRevenue)
+// - Dynamic fees via calculateFeeClientSide() (no more hardcoded 0.0001 ETH)
+// - getBoostCost(days) estimates boost cost
 //
 // ============================================================================
-// V9 FEE STRUCTURE (ETH only):
-// - Create: ecosystem.calculateFee(ACTION_CREATE, 0)
-// - Donate: value-based fee → ecosystem.calculateFee(ACTION_DONATE, msgValue)
-// - Boost:  ecosystem.calculateFee(ACTION_BOOST, 0)
+// V2 FEE STRUCTURE (ETH only):
+// - Create: gas-based → calculateFeeClientSide(CHARITY_CREATE)
+// - Donate: value-based 5% → ecosystem deducts on-chain
+// - Boost:  gas-based per day → calculateFeeClientSide(CHARITY_BOOST) × days
 // - Withdraw: FREE (no fee)
 // ============================================================================
 
-import { txEngine, ValidationLayer, CacheManager } from '../core/index.js';
+import { txEngine, calculateFeeClientSide } from '../core/index.js';
 import { resolveOperator } from '../core/operator.js';
 import { addresses, contractAddresses } from '../../config.js';
 
@@ -44,24 +39,25 @@ function getContracts() {
 }
 
 /**
- * CharityPool V9 ABI
+ * CharityPool V2 ABI
  */
 const CHARITY_ABI = [
     // Write functions
     'function createCampaign(string calldata title, string calldata metadataUri, uint96 goal, uint256 durationDays, address operator) external payable returns (uint256 campaignId)',
     'function donate(uint256 campaignId, address operator) external payable',
-    'function boostCampaign(uint256 campaignId, address operator) external payable',
+    'function boostCampaign(uint256 campaignId, uint256 days_, address operator) external payable',
     'function closeCampaign(uint256 campaignId) external',
     'function withdraw(uint256 campaignId) external',
 
     // Read functions - Campaign
-    'function getCampaign(uint256 campaignId) view returns (address owner, uint48 deadline, uint8 status, uint96 raised, uint96 goal, uint32 donorCount, bool isBoosted, string memory title, string memory metadataUri)',
+    'function getCampaign(uint256 campaignId) view returns (address owner, uint48 deadline, uint8 status, uint96 raised, uint96 goal, uint32 donorCount, bool isBoosted, uint48 boostExpiry, string memory title, string memory metadataUri)',
+    'function getCampaignsBatch(uint256 start, uint256 count) view returns (address[] owners, uint48[] deadlines, uint8[] statuses, uint96[] raiseds, uint96[] goals, uint32[] donorCounts, bool[] boosteds, uint48[] boostExpiries)',
     'function canWithdraw(uint256 campaignId) view returns (bool)',
     'function previewDonation(uint256 amount) view returns (uint256 fee, uint256 netToCampaign)',
 
     // Read functions - Stats
     'function campaignCount() view returns (uint256)',
-    'function getStats() view returns (uint256 campaignCount, uint256 totalDonated, uint256 totalWithdrawn, uint256 totalEthFees)',
+    'function getStats() view returns (uint256 campaignCount, uint256 totalDonated, uint256 totalWithdrawn, uint256 totalEthFees, uint256 totalBoostRevenue)',
     'function version() view returns (string)',
 
     // Events
@@ -102,7 +98,7 @@ async function getCharityContractReadOnly() {
 
 /**
  * Creates a new charity campaign
- * V9: Payable (ETH fee), uses metadataUri instead of description
+ * V2: Dynamic fee via calculateFeeClientSide
  */
 export async function createCampaign({
     title,
@@ -139,23 +135,21 @@ export async function createCampaign({
         get value() { return createFee; },
 
         validate: async (signer, userAddress) => {
-            // Fetch create fee from contract
-            const contract = await getCharityContractReadOnly();
+            // V2: Dynamic fee via calculateFeeClientSide
             try {
-                // V9: fee comes from ecosystem.calculateFee — we estimate via provider
-                const { NetworkManager } = await import('../core/index.js');
-                const provider = NetworkManager.getProvider();
-
-                // Try to get fee estimate (contract will revert if insufficient)
-                // Use a reasonable default
-                createFee = ethers.parseEther('0.0001');
-
-                const ethBalance = await provider.getBalance(userAddress);
-                if (ethBalance < createFee + ethers.parseEther('0.001')) {
-                    throw new Error(`Insufficient ETH for creation fee + gas`);
-                }
+                createFee = await calculateFeeClientSide(ethers.id('CHARITY_CREATE'));
             } catch (e) {
-                if (e.message.includes('Insufficient')) throw e;
+                console.warn('[CharityTx] calculateFeeClientSide failed, using fallback:', e.message);
+                createFee = ethers.parseEther('0.0001');
+            }
+
+            if (createFee === 0n) createFee = ethers.parseEther('0.0001');
+
+            const { NetworkManager } = await import('../core/index.js');
+            const provider = NetworkManager.getProvider();
+            const ethBalance = await provider.getBalance(userAddress);
+            if (ethBalance < createFee + ethers.parseEther('0.001')) {
+                throw new Error('Insufficient ETH for creation fee + gas');
             }
         },
 
@@ -181,7 +175,7 @@ export async function createCampaign({
 
 /**
  * Donates ETH to a campaign
- * V9: Same structure, value-based fee
+ * V2: Same structure, value-based fee deducted on-chain
  */
 export async function donate({
     campaignId,
@@ -245,7 +239,6 @@ export async function donate({
 
 /**
  * Closes an active campaign (replaces cancelCampaign)
- * V9: closeCampaign — creator can still withdraw raised funds
  */
 export async function closeCampaign({
     campaignId,
@@ -283,7 +276,6 @@ export const cancelCampaign = closeCampaign;
 
 /**
  * Withdraws funds from closed campaign
- * V9: No operator, no BKC fee — FREE withdrawal
  */
 export async function withdraw({
     campaignId,
@@ -335,11 +327,12 @@ export async function withdraw({
 }
 
 /**
- * Boosts a campaign for visibility
- * V9: ETH-only (no BKC cost)
+ * Boosts a campaign for X days. Pays ETH gas-based fee per day.
+ * V2: Variable days (1-30), additive expiry (stacks with existing boost)
  */
 export async function boostCampaign({
     campaignId,
+    days = 1,
     operator,
     button = null,
     onSuccess = null,
@@ -347,10 +340,10 @@ export async function boostCampaign({
 }) {
     const ethers = window.ethers;
     if (campaignId === undefined || campaignId === null) throw new Error('Campaign ID is required');
+    if (days < 1 || days > 30) throw new Error('Boost duration must be 1-30 days');
 
     let storedOperator = operator;
-    // V9: boost fee from ecosystem — use reasonable minimum
-    let boostFee = ethers.parseEther('0.0001');
+    let totalFee = 0n;
 
     return await txEngine.execute({
         name: 'BoostCampaign',
@@ -358,8 +351,8 @@ export async function boostCampaign({
 
         getContract: async (signer) => getCharityContract(signer),
         method: 'boostCampaign',
-        args: () => [campaignId, resolveOperator(storedOperator)],
-        get value() { return boostFee; },
+        args: () => [campaignId, days, resolveOperator(storedOperator)],
+        get value() { return totalFee; },
 
         validate: async (signer, userAddress) => {
             const contract = await getCharityContractReadOnly();
@@ -370,6 +363,19 @@ export async function boostCampaign({
 
             const now = Math.floor(Date.now() / 1000);
             if (Number(campaign.deadline) <= now) throw new Error('Campaign has ended');
+
+            // Calculate boost cost client-side (gas-based fee × days)
+            const feePerDay = await calculateFeeClientSide(ethers.id('CHARITY_BOOST'));
+            totalFee = feePerDay * BigInt(days);
+
+            if (totalFee === 0n) throw new Error('Could not calculate boost fee');
+
+            const { NetworkManager } = await import('../core/index.js');
+            const provider = NetworkManager.getProvider();
+            const ethBalance = await provider.getBalance(userAddress);
+            if (ethBalance < totalFee + ethers.parseEther('0.001')) {
+                throw new Error(`Insufficient ETH. Need ~${ethers.formatEther(totalFee)} ETH for ${days}-day boost`);
+            }
         },
 
         onSuccess,
@@ -383,7 +389,7 @@ export async function boostCampaign({
 
 /**
  * Gets campaign details
- * V9: Returns (owner, deadline, status, raised, goal, donorCount, isBoosted, title, metadataUri)
+ * V2: Returns 10 fields (added boostExpiry)
  */
 export async function getCampaign(campaignId) {
     const ethers = window.ethers;
@@ -404,10 +410,50 @@ export async function getCampaign(campaignId) {
         status: Number(c.status),
         statusName: ['ACTIVE', 'CLOSED', 'WITHDRAWN'][Number(c.status)] || 'UNKNOWN',
         isBoosted: c.isBoosted,
+        boostExpiry: Number(c.boostExpiry),
         progress: c.goal > 0n ? Number((c.raised * 100n) / c.goal) : 0,
         isEnded: Number(c.deadline) < now,
         isActive: Number(c.status) === CampaignStatus.ACTIVE && Number(c.deadline) > now
     };
+}
+
+/**
+ * Batch read campaign data (struct fields only, no strings)
+ * Frontend must fetch titles/metadata separately or from Firebase
+ */
+export async function getCampaignsBatch(start, count) {
+    const contract = await getCharityContractReadOnly();
+    const now = Math.floor(Date.now() / 1000);
+
+    const batch = await contract.getCampaignsBatch(start, count);
+    const len = batch.owners.length;
+    const campaigns = [];
+
+    for (let i = 0; i < len; i++) {
+        const id = start + i;
+        const deadline = Number(batch.deadlines[i]);
+        const status = Number(batch.statuses[i]);
+        const goal = batch.goals[i];
+        const raised = batch.raiseds[i];
+
+        campaigns.push({
+            id: String(id),
+            creator: batch.owners[i],
+            deadline,
+            status,
+            statusName: ['ACTIVE', 'CLOSED', 'WITHDRAWN'][status] || 'UNKNOWN',
+            raisedAmount: raised,
+            goalAmount: goal,
+            donationCount: Number(batch.donorCounts[i]),
+            isBoosted: batch.boosteds[i],
+            boostExpiry: Number(batch.boostExpiries[i]),
+            progress: goal > 0n ? Number((raised * 100n) / goal) : 0,
+            isEnded: deadline < now,
+            isActive: status === CampaignStatus.ACTIVE && deadline > now
+        });
+    }
+
+    return campaigns;
 }
 
 export async function getCampaignCount() {
@@ -422,24 +468,71 @@ export async function canWithdraw(campaignId) {
 
 /**
  * Preview donation fee calculation
- * V9: Returns (fee, netToCampaign)
+ * Note: previewDonation uses on-chain calculateFee which returns 0 in eth_call.
+ * Use calculateFeeClientSide for accurate preview.
  */
 export async function previewDonation(amount) {
     const ethers = window.ethers;
-    const contract = await getCharityContractReadOnly();
+    try {
+        const fee = await calculateFeeClientSide(ethers.id('CHARITY_DONATE'), BigInt(amount));
+        const net = BigInt(amount) - fee;
+        return {
+            fee,
+            netToCampaign: net,
+            feeFormatted: ethers.formatEther(fee),
+            netFormatted: ethers.formatEther(net)
+        };
+    } catch {
+        // Fallback: 5% estimate
+        const val = BigInt(amount);
+        const fee = val * 500n / 10000n;
+        const net = val - fee;
+        return {
+            fee,
+            netToCampaign: net,
+            feeFormatted: ethers.formatEther(fee),
+            netFormatted: ethers.formatEther(net)
+        };
+    }
+}
 
-    const result = await contract.previewDonation(amount);
+/**
+ * Estimate boost cost for X days (gas-based fee × days)
+ */
+export async function getBoostCost(days) {
+    const ethers = window.ethers;
+    const feePerDay = await calculateFeeClientSide(ethers.id('CHARITY_BOOST'));
+    const totalFee = feePerDay * BigInt(days);
     return {
-        fee: result.fee || result[0],
-        netToCampaign: result.netToCampaign || result[1],
-        feeFormatted: ethers.formatEther(result.fee || result[0]),
-        netFormatted: ethers.formatEther(result.netToCampaign || result[1])
+        feePerDay,
+        feePerDayFormatted: ethers.formatEther(feePerDay),
+        totalFee,
+        totalFeeFormatted: ethers.formatEther(totalFee)
     };
 }
 
 /**
+ * Estimate create campaign fee (gas-based)
+ */
+export async function getCreateFee() {
+    const ethers = window.ethers;
+    try {
+        const fee = await calculateFeeClientSide(ethers.id('CHARITY_CREATE'));
+        return {
+            fee,
+            feeFormatted: ethers.formatEther(fee)
+        };
+    } catch {
+        return {
+            fee: ethers.parseEther('0.0001'),
+            feeFormatted: '0.0001'
+        };
+    }
+}
+
+/**
  * Gets global statistics
- * V9: Returns (campaignCount, totalDonated, totalWithdrawn, totalEthFees)
+ * V2: Returns 5-tuple (added totalBoostRevenue)
  */
 export async function getStats() {
     const ethers = window.ethers;
@@ -447,13 +540,15 @@ export async function getStats() {
 
     const stats = await contract.getStats();
     return {
-        totalCampaigns: Number(stats.campaignCount || stats[0]),
-        totalDonated: stats.totalDonated || stats[1],
-        totalDonatedFormatted: ethers.formatEther(stats.totalDonated || stats[1]),
-        totalWithdrawn: stats.totalWithdrawn || stats[2],
-        totalWithdrawnFormatted: ethers.formatEther(stats.totalWithdrawn || stats[2]),
-        totalEthFees: stats.totalEthFees || stats[3],
-        totalEthFeesFormatted: ethers.formatEther(stats.totalEthFees || stats[3])
+        totalCampaigns: Number(stats[0]),
+        totalDonated: stats[1],
+        totalDonatedFormatted: ethers.formatEther(stats[1]),
+        totalWithdrawn: stats[2],
+        totalWithdrawnFormatted: ethers.formatEther(stats[2]),
+        totalEthFees: stats[3],
+        totalEthFeesFormatted: ethers.formatEther(stats[3]),
+        totalBoostRevenue: stats[4],
+        totalBoostRevenueFormatted: ethers.formatEther(stats[4])
     };
 }
 
@@ -470,9 +565,12 @@ export const CharityTx = {
     boostCampaign,
 
     getCampaign,
+    getCampaignsBatch,
     getCampaignCount,
     canWithdraw,
     previewDonation,
+    getBoostCost,
+    getCreateFee,
     getStats,
 
     CampaignStatus
