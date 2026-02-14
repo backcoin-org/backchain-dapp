@@ -37,6 +37,9 @@ const EXPLORER_ADDRESS = "https://sepolia.arbiscan.io/address/";
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 // Removed IPFS_GATEWAY — using resolveContentUrl() for all content URLs
 const MAX_CONTENT = 500;
+// Arbitrum block time ~250ms → 50k blocks = 3.5h (too short).
+// 10M blocks ≈ 29 days. Covers all testnet activity since deployment.
+const EVENTS_LOOKBACK = -10_000_000;
 
 const TAGS = [
     { id: 0,  name: 'General',   icon: 'fa-globe',             color: '#8b8b9e' },
@@ -678,7 +681,7 @@ async function loadProfiles() {
         const contract = getContract();
         if (!contract) { BC.hasProfile = false; return; }
 
-        const createEvents = await contract.queryFilter(contract.filters.ProfileCreated(), -50000).catch(() => []);
+        const createEvents = await contract.queryFilter(contract.filters.ProfileCreated(), EVENTS_LOOKBACK).catch(() => []);
         for (const ev of createEvents) {
             const addr = ev.args.user.toLowerCase();
             const meta = parseMetadata(ev.args.metadataURI);
@@ -742,8 +745,8 @@ async function loadSocialGraph() {
         const contract = getContract();
         if (!contract) return;
         // Load follow events to know who the current user follows
-        const followEvents = await contract.queryFilter(contract.filters.Followed(), -50000).catch(() => []);
-        const unfollowEvents = await contract.queryFilter(contract.filters.Unfollowed(), -50000).catch(() => []);
+        const followEvents = await contract.queryFilter(contract.filters.Followed(), EVENTS_LOOKBACK).catch(() => []);
+        const unfollowEvents = await contract.queryFilter(contract.filters.Unfollowed(), EVENTS_LOOKBACK).catch(() => []);
         const myAddr = State.userAddress.toLowerCase();
         for (const ev of followEvents) {
             if (ev.args.follower?.toLowerCase() === myAddr) {
@@ -772,7 +775,7 @@ async function loadBlockedAuthors() {
     try {
         const contract = getContract();
         if (!contract) return;
-        const reportEvents = await contract.queryFilter(contract.filters.PostReported(), -50000).catch(() => []);
+        const reportEvents = await contract.queryFilter(contract.filters.PostReported(), EVENTS_LOOKBACK).catch(() => []);
         const myAddr = State.userAddress.toLowerCase();
         for (const ev of reportEvents) {
             if (ev.args.reporter?.toLowerCase() === myAddr) {
@@ -807,9 +810,9 @@ async function loadPosts() {
         BC.contractAvailable = true;
 
         const [postEvents, replyEvents, repostEvents] = await Promise.all([
-            contract.queryFilter(contract.filters.PostCreated(), -50000).catch(e => { console.warn('[Agora] PostCreated query failed:', e.message); return []; }),
-            contract.queryFilter(contract.filters.ReplyCreated(), -50000).catch(e => { console.warn('[Agora] ReplyCreated query failed:', e.message); return []; }),
-            contract.queryFilter(contract.filters.RepostCreated(), -50000).catch(e => { console.warn('[Agora] RepostCreated query failed:', e.message); return []; })
+            contract.queryFilter(contract.filters.PostCreated(), EVENTS_LOOKBACK).catch(e => { console.warn('[Agora] PostCreated query failed:', e.message); return []; }),
+            contract.queryFilter(contract.filters.ReplyCreated(), EVENTS_LOOKBACK).catch(e => { console.warn('[Agora] ReplyCreated query failed:', e.message); return []; }),
+            contract.queryFilter(contract.filters.RepostCreated(), EVENTS_LOOKBACK).catch(e => { console.warn('[Agora] RepostCreated query failed:', e.message); return []; })
         ]);
         console.log(`[Agora] Events found: ${postEvents.length} posts, ${replyEvents.length} replies, ${repostEvents.length} reposts`);
 
