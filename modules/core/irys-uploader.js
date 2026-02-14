@@ -372,8 +372,18 @@ async function _doManualFund(irys, amount) {
     });
 
     console.log(`[Irys] Fund tx sent: ${tx.hash}`);
-    await tx.wait(1);
-    console.log(`[Irys] Fund tx confirmed`);
+
+    // Wait for tx confirmation via raw RPC (avoids ethers v6 formatTransactionResponse
+    // bug on Arbitrum where yParity mismatch on unrelated txs in the block causes crash)
+    for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const receipt = await provider.send('eth_getTransactionReceipt', [tx.hash]);
+        if (receipt && receipt.blockNumber) {
+            console.log(`[Irys] Fund tx confirmed in block ${parseInt(receipt.blockNumber, 16)}`);
+            break;
+        }
+        if (i === 29) console.warn('[Irys] Fund tx confirmation timeout, proceeding anyway');
+    }
 
     // Notify Irys node via direct HTTP POST (bypasses ethers v5/v6 yParity conflict
     // in irys.funder.submitFundTransaction which tries to parse the tx with ethers v5)
@@ -392,7 +402,7 @@ async function _doManualFund(irys, amount) {
         console.log(`[Irys] Fund registered with Irys node`);
     }
 
-    // Wait a moment for Irys to process the funding
+    // Wait for Irys to process the funding
     await new Promise(r => setTimeout(r, 2000));
 }
 
