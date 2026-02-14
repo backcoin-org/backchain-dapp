@@ -327,9 +327,9 @@ function injectStyles() {
 function render() {
     injectStyles();
 
-    const app = document.getElementById('actions');
+    const app = document.getElementById('fortune');
     if (!app) {
-        console.error("[FortunePool] Container #actions not found!");
+        console.error("[FortunePool] Container #fortune not found!");
         return;
     }
 

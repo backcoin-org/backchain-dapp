@@ -27,11 +27,11 @@ export const DOMElements = {
 
     // --- Page Content Containers (Seções) ---
     dashboard: document.getElementById('dashboard'),
-    earn: document.getElementById('mine'), // Nota: HTML usa id="mine" para Staking
+    earn: document.getElementById('staking'), // Staking section
     store: document.getElementById('store'), // NFT Market
     rental: document.getElementById('rental'), // <--- NOVO: AirBNFT Section
     rewards: document.getElementById('rewards'),
-    actions: document.getElementById('actions'), // Fortune Pool
+    actions: document.getElementById('fortune'), // Fortune Pool
     presale: document.getElementById('presale'),
     faucet: document.getElementById('faucet'),
     airdrop: document.getElementById('airdrop'), 

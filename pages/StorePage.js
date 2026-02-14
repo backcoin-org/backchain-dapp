@@ -1702,7 +1702,7 @@ function setupEventListeners() {
         if (e.target.closest('.go-to-tutor')) { e.preventDefault(); window.navigateTo('referral'); return; }
         if (e.target.closest('.go-to-rental')) { e.preventDefault(); window.navigateTo('rental'); return; }
         if (e.target.closest('.go-to-diamond')) { e.preventDefault(); return; } // Already on page
-        if (e.target.closest('.go-to-staking')) { e.preventDefault(); window.navigateTo('mine'); return; }
+        if (e.target.closest('.go-to-staking')) { e.preventDefault(); window.navigateTo('staking'); return; }
 
         // Buy / Sell buttons on tier cards
         const actionBtn = e.target.closest('.nft-action-btn');

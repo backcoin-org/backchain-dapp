@@ -2464,7 +2464,7 @@ function renderModals() {
 
 function render() {
     injectStyles();
-    const section = document.getElementById('backchat');
+    const section = document.getElementById('agora');
     if (!section) return;
     section.innerHTML = `
         <div class="bc-shell">

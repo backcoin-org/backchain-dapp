@@ -2083,13 +2083,13 @@ function attachDashboardListeners() {
         if (target.closest('#referral-share-btn')) shareTutorLink();
 
         // Navigation
-        if (target.closest('.delegate-link')) { e.preventDefault(); window.navigateTo('mine'); }
+        if (target.closest('.delegate-link')) { e.preventDefault(); window.navigateTo('staking'); }
         if (target.closest('.go-to-store')) { e.preventDefault(); window.navigateTo('store'); }
         if (target.closest('.go-to-rental')) { e.preventDefault(); window.navigateTo('rental'); }
-        if (target.closest('.go-to-fortune')) { e.preventDefault(); window.navigateTo('actions'); }
+        if (target.closest('.go-to-fortune')) { e.preventDefault(); window.navigateTo('fortune'); }
         if (target.closest('.go-to-notary')) { e.preventDefault(); window.navigateTo('notary'); }
         if (target.closest('.go-to-charity')) { e.preventDefault(); window.navigateTo('charity'); }
-        if (target.closest('.go-to-backchat')) { e.preventDefault(); window.navigateTo('backchat'); }
+        if (target.closest('.go-to-backchat')) { e.preventDefault(); window.navigateTo('agora'); }
 
         // Booster modal
         if (target.closest('#open-booster-info')) {

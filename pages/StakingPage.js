@@ -532,7 +532,7 @@ function injectStyles() {
 // RENDER
 // ============================================================================
 function render() {
-    const container = document.getElementById('mine');
+    const container = document.getElementById('staking');
     if (!container) return;
     injectStyles();
 
@@ -1502,7 +1502,7 @@ async function handleBuyback() {
 // EVENT LISTENERS
 // ============================================================================
 function setupListeners() {
-    const container = document.getElementById('mine');
+    const container = document.getElementById('staking');
     if (!container) return;
 
     const amountInput = document.getElementById('stk-amount-input');

@@ -57,12 +57,11 @@ let uiUpdatePending = false;
 
 const routes = {
     'dashboard': DashboardPage,
-    'mine': StakingPage,
+    'staking': StakingPage,
     'store': StorePage,
-    'rewards': StakingPage, // redirects old #rewards URLs to unified page
-    'actions': FortunePoolPage, 
+    'fortune': FortunePoolPage,
     'charity': CharityPage,
-    'backchat': BackchatPage,
+    'agora': BackchatPage,
     'notary': NotaryPage,
     'airdrop': AirdropPage,
     'tokenomics': TokenomicsPage,
@@ -72,7 +71,12 @@ const routes = {
     'socials': SocialMediaPage,
     'tutorials': TutorialsPage,
     'referral': ReferralPage,
-    'operator': OperatorPage
+    'operator': OperatorPage,
+    // Legacy aliases — redirect old URLs
+    'mine': StakingPage,
+    'rewards': StakingPage,
+    'actions': FortunePoolPage,
+    'backchat': BackchatPage
 };
 
 // ============================================================================
@@ -106,10 +110,11 @@ function navigateTo(pageId, forceUpdate = false) {
         return;
     }
 
-    // ✅ Redirect merged routes to their new home
-    if (pageId === 'rewards') {
-        pageId = 'mine';
-        window.location.hash = 'mine';
+    // ✅ Redirect legacy routes to SEO-friendly names
+    const legacyRedirects = { 'rewards': 'staking', 'mine': 'staking', 'actions': 'fortune', 'backchat': 'agora' };
+    if (legacyRedirects[pageId]) {
+        pageId = legacyRedirects[pageId];
+        window.location.hash = pageId;
     }
 
     // ✅ FIX: Always process navigation when coming from a deep link
@@ -671,7 +676,7 @@ window.addEventListener('load', async () => {
     console.log("🚀 App Initializing...");
 
     if (!DOMElements.earn) {
-        DOMElements.earn = document.getElementById('mine'); 
+        DOMElements.earn = document.getElementById('staking');
     }
 
     try {
