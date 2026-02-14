@@ -375,9 +375,25 @@ async function _doManualFund(irys, amount) {
     await tx.wait(1);
     console.log(`[Irys] Fund tx confirmed`);
 
-    // Notify Irys node about the funding transaction
-    await irys.funder.submitFundTransaction(tx.hash);
-    console.log(`[Irys] Fund registered with Irys node`);
+    // Notify Irys node via direct HTTP POST (bypasses ethers v5/v6 yParity conflict
+    // in irys.funder.submitFundTransaction which tries to parse the tx with ethers v5)
+    const irysUrl = irys.url?.toString?.() || irys.api?.config?.url?.toString?.() || 'https://devnet.irys.xyz';
+    const baseUrl = irysUrl.replace(/\/$/, '');
+    const response = await fetch(`${baseUrl}/account/balance/${irys.token}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tx_id: tx.hash })
+    });
+
+    if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        console.warn(`[Irys] Fund notification returned ${response.status}: ${errText}`);
+    } else {
+        console.log(`[Irys] Fund registered with Irys node`);
+    }
+
+    // Wait a moment for Irys to process the funding
+    await new Promise(r => setTimeout(r, 2000));
 }
 
 // ============================================================================
