@@ -1,5 +1,5 @@
 // pages/OperatorPage.js
-// ✅ VERSION V1.0: Build on Backchain, Earn Perpetual Commissions
+// ✅ VERSION V2.0: Build on Backchain, Earn Perpetual Commissions
 
 import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
@@ -127,23 +127,30 @@ function render(isActive) {
     const opInfo = getOperatorInfo();
 
     container.innerHTML = `
+    <div class="max-w-3xl mx-auto px-4 pb-24">
+
         <!-- Hero -->
         <div class="text-center py-8 sm:py-12">
             <div class="op-hero-badge inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-5 py-2 mb-5">
                 <i class="fa-solid fa-code text-emerald-400 text-sm"></i>
-                <span class="text-emerald-400 text-sm font-bold">10-20% Commission</span>
+                <span class="text-emerald-400 text-sm font-bold">Permissionless Developer Program</span>
             </div>
             <h1 class="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white mb-4 leading-tight">
                 Build on Backchain,<br class="sm:hidden"> <span class="text-emerald-400">Earn Forever</span>
             </h1>
-            <p class="text-zinc-400 text-base sm:text-lg max-w-xl mx-auto leading-relaxed">
-                Create your own frontend, bot, or integration. Earn <strong class="text-white">10-20% of every fee</strong> generated through your app — perpetually.
+            <p class="text-zinc-400 text-base sm:text-lg max-w-xl mx-auto leading-relaxed mb-6">
+                Create your own frontend, bot, or integration. Every fee generated through your app sends <strong class="text-white">10-20% directly to your wallet</strong> — with no registration, no approval, and no middleman.
             </p>
+            <div class="flex flex-wrap justify-center gap-3 text-xs">
+                <span class="bg-zinc-800/60 border border-zinc-700/40 rounded-full px-3 py-1.5 text-zinc-300"><i class="fa-solid fa-infinity text-emerald-400 mr-1.5"></i>Perpetual revenue</span>
+                <span class="bg-zinc-800/60 border border-zinc-700/40 rounded-full px-3 py-1.5 text-zinc-300"><i class="fa-solid fa-lock-open text-emerald-400 mr-1.5"></i>No registration</span>
+                <span class="bg-zinc-800/60 border border-zinc-700/40 rounded-full px-3 py-1.5 text-zinc-300"><i class="fa-solid fa-file-contract text-emerald-400 mr-1.5"></i>On-chain guarantee</span>
+            </div>
         </div>
 
         <!-- Earnings Dashboard -->
         ${isConnected ? `
-        <div class="op-earnings-card rounded-2xl p-6 max-w-2xl mx-auto mb-8">
+        <div class="op-earnings-card rounded-2xl p-6 mb-10">
             <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div class="text-center sm:text-left">
                     <p class="text-emerald-400/80 text-sm font-medium mb-1">Your Pending Earnings</p>
@@ -157,56 +164,223 @@ function render(isActive) {
             </div>
         </div>
         ` : `
-        <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-6 max-w-2xl mx-auto mb-8 text-center">
+        <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-6 mb-10 text-center">
             <i class="fa-solid fa-wallet text-4xl text-zinc-600 mb-3"></i>
             <p class="text-zinc-400">Connect your wallet to see your operator earnings</p>
         </div>
         `}
 
-        <!-- How It Works -->
-        <div class="max-w-3xl mx-auto mb-10">
-            <h2 class="text-xl font-bold text-white mb-6 text-center">How Operators Earn</h2>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div class="text-center">
-                    <div class="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto mb-3">
+        <!-- What is an Operator? -->
+        <div class="mb-10">
+            <h2 class="text-xl font-bold text-white mb-2">What is a Backchain Operator?</h2>
+            <p class="text-zinc-400 text-sm leading-relaxed mb-4">
+                An Operator is any developer who builds an application on top of the Backchain protocol. By embedding your wallet address as the <code class="text-emerald-400 bg-zinc-800/60 px-1.5 py-0.5 rounded text-xs">operator</code> parameter in transactions, the smart contract automatically routes a percentage of every fee to you.
+            </p>
+            <p class="text-zinc-400 text-sm leading-relaxed">
+                Think of it like an affiliate program — except it's <strong class="text-white">enforced by smart contract</strong>, not by a company. There's no signup form, no API key, and no way for anyone to revoke your earnings. If your app generates fees, you get paid. Period.
+            </p>
+        </div>
+
+        <!-- How It Works — Detailed -->
+        <div class="mb-10">
+            <h2 class="text-xl font-bold text-white mb-6">How It Works</h2>
+            <div class="space-y-4">
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-5 flex gap-4">
+                    <div class="w-12 h-12 shrink-0 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
                         <i class="fa-solid fa-code text-xl text-emerald-400"></i>
                     </div>
-                    <h3 class="text-white font-bold text-sm mb-1">1. Build</h3>
-                    <p class="text-zinc-500 text-xs">Create a frontend or bot</p>
+                    <div>
+                        <h3 class="text-white font-bold text-sm mb-1">1. Build Your Application</h3>
+                        <p class="text-zinc-400 text-xs leading-relaxed">Create a custom frontend, trading bot, Telegram bot, Discord integration, mobile app — anything that interacts with Backchain smart contracts. Set your wallet address as the <code class="text-emerald-400 bg-zinc-800/60 px-1 py-0.5 rounded">operator</code> in one line of code.</p>
+                    </div>
                 </div>
-                <div class="text-center">
-                    <div class="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center mx-auto mb-3">
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-5 flex gap-4">
+                    <div class="w-12 h-12 shrink-0 rounded-2xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center">
                         <i class="fa-solid fa-users text-xl text-blue-400"></i>
                     </div>
-                    <h3 class="text-white font-bold text-sm mb-1">2. Users</h3>
-                    <p class="text-zinc-500 text-xs">Users interact via your app</p>
-                </div>
-                <div class="text-center">
-                    <div class="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto mb-3">
-                        <i class="fa-solid fa-receipt text-xl text-amber-400"></i>
+                    <div>
+                        <h3 class="text-white font-bold text-sm mb-1">2. Users Interact Through Your App</h3>
+                        <p class="text-zinc-400 text-xs leading-relaxed">Users stake BKC, buy NFTs, play Fortune Pool, certify documents, trade on Agora — any protocol action. Each action has a fee (gas-based or value-based), and your operator address travels with the transaction.</p>
                     </div>
-                    <h3 class="text-white font-bold text-sm mb-1">3. Fees</h3>
-                    <p class="text-zinc-500 text-xs">Protocol fees are generated</p>
                 </div>
-                <div class="text-center">
-                    <div class="w-14 h-14 rounded-2xl bg-green-500/10 border border-green-500/30 flex items-center justify-center mx-auto mb-3">
-                        <i class="fa-solid fa-coins text-xl text-green-400"></i>
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-5 flex gap-4">
+                    <div class="w-12 h-12 shrink-0 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
+                        <i class="fa-solid fa-sitemap text-xl text-amber-400"></i>
                     </div>
-                    <h3 class="text-white font-bold text-sm mb-1">4. Earn %</h3>
-                    <p class="text-zinc-500 text-xs">You get your commission cut</p>
+                    <div>
+                        <h3 class="text-white font-bold text-sm mb-1">3. Smart Contract Splits the Fee</h3>
+                        <p class="text-zinc-400 text-xs leading-relaxed">The <code class="text-emerald-400 bg-zinc-800/60 px-1 py-0.5 rounded">BackchainEcosystem</code> contract receives every fee and splits it automatically: Operator share (10-20%), Buyback & Burn, Treasury, and module-specific pools. The split is per-module, immutable, and verifiable on-chain.</p>
+                    </div>
+                </div>
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-5 flex gap-4">
+                    <div class="w-12 h-12 shrink-0 rounded-2xl bg-green-500/10 border border-green-500/30 flex items-center justify-center">
+                        <i class="fa-solid fa-vault text-xl text-green-400"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-white font-bold text-sm mb-1">4. ETH Accumulates in Your Balance</h3>
+                        <p class="text-zinc-400 text-xs leading-relaxed">Your operator ETH earnings are stored on-chain in <code class="text-emerald-400 bg-zinc-800/60 px-1 py-0.5 rounded">pendingEth[yourAddress]</code>. Withdraw anytime by calling <code class="text-emerald-400 bg-zinc-800/60 px-1 py-0.5 rounded">withdrawEth()</code> — no minimum, no cooldown, no admin approval.</p>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Commission Rates -->
-        <div class="max-w-3xl mx-auto mb-10">
-            <h2 class="text-xl font-bold text-white mb-4 text-center">Commission Rates</h2>
-            <p class="text-zinc-400 text-sm text-center mb-6">Each module distributes fees differently. Your operator share is guaranteed by smart contract.</p>
+        <!-- Fee Flow Diagram -->
+        <div class="mb-10">
+            <h2 class="text-xl font-bold text-white mb-4">Fee Flow</h2>
+            <p class="text-zinc-400 text-sm mb-4">Every protocol action generates a fee. Here's where that fee goes:</p>
+            <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-5 space-y-3">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center shrink-0">
+                        <i class="fa-solid fa-user text-blue-400 text-sm"></i>
+                    </div>
+                    <div class="flex-1 text-sm text-white font-medium">User pays fee (ETH)</div>
+                </div>
+                <div class="ml-5 border-l-2 border-zinc-700 pl-5 py-1 text-xs text-zinc-500">
+                    <i class="fa-solid fa-arrow-down mr-1"></i> Fee sent to BackchainEcosystem contract
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 text-center">
+                        <p class="text-emerald-400 text-lg font-extrabold">10-20%</p>
+                        <p class="text-emerald-400/80 text-[10px] font-bold uppercase tracking-wider">Operator</p>
+                        <p class="text-zinc-500 text-[10px]">Your wallet</p>
+                    </div>
+                    <div class="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-center">
+                        <p class="text-amber-400 text-lg font-extrabold">30-50%</p>
+                        <p class="text-amber-400/80 text-[10px] font-bold uppercase tracking-wider">Buyback</p>
+                        <p class="text-zinc-500 text-[10px]">Buy + burn BKC</p>
+                    </div>
+                    <div class="bg-purple-500/10 border border-purple-500/30 rounded-xl p-3 text-center">
+                        <p class="text-purple-400 text-lg font-extrabold">10-30%</p>
+                        <p class="text-purple-400/80 text-[10px] font-bold uppercase tracking-wider">Treasury</p>
+                        <p class="text-zinc-500 text-[10px]">Protocol growth</p>
+                    </div>
+                    <div class="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-3 text-center">
+                        <p class="text-cyan-400 text-lg font-extrabold">10-30%</p>
+                        <p class="text-cyan-400/80 text-[10px] font-bold uppercase tracking-wider">Custom</p>
+                        <p class="text-zinc-500 text-[10px]">Module-specific</p>
+                    </div>
+                </div>
+                <p class="text-zinc-500 text-[11px] text-center pt-1">Exact percentages vary by module — see Commission Rates below</p>
+            </div>
+        </div>
+
+        <!-- Concrete Earning Examples -->
+        <div class="mb-10">
+            <h2 class="text-xl font-bold text-white mb-4">Earning Examples</h2>
+            <p class="text-zinc-400 text-sm mb-4">Here's what you'd earn from real transactions through your app:</p>
+            <div class="space-y-3">
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                    <div class="flex items-center gap-3 flex-1">
+                        <div class="w-9 h-9 bg-purple-500/10 rounded-lg flex items-center justify-center shrink-0">
+                            <i class="fa-solid fa-layer-group text-purple-400 text-sm"></i>
+                        </div>
+                        <div>
+                            <p class="text-white text-sm font-medium">User stakes 10,000 BKC</p>
+                            <p class="text-zinc-500 text-xs">Staking fee: ~0.005 ETH</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-emerald-400 font-bold">+0.001 ETH</p>
+                        <p class="text-zinc-500 text-[10px]">20% operator</p>
+                    </div>
+                </div>
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                    <div class="flex items-center gap-3 flex-1">
+                        <div class="w-9 h-9 bg-pink-500/10 rounded-lg flex items-center justify-center shrink-0">
+                            <i class="fa-solid fa-store text-pink-400 text-sm"></i>
+                        </div>
+                        <div>
+                            <p class="text-white text-sm font-medium">User buys a Gold NFT</p>
+                            <p class="text-zinc-500 text-xs">NFT price: ~0.03 ETH</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-emerald-400 font-bold">+0.003 ETH</p>
+                        <p class="text-zinc-500 text-[10px]">10% operator</p>
+                    </div>
+                </div>
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                    <div class="flex items-center gap-3 flex-1">
+                        <div class="w-9 h-9 bg-green-500/10 rounded-lg flex items-center justify-center shrink-0">
+                            <i class="fa-solid fa-dice text-green-400 text-sm"></i>
+                        </div>
+                        <div>
+                            <p class="text-white text-sm font-medium">User plays Fortune Pool Tier 2</p>
+                            <p class="text-zinc-500 text-xs">Entry: 0.05 ETH</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-emerald-400 font-bold">+0.005 ETH</p>
+                        <p class="text-zinc-500 text-[10px]">10% operator</p>
+                    </div>
+                </div>
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                    <div class="flex items-center gap-3 flex-1">
+                        <div class="w-9 h-9 bg-slate-500/10 rounded-lg flex items-center justify-center shrink-0">
+                            <i class="fa-solid fa-stamp text-slate-400 text-sm"></i>
+                        </div>
+                        <div>
+                            <p class="text-white text-sm font-medium">User certifies a document</p>
+                            <p class="text-zinc-500 text-xs">Notary fee: ~0.002 ETH</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-emerald-400 font-bold">+0.0004 ETH</p>
+                        <p class="text-zinc-500 text-[10px]">20% operator</p>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 mt-4 text-center">
+                <p class="text-zinc-400 text-xs">If your app processes <strong class="text-white">100 transactions/day</strong> averaging 0.01 ETH in fees:</p>
+                <p class="text-emerald-400 text-2xl font-extrabold mt-1">~0.15 ETH/day</p>
+                <p class="text-zinc-500 text-xs mt-1">~4.5 ETH/month at 15% average operator rate</p>
+            </div>
+        </div>
+
+        <!-- What You Can Build -->
+        <div class="mb-10">
+            <h2 class="text-xl font-bold text-white mb-4">What You Can Build</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4">
+                    <div class="flex items-center gap-2 mb-2">
+                        <i class="fa-solid fa-globe text-blue-400"></i>
+                        <h3 class="text-white font-bold text-sm">Custom Frontend</h3>
+                    </div>
+                    <p class="text-zinc-500 text-xs leading-relaxed">Build your own version of backcoin.org with a different UI, different language, or specialized features for your community. All protocol actions earn you operator fees.</p>
+                </div>
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4">
+                    <div class="flex items-center gap-2 mb-2">
+                        <i class="fa-brands fa-telegram text-sky-400"></i>
+                        <h3 class="text-white font-bold text-sm">Telegram / Discord Bot</h3>
+                    </div>
+                    <p class="text-zinc-500 text-xs leading-relaxed">Let users stake, play Fortune Pool, or buy NFTs directly from chat. Every action includes your operator address and routes commissions to your wallet.</p>
+                </div>
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4">
+                    <div class="flex items-center gap-2 mb-2">
+                        <i class="fa-solid fa-robot text-amber-400"></i>
+                        <h3 class="text-white font-bold text-sm">Trading / Automation Bot</h3>
+                    </div>
+                    <p class="text-zinc-500 text-xs leading-relaxed">Automated staking strategies, NFT arbitrage, or yield optimization. Users opt-in, your bot executes, and you earn fees on every automated transaction.</p>
+                </div>
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4">
+                    <div class="flex items-center gap-2 mb-2">
+                        <i class="fa-solid fa-mobile-screen text-green-400"></i>
+                        <h3 class="text-white font-bold text-sm">Mobile App / PWA</h3>
+                    </div>
+                    <p class="text-zinc-500 text-xs leading-relaxed">Build a mobile-first experience using WalletConnect or embedded wallets. Same protocol, same fees, same commissions — just a better mobile UX.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Commission Rates (Live from Contract) -->
+        <div class="mb-10">
+            <h2 class="text-xl font-bold text-white mb-2">Commission Rates</h2>
+            <p class="text-zinc-400 text-sm mb-5">Live data from the <code class="text-emerald-400 bg-zinc-800/60 px-1.5 py-0.5 rounded text-xs">BackchainEcosystem</code> contract. Each module has its own fee distribution.</p>
             <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl overflow-hidden">
                 <div class="grid grid-cols-3 gap-2 px-4 py-3 border-b border-zinc-700/30 text-xs text-zinc-500 font-bold uppercase tracking-wider">
                     <span>Module</span>
                     <span class="text-center">Operator %</span>
-                    <span class="text-right">Fee Split</span>
+                    <span class="text-right">Full Split</span>
                 </div>
                 <div id="op-modules-list">
                     ${OS.modules.length > 0 ? OS.modules.map(m => `
@@ -233,36 +407,147 @@ function render(isActive) {
                     `}
                 </div>
             </div>
+            <p class="text-zinc-600 text-[11px] mt-2 text-center">No operator = operator share is burned (sent to 0x0 dead address)</p>
         </div>
 
-        <!-- Quick Start -->
-        <div class="max-w-3xl mx-auto mb-10">
-            <h2 class="text-xl font-bold text-white mb-4 text-center">Quick Start for Developers</h2>
-            <div class="space-y-4">
-                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-5">
-                    <h3 class="text-white font-semibold mb-2 text-sm flex items-center gap-2"><i class="fa-solid fa-1 text-emerald-400"></i> Set your operator address</h3>
-                    <p class="text-zinc-400 text-xs mb-3">Add this to your frontend before any Backchain imports:</p>
-                    <div class="op-code-block rounded-xl px-4 py-3 text-sm overflow-x-auto">
-                        <code><span class="op-comment">// Set your wallet as the operator</span>
-window.BACKCHAIN_OPERATOR = <span class="op-string">"0xYOUR_WALLET_ADDRESS"</span>;</code>
+        <!-- On-Chain Guarantees -->
+        <div class="mb-10">
+            <h2 class="text-xl font-bold text-white mb-4">On-Chain Guarantees</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4 flex gap-3">
+                    <i class="fa-solid fa-lock-open text-emerald-400 text-lg mt-0.5"></i>
+                    <div>
+                        <h3 class="text-white font-bold text-sm mb-1">Permissionless</h3>
+                        <p class="text-zinc-500 text-xs leading-relaxed">No registration, no API key, no approval process. Any Ethereum address can be an operator. Just set it and start earning.</p>
                     </div>
                 </div>
-                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-5">
-                    <h3 class="text-white font-semibold mb-2 text-sm flex items-center gap-2"><i class="fa-solid fa-2 text-emerald-400"></i> Or via localStorage</h3>
-                    <p class="text-zinc-400 text-xs mb-3">For runtime configuration:</p>
-                    <div class="op-code-block rounded-xl px-4 py-3 text-sm overflow-x-auto">
-                        <code>localStorage.setItem(<span class="op-string">'bkc_operator'</span>, <span class="op-string">'0xYOUR_WALLET_ADDRESS'</span>);</code>
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4 flex gap-3">
+                    <i class="fa-solid fa-file-shield text-emerald-400 text-lg mt-0.5"></i>
+                    <div>
+                        <h3 class="text-white font-bold text-sm mb-1">Immutable Commissions</h3>
+                        <p class="text-zinc-500 text-xs leading-relaxed">Fee percentages are set in the smart contract. No admin can change your commission rate or divert your earnings. Code is law.</p>
                     </div>
                 </div>
-                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-5">
-                    <h3 class="text-white font-semibold mb-2 text-sm flex items-center gap-2"><i class="fa-solid fa-3 text-emerald-400"></i> That's it!</h3>
-                    <p class="text-zinc-400 text-sm">Every transaction made through your frontend will include your operator address. Fees accumulate on-chain and you can withdraw anytime.</p>
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4 flex gap-3">
+                    <i class="fa-solid fa-clock text-emerald-400 text-lg mt-0.5"></i>
+                    <div>
+                        <h3 class="text-white font-bold text-sm mb-1">No Expiration</h3>
+                        <p class="text-zinc-500 text-xs leading-relaxed">No time limit on earnings. As long as the Backchain protocol exists on Arbitrum, your operator commissions will keep accumulating.</p>
+                    </div>
+                </div>
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4 flex gap-3">
+                    <i class="fa-solid fa-money-bill-transfer text-emerald-400 text-lg mt-0.5"></i>
+                    <div>
+                        <h3 class="text-white font-bold text-sm mb-1">Instant Withdrawal</h3>
+                        <p class="text-zinc-500 text-xs leading-relaxed">Withdraw ETH earnings anytime. No minimum amount, no cooldown period, no vesting. One transaction and it's in your wallet.</p>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Set Operator (for testing) -->
-        <div class="max-w-2xl mx-auto mb-10">
+        <!-- Integration Guide -->
+        <div class="mb-10">
+            <h2 class="text-xl font-bold text-white mb-2">Integration Guide</h2>
+            <p class="text-zinc-400 text-sm mb-5">Three ways to set your operator address. Choose the one that fits your setup.</p>
+            <div class="space-y-4">
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-5">
+                    <h3 class="text-white font-semibold mb-1 text-sm flex items-center gap-2">
+                        <span class="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold">1</span>
+                        Global Variable (recommended for custom frontends)
+                    </h3>
+                    <p class="text-zinc-400 text-xs mb-3">Set before loading any Backchain modules. Works for full custom frontends.</p>
+                    <div class="op-code-block rounded-xl px-4 py-3 text-sm overflow-x-auto">
+                        <code><span class="op-comment">// Add this BEFORE importing Backchain modules</span>
+window.BACKCHAIN_OPERATOR = <span class="op-string">"0xYOUR_WALLET"</span>;
+
+<span class="op-comment">// Then import and use the protocol normally</span>
+<span class="op-comment">// All transactions will include your operator address</span></code>
+                    </div>
+                </div>
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-5">
+                    <h3 class="text-white font-semibold mb-1 text-sm flex items-center gap-2">
+                        <span class="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold">2</span>
+                        localStorage (for dynamic / runtime configuration)
+                    </h3>
+                    <p class="text-zinc-400 text-xs mb-3">Good for bots and apps that configure operator at runtime.</p>
+                    <div class="op-code-block rounded-xl px-4 py-3 text-sm overflow-x-auto">
+                        <code>localStorage.setItem(<span class="op-string">'bkc_operator'</span>, <span class="op-string">'0xYOUR_WALLET'</span>);
+
+<span class="op-comment">// To verify it's active:</span>
+console.log(localStorage.getItem(<span class="op-string">'bkc_operator'</span>));</code>
+                    </div>
+                </div>
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-5">
+                    <h3 class="text-white font-semibold mb-1 text-sm flex items-center gap-2">
+                        <span class="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold">3</span>
+                        Per-Transaction (for bots and advanced integrations)
+                    </h3>
+                    <p class="text-zinc-400 text-xs mb-3">Pass operator directly in each contract call for maximum control.</p>
+                    <div class="op-code-block rounded-xl px-4 py-3 text-sm overflow-x-auto">
+                        <code><span class="op-comment">// Every Backchain contract function accepts an operator parameter</span>
+<span class="op-comment">// Example: staking with operator</span>
+stakingPool.delegate(amount, lockDays, <span class="op-string">OPERATOR_ADDR</span>);
+
+<span class="op-comment">// Example: buying NFT with operator</span>
+nftPool.buy(tier, quantity, <span class="op-string">OPERATOR_ADDR</span>, { value: price });</code>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SDK Coming Soon -->
+        <div class="mb-10">
+            <div class="bg-gradient-to-r from-emerald-500/5 via-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 rounded-2xl p-6 text-center">
+                <div class="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-4 py-1.5 mb-4">
+                    <i class="fa-solid fa-flask text-emerald-400 text-xs"></i>
+                    <span class="text-emerald-400 text-xs font-bold uppercase tracking-wider">Coming Soon</span>
+                </div>
+                <h2 class="text-xl font-bold text-white mb-2">Backchain Developer SDK</h2>
+                <p class="text-zinc-400 text-sm max-w-lg mx-auto leading-relaxed mb-4">
+                    We're building an official SDK to make integration even easier. Pre-built components, TypeScript types, React hooks, and ready-to-use transaction helpers — so you can build on Backchain in minutes, not days.
+                </p>
+                <div class="flex flex-wrap justify-center gap-2 text-xs">
+                    <span class="bg-zinc-800/60 border border-zinc-700/40 rounded-full px-3 py-1.5 text-zinc-400"><i class="fa-brands fa-npm text-red-400 mr-1"></i>npm package</span>
+                    <span class="bg-zinc-800/60 border border-zinc-700/40 rounded-full px-3 py-1.5 text-zinc-400"><i class="fa-brands fa-js text-yellow-400 mr-1"></i>TypeScript</span>
+                    <span class="bg-zinc-800/60 border border-zinc-700/40 rounded-full px-3 py-1.5 text-zinc-400"><i class="fa-brands fa-react text-cyan-400 mr-1"></i>React hooks</span>
+                    <span class="bg-zinc-800/60 border border-zinc-700/40 rounded-full px-3 py-1.5 text-zinc-400"><i class="fa-solid fa-book text-emerald-400 mr-1"></i>Full docs</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- FAQ -->
+        <div class="mb-10">
+            <h2 class="text-xl font-bold text-white mb-4">FAQ</h2>
+            <div class="space-y-3">
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4">
+                    <h3 class="text-white font-bold text-sm mb-1">Do I need to register or apply?</h3>
+                    <p class="text-zinc-500 text-xs leading-relaxed">No. The operator system is completely permissionless. Any valid Ethereum address works as an operator. There's no whitelist, no approval, and no KYC.</p>
+                </div>
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4">
+                    <h3 class="text-white font-bold text-sm mb-1">Which actions generate operator fees?</h3>
+                    <p class="text-zinc-500 text-xs leading-relaxed">All protocol actions that pass through BackchainEcosystem: staking, unstaking, NFT buy/sell, Fortune Pool entries, Notary certification, Charity donations, Agora actions, and NFT rentals. Every module that collects fees supports operators.</p>
+                </div>
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4">
+                    <h3 class="text-white font-bold text-sm mb-1">What happens if no operator is set?</h3>
+                    <p class="text-zinc-500 text-xs leading-relaxed">The operator share is sent to the zero address (0x000...0000) — effectively burned. This means transactions without an operator benefit the protocol by reducing supply, but no one earns the commission.</p>
+                </div>
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4">
+                    <h3 class="text-white font-bold text-sm mb-1">Can the admin change commission rates?</h3>
+                    <p class="text-zinc-500 text-xs leading-relaxed">Module configs are set during deployment. The Backchain governance model is designed for progressive decentralization — commission rates follow the same immutability guarantees as the rest of the protocol.</p>
+                </div>
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4">
+                    <h3 class="text-white font-bold text-sm mb-1">Can multiple operators exist at the same time?</h3>
+                    <p class="text-zinc-500 text-xs leading-relaxed">Yes. Each transaction specifies its own operator. If 10 different developers build 10 different frontends, each one earns commissions from the transactions that go through their app. There's no competition — the ecosystem grows with more operators.</p>
+                </div>
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4">
+                    <h3 class="text-white font-bold text-sm mb-1">How do I track my earnings?</h3>
+                    <p class="text-zinc-500 text-xs leading-relaxed">Connect your wallet on this page to see your pending ETH balance. You can also read <code class="text-emerald-400 bg-zinc-800/60 px-1 py-0.5 rounded">pendingEth(yourAddress)</code> directly from the BackchainEcosystem contract on Arbiscan.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Test as Operator -->
+        <div class="mb-10">
             <div class="bg-zinc-800/50 border border-zinc-700/50 rounded-2xl p-5 sm:p-6">
                 <h3 class="text-lg font-bold text-white mb-2 flex items-center gap-2">
                     <i class="fa-solid fa-flask text-emerald-400"></i> Test as Operator
@@ -290,10 +575,13 @@ window.BACKCHAIN_OPERATOR = <span class="op-string">"0xYOUR_WALLET_ADDRESS"</spa
             </div>
         </div>
 
-        <!-- CTA -->
-        <div class="text-center py-6">
-            <p class="text-zinc-500 text-xs">Operator system is permissionless. No registration required. No admin approval.</p>
+        <!-- Bottom CTA -->
+        <div class="text-center py-4">
+            <p class="text-zinc-500 text-xs">The Backchain Operator system is permissionless, on-chain, and unstoppable.</p>
+            <p class="text-zinc-600 text-xs mt-1">Contracts verified on Arbiscan. Open source.</p>
         </div>
+
+    </div><!-- /max-w-3xl -->
     `;
 
     setupEventListeners();
