@@ -1637,7 +1637,8 @@ function renderCertDetail(el) {
             <!-- Description -->
             <div class="nt-card" style="margin-bottom:12px">
                 <div style="font-size:11px;font-weight:600;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Description</div>
-                <div style="font-size:14px;color:var(--nt-text);line-height:1.5">${cert.description?.split('---')[0].trim() || 'Notarized Document'}</div>
+                <div style="font-size:14px;color:var(--nt-text);line-height:1.5">${cert.description || 'Notarized Document'}</div>
+                ${cert.fileName ? `<div style="font-size:12px;color:var(--nt-text-2);margin-top:6px"><i class="${fileInfo.icon}" style="margin-right:4px;color:${fileInfo.color}"></i>${cert.fileName}</div>` : ''}
             </div>
 
             <!-- Content Hash -->
@@ -1760,17 +1761,20 @@ async function loadCertificatesFromContract() {
     for (const cert of userCerts) {
         try {
             const detail = await NotaryTx.getCertificate(cert.id);
+            const parsed = parseMetaJson(detail?.meta || '');
             enriched.push({
                 id: cert.id,
                 hash: cert.documentHash || detail?.documentHash || '',
-                description: detail?.meta || '',
+                description: parsed.desc || parsed.name || '',
                 docType: cert.docType ?? detail?.docType ?? 0,
                 timestamp: cert.timestamp || detail?.timestamp || 0,
                 owner: cert.owner,
                 isBoosted: cert.isBoosted || detail?.isBoosted || false,
                 boostExpiry: cert.boostExpiry || detail?.boostExpiry || 0,
-                // Parse IPFS/Arweave CID from metadata if present
-                ipfs: extractStorageUri(detail?.meta || ''),
+                ipfs: parsed.uri || extractStorageUri(detail?.meta || ''),
+                mimeType: parsed.type || '',
+                fileName: parsed.name || '',
+                rawMeta: detail?.meta || '',
                 txHash: ''
             });
         } catch {
@@ -1790,17 +1794,39 @@ async function loadCertificatesFromContract() {
     return enriched.sort((a, b) => b.id - a.id);
 }
 
+/**
+ * Parse metadata JSON string from contract.
+ * Format: {"uri":"ar://...","name":"file.png","size":123,"type":"image/png","desc":"..."}
+ * Falls back to empty object if not valid JSON.
+ */
+function parseMetaJson(meta) {
+    if (!meta) return {};
+    try {
+        // Try JSON parse first
+        if (meta.trim().startsWith('{')) {
+            return JSON.parse(meta);
+        }
+    } catch {}
+    // Not JSON — treat as plain description
+    return { desc: meta };
+}
+
 function extractStorageUri(meta) {
     if (!meta) return '';
-    // Check for common patterns in metadata: ar://..., ipfs://..., Qm..., bafy...
-    const arMatch = meta.match(/ar:\/\/[a-zA-Z0-9_-]{43}/);
+    // Try JSON parse first
+    try {
+        if (meta.trim().startsWith('{')) {
+            const obj = JSON.parse(meta);
+            if (obj.uri) return obj.uri;
+        }
+    } catch {}
+    // Regex fallback for ar://, ipfs://, CIDs
+    const arMatch = meta.match(/ar:\/\/[a-zA-Z0-9_-]{43,44}/);
     if (arMatch) return arMatch[0];
     const ipfsMatch = meta.match(/ipfs:\/\/\S+/);
     if (ipfsMatch) return ipfsMatch[0];
     const cidMatch = meta.match(/\b(Qm[1-9A-HJ-NP-Za-km-z]{44}|bafy\S+)\b/);
     if (cidMatch) return cidMatch[1];
-    const arTxMatch = meta.match(/\b[a-zA-Z0-9_-]{43}\b/);
-    if (arTxMatch && !meta.startsWith('0x')) return `ar://${arTxMatch[0]}`;
     // If meta contains --- separator, the part after might be a storage URI
     if (meta.includes('---')) {
         const parts = meta.split('---');
