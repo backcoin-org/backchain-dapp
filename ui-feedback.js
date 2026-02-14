@@ -250,35 +250,62 @@ export async function addNftToWallet(tokenId, tierName) {
 
 // --- SHARE MODAL ---
 
-export function showShareModal() {
-    const projectUrl = window.location.origin;
-    const shareText = encodeURIComponent("Check out Backcoin - The Unstoppable DeFi Protocol on Arbitrum! Build your own business. Be Your Own CEO. 🚀 #Backcoin #DeFi #Arbitrum #BeYourOwnCEO");
+export function showShareModal(userAddress) {
+    const origin = window.location.origin;
+    const isConnected = !!userAddress;
+    const shareUrl = isConnected ? `${origin}/#dashboard?ref=${userAddress}` : origin;
+    const shortAddr = isConnected ? `${userAddress.slice(0, 6)}...${userAddress.slice(-4)}` : '';
+
+    const shareText = isConnected
+        ? encodeURIComponent("Join Backchain — I'll be your tutor! Stake BKC, earn rewards, and I'll earn too. Use my invite link:")
+        : encodeURIComponent("Check out Backchain — Unstoppable DeFi on Arbitrum. Stake, trade NFTs, play Fortune Pool & more!");
 
     const content = `
         <div class="text-center py-2">
             <div class="mb-4">
                 <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-amber-500/20 to-orange-500/20 rounded-full mb-3">
-                    <i class="fa-solid fa-share-nodes text-3xl text-amber-400"></i>
+                    <i class="fa-solid fa-graduation-cap text-3xl text-amber-400"></i>
                 </div>
-                <h2 class="text-2xl font-bold text-white mb-1">Spread the Word</h2>
-                <p class="text-zinc-400 text-sm">Help us grow the unstoppable community!</p>
+                <h2 class="text-2xl font-bold text-white mb-1">${isConnected ? 'Invite & Earn' : 'Share Backchain'}</h2>
+                <p class="text-zinc-400 text-sm">${isConnected
+                    ? 'Share your tutor link — earn <strong class="text-amber-400">10% ETH</strong> + <strong class="text-amber-400">5% BKC</strong> from every friend'
+                    : 'Connect your wallet to get a personal tutor link and earn commissions!'}</p>
             </div>
+
+            ${isConnected ? `
+            <!-- Tutor Reward Badges -->
+            <div class="flex justify-center gap-2 mb-4">
+                <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                    <i class="fa-solid fa-coins"></i> 10% ETH Fees
+                </span>
+                <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold bg-purple-500/15 text-purple-400 border border-purple-500/30">
+                    <i class="fa-solid fa-gem"></i> 5% BKC Claims
+                </span>
+                <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                    <i class="fa-solid fa-infinity"></i> Forever
+                </span>
+            </div>
+            ` : `
+            <div class="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                <p class="text-amber-400 text-xs"><i class="fa-solid fa-lightbulb mr-1"></i> Connect your wallet to generate a personal invite link with your tutor referral built in!</p>
+            </div>
+            `}
 
             <!-- Social Share Grid -->
             <div class="grid grid-cols-4 gap-3 mb-5">
-                <a href="https://twitter.com/intent/tweet?text=${shareText}&url=${encodeURIComponent(projectUrl)}" target="_blank" class="flex flex-col items-center justify-center bg-zinc-800 hover:bg-sky-600 border border-zinc-700 hover:border-sky-500 rounded-xl p-3 transition-all duration-300 group">
+                <a href="https://twitter.com/intent/tweet?text=${shareText}&url=${encodeURIComponent(shareUrl)}" target="_blank" class="flex flex-col items-center justify-center bg-zinc-800 hover:bg-sky-600 border border-zinc-700 hover:border-sky-500 rounded-xl p-3 transition-all duration-300 group">
                     <i class="fa-brands fa-x-twitter text-xl text-zinc-400 group-hover:text-white transition-colors mb-1"></i>
                     <span class="text-[10px] text-zinc-500 group-hover:text-white">Twitter</span>
                 </a>
-                <a href="https://t.me/share/url?url=${encodeURIComponent(projectUrl)}&text=${shareText}" target="_blank" class="flex flex-col items-center justify-center bg-zinc-800 hover:bg-blue-600 border border-zinc-700 hover:border-blue-500 rounded-xl p-3 transition-all duration-300 group">
+                <a href="https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${shareText}" target="_blank" class="flex flex-col items-center justify-center bg-zinc-800 hover:bg-blue-600 border border-zinc-700 hover:border-blue-500 rounded-xl p-3 transition-all duration-300 group">
                     <i class="fa-brands fa-telegram text-xl text-zinc-400 group-hover:text-white transition-colors mb-1"></i>
                     <span class="text-[10px] text-zinc-500 group-hover:text-white">Telegram</span>
                 </a>
-                <a href="https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(projectUrl)}&title=Backcoin%20Protocol&summary=${shareText}" target="_blank" class="flex flex-col items-center justify-center bg-zinc-800 hover:bg-blue-700 border border-zinc-700 hover:border-blue-600 rounded-xl p-3 transition-all duration-300 group">
+                <a href="https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(shareUrl)}&title=Backchain%20Protocol&summary=${shareText}" target="_blank" class="flex flex-col items-center justify-center bg-zinc-800 hover:bg-blue-700 border border-zinc-700 hover:border-blue-600 rounded-xl p-3 transition-all duration-300 group">
                     <i class="fa-brands fa-linkedin-in text-xl text-zinc-400 group-hover:text-white transition-colors mb-1"></i>
                     <span class="text-[10px] text-zinc-500 group-hover:text-white">LinkedIn</span>
                 </a>
-                <a href="https://wa.me/?text=${shareText}%20${encodeURIComponent(projectUrl)}" target="_blank" class="flex flex-col items-center justify-center bg-zinc-800 hover:bg-green-600 border border-zinc-700 hover:border-green-500 rounded-xl p-3 transition-all duration-300 group">
+                <a href="https://wa.me/?text=${shareText}%20${encodeURIComponent(shareUrl)}" target="_blank" class="flex flex-col items-center justify-center bg-zinc-800 hover:bg-green-600 border border-zinc-700 hover:border-green-500 rounded-xl p-3 transition-all duration-300 group">
                     <i class="fa-brands fa-whatsapp text-xl text-zinc-400 group-hover:text-white transition-colors mb-1"></i>
                     <span class="text-[10px] text-zinc-500 group-hover:text-white">WhatsApp</span>
                 </a>
@@ -287,27 +314,36 @@ export function showShareModal() {
             <!-- Copy Link Section -->
             <div class="flex items-center gap-2 bg-zinc-800/70 border border-zinc-700 rounded-xl p-2">
                 <div class="flex-1 px-3 py-2 bg-black/30 rounded-lg overflow-hidden">
-                    <p id="share-url-text" class="text-xs font-mono text-zinc-400 truncate">${projectUrl}</p>
+                    <p id="share-url-text" class="text-xs font-mono text-zinc-400 truncate">${shareUrl}</p>
                 </div>
-                <button id="copy-link-btn" onclick="navigator.clipboard.writeText('${projectUrl}').then(() => { 
-                            document.getElementById('copy-link-btn').innerHTML = '<i class=\\'fa-solid fa-check\\'></i>'; 
+                <button id="copy-link-btn" onclick="navigator.clipboard.writeText('${shareUrl}').then(() => {
+                            document.getElementById('copy-link-btn').innerHTML = '<i class=\\'fa-solid fa-check\\'></i>';
                             document.getElementById('copy-link-btn').classList.add('bg-green-600', 'border-green-500');
                             document.getElementById('copy-link-btn').classList.remove('bg-amber-600', 'border-amber-500', 'hover:bg-amber-500');
-                            setTimeout(() => { 
-                                document.getElementById('copy-link-btn').innerHTML = '<i class=\\'fa-solid fa-copy\\'></i>'; 
+                            setTimeout(() => {
+                                document.getElementById('copy-link-btn').innerHTML = '<i class=\\'fa-solid fa-copy\\'></i>';
                                 document.getElementById('copy-link-btn').classList.remove('bg-green-600', 'border-green-500');
                                 document.getElementById('copy-link-btn').classList.add('bg-amber-600', 'border-amber-500', 'hover:bg-amber-500');
-                            }, 2000); 
-                        })" 
+                            }, 2000);
+                        })"
                         class="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-amber-600 hover:bg-amber-500 border border-amber-500 rounded-lg text-white transition-all duration-300">
                     <i class="fa-solid fa-copy"></i>
                 </button>
             </div>
 
+            ${isConnected ? `
+            <p class="mt-3 text-[11px] text-zinc-500">
+                <i class="fa-solid fa-link text-amber-400/60 mr-1"></i>
+                Your tutor address <span class="font-mono text-zinc-400">${shortAddr}</span> is embedded in this link
+            </p>
+            ` : ''}
+
             <!-- Footer -->
-            <p class="mt-4 text-[11px] text-zinc-600">
-                <i class="fa-solid fa-heart text-red-500 mr-1"></i>
-                Thank you for supporting Backcoin!
+            <p class="mt-3 text-[11px] text-zinc-600">
+                <i class="fa-solid fa-circle-info mr-1"></i>
+                ${isConnected
+                    ? 'Friends who join via your link automatically set you as their tutor'
+                    : 'Share now — every new user strengthens the ecosystem'}
             </p>
         </div>
     `;
