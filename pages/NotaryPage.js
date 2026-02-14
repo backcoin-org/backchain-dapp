@@ -390,6 +390,27 @@ function injectStyles() {
         .nt-cert-info {
             padding: 14px;
         }
+        .nt-card-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--nt-text-2);
+            background: var(--nt-bg3);
+            border: 1px solid var(--nt-border);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all var(--nt-transition);
+            text-decoration: none;
+            font-family: inherit;
+        }
+        .nt-card-action:hover {
+            color: var(--nt-accent);
+            border-color: rgba(245,158,11,0.3);
+            background: var(--nt-accent-glow);
+        }
 
         /* Dropzone */
         .nt-dropzone {
@@ -779,6 +800,7 @@ function renderCertCard(cert) {
     const fileInfo = getFileTypeInfo(cert.mimeType || '', cert.description || cert.fileName || '');
     const timeAgo = formatTimestamp(cert.timestamp);
     const desc = cert.description?.split('---')[0].trim().split('\n')[0].trim() || 'Notarized Document';
+    const docTypeName = NotaryTx.DOC_TYPE_NAMES?.[cert.docType] || '';
 
     return `
         <div class="nt-cert-card" onclick="NotaryPage.viewCert(${cert.id})">
@@ -795,8 +817,17 @@ function renderCertCard(cert) {
                 ${timeAgo ? `<span style="position:absolute;top:8px;left:8px;font-size:10px;color:var(--nt-text-3);background:rgba(0,0,0,0.8);padding:2px 8px;border-radius:20px"><i class="fa-regular fa-clock" style="margin-right:4px"></i>${timeAgo}</span>` : ''}
             </div>
             <div class="nt-cert-info">
-                <div style="font-size:13px;font-weight:600;color:var(--nt-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px">${desc}</div>
-                <div style="font-size:10px;font-family:monospace;color:var(--nt-text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">SHA-256: ${cert.hash?.slice(0, 18) || '...'}...</div>
+                <div style="font-size:13px;font-weight:600;color:var(--nt-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px">${desc}</div>
+                ${docTypeName ? `<div style="font-size:10px;color:${fileInfo.color};margin-bottom:2px"><i class="${fileInfo.icon}" style="margin-right:3px;font-size:9px"></i>${docTypeName}</div>` : ''}
+                <div style="font-size:10px;font-family:monospace;color:var(--nt-text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:6px">SHA-256: ${cert.hash?.slice(0, 18) || '...'}...</div>
+                <div style="display:flex;gap:6px" onclick="event.stopPropagation()">
+                    <a href="${EXPLORER_ADDR}${addresses?.notary}?a=${cert.id}" target="_blank" class="nt-card-action" title="Verify on Arbiscan">
+                        <i class="fa-solid fa-cube"></i> Verify
+                    </a>
+                    <button class="nt-card-action" onclick="NotaryPage.addToWallet('${cert.id}', '${ipfsUrl}')" title="Add to MetaMask">
+                        <i class="fa-solid fa-wallet"></i> Wallet
+                    </button>
+                </div>
             </div>
         </div>
     `;
@@ -1689,99 +1720,94 @@ async function loadCertificates() {
     NT.certsLoading = true;
     renderContent();
 
-    // Strategy: try API first, then on-chain events as fallback
-    let loaded = false;
-
-    // Primary: Firebase API (getNotaryHistory is the actual endpoint in data.js)
+    // Primary strategy: read directly from contract (no events, no block range issues)
     try {
-        const baseUrl = API_ENDPOINTS.getNotaryHistory;
-        if (!baseUrl) throw new Error('No API endpoint configured');
-
-        console.log('[NotaryPage] Loading certificates from API:', `${baseUrl}/${State.userAddress}`);
-        const response = await fetch(`${baseUrl}/${State.userAddress}`);
-
-        if (!response.ok) throw new Error(`API ${response.status}`);
-
-        const data = await response.json();
-        console.log('[NotaryPage] API response:', typeof data, Array.isArray(data) ? `array(${data.length})` : JSON.stringify(data).substring(0, 200));
-
-        // Handle multiple response formats: direct array, or wrapped in object
-        const docs = Array.isArray(data) ? data
-            : Array.isArray(data?.documents) ? data.documents
-            : Array.isArray(data?.data) ? data.data
-            : Array.isArray(data?.history) ? data.history
-            : null;
-
-        if (docs && docs.length > 0) {
-            NT.certificates = docs.map(doc => ({
-                id: doc.tokenId || doc.id || '?',
-                ipfs: doc.ipfsCid || doc.ipfsUri || '',
-                description: doc.description || '',
-                hash: doc.contentHash || '',
-                timestamp: doc.createdAt || doc.timestamp || '',
-                txHash: doc.txHash || doc.transactionHash || '',
-                owner: doc.owner || State.userAddress,
-                mimeType: doc.mimeType || '',
-                fileName: doc.fileName || ''
-            })).sort((a, b) => parseInt(b.id) - parseInt(a.id));
-            loaded = true;
-            console.log('[NotaryPage] Loaded', NT.certificates.length, 'certificates from API');
-        }
-    } catch (apiErr) {
-        console.warn('[NotaryPage] API failed:', apiErr.message);
-    }
-
-    // Fallback: On-chain events
-    if (!loaded) {
-        console.log('[NotaryPage] Trying on-chain event fallback...');
-        try {
-            const certs = await loadCertificatesFromChain();
-            NT.certificates = certs;
-            console.log('[NotaryPage] Loaded', certs.length, 'certificates from chain events');
-        } catch (chainErr) {
-            console.error('[NotaryPage] Chain fallback also failed:', chainErr);
-            NT.certificates = [];
-        }
+        const certs = await loadCertificatesFromContract();
+        NT.certificates = certs;
+        console.log('[NotaryPage] Loaded', certs.length, 'certificates from contract');
+    } catch (err) {
+        console.error('[NotaryPage] Contract load failed:', err);
+        NT.certificates = [];
     }
 
     NT.certsLoading = false;
     renderContent();
 }
 
-async function loadCertificatesFromChain() {
-    if (!ethers || !addresses?.notary) {
-        console.warn('[NotaryPage] Chain fallback: missing ethers or contract address');
-        return [];
+async function loadCertificatesFromContract() {
+    const total = await NotaryTx.getTotalDocuments();
+    if (total === 0) return [];
+
+    console.log(`[NotaryPage] Total certs on-chain: ${total}, scanning for owner: ${State.userAddress}`);
+
+    // Load all certs in batches of 50 and filter by owner
+    const userAddr = State.userAddress.toLowerCase();
+    const userCerts = [];
+    const BATCH = 50;
+
+    for (let start = 1; start <= total; start += BATCH) {
+        const count = Math.min(BATCH, total - start + 1);
+        const batch = await NotaryTx.getCertificatesBatch(start, count);
+        for (const cert of batch) {
+            if (cert.owner?.toLowerCase() === userAddr) {
+                userCerts.push(cert);
+            }
+        }
     }
 
-    const { NetworkManager } = await import('../modules/core/index.js');
-    const provider = NetworkManager.getProvider();
-    if (!provider) {
-        console.warn('[NotaryPage] Chain fallback: no provider available');
-        return [];
+    // Enrich with metadata (description) via individual getCertificate calls
+    const enriched = [];
+    for (const cert of userCerts) {
+        try {
+            const detail = await NotaryTx.getCertificate(cert.id);
+            enriched.push({
+                id: cert.id,
+                hash: cert.documentHash || detail?.documentHash || '',
+                description: detail?.meta || '',
+                docType: cert.docType ?? detail?.docType ?? 0,
+                timestamp: cert.timestamp || detail?.timestamp || 0,
+                owner: cert.owner,
+                isBoosted: cert.isBoosted || detail?.isBoosted || false,
+                boostExpiry: cert.boostExpiry || detail?.boostExpiry || 0,
+                // Parse IPFS/Arweave CID from metadata if present
+                ipfs: extractStorageUri(detail?.meta || ''),
+                txHash: ''
+            });
+        } catch {
+            enriched.push({
+                id: cert.id,
+                hash: cert.documentHash || '',
+                description: '',
+                docType: cert.docType ?? 0,
+                timestamp: cert.timestamp || 0,
+                owner: cert.owner,
+                ipfs: '',
+                txHash: ''
+            });
+        }
     }
 
-    // V9: Certified event replaces DocumentNotarized
-    console.log('[NotaryPage] Querying Certified events for:', State.userAddress);
-    const contract = new ethers.Contract(addresses.notary, NOTARY_ABI_EVENTS, provider);
-    const filter = contract.filters.Certified(null, State.userAddress);
+    return enriched.sort((a, b) => b.id - a.id);
+}
 
-    const currentBlock = await provider.getBlockNumber();
-    // V10: Reduzido de -500000 para -50000 blocos (~3.5h) para economizar RPC
-    const fromBlock = Math.max(0, currentBlock - 50000);
-    console.log('[NotaryPage] Block range:', fromBlock, '->', currentBlock);
-
-    const events = await contract.queryFilter(filter, fromBlock, currentBlock);
-    console.log('[NotaryPage] Found', events.length, 'events');
-
-    return events.map(ev => ({
-        id: Number(ev.args.certId),
-        hash: ev.args.documentHash || '',
-        docType: Number(ev.args.docType || 0),
-        timestamp: null,
-        txHash: ev.transactionHash,
-        owner: ev.args.owner
-    })).sort((a, b) => b.id - a.id);
+function extractStorageUri(meta) {
+    if (!meta) return '';
+    // Check for common patterns in metadata: ar://..., ipfs://..., Qm..., bafy...
+    const arMatch = meta.match(/ar:\/\/[a-zA-Z0-9_-]{43}/);
+    if (arMatch) return arMatch[0];
+    const ipfsMatch = meta.match(/ipfs:\/\/\S+/);
+    if (ipfsMatch) return ipfsMatch[0];
+    const cidMatch = meta.match(/\b(Qm[1-9A-HJ-NP-Za-km-z]{44}|bafy\S+)\b/);
+    if (cidMatch) return cidMatch[1];
+    const arTxMatch = meta.match(/\b[a-zA-Z0-9_-]{43}\b/);
+    if (arTxMatch && !meta.startsWith('0x')) return `ar://${arTxMatch[0]}`;
+    // If meta contains --- separator, the part after might be a storage URI
+    if (meta.includes('---')) {
+        const parts = meta.split('---');
+        const uri = parts[parts.length - 1].trim();
+        if (uri.length > 10) return uri;
+    }
+    return '';
 }
 
 async function loadStats() {
@@ -1821,8 +1847,8 @@ async function loadRecentNotarizations() {
     const filter = contract.filters.Certified();
 
     const currentBlock = await provider.getBlockNumber();
-    // V10: Reduzido de -50000 para -5000 blocos (~20min) para economizar RPC
-    const fromBlock = Math.max(0, currentBlock - 5000);
+    // Arbitrum ~250ms/block → 10M blocks ≈ 29 days
+    const fromBlock = Math.max(0, currentBlock - 10_000_000);
 
     const events = await contract.queryFilter(filter, fromBlock, currentBlock);
 
