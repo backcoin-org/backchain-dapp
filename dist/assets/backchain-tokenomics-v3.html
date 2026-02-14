@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backchain $BKC — Tokenomics Paper V3</title>
+    <style>
+        /* ── Reset & Base ──────────────────────────────────────────── */
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        body {
+            background-color: #09090b;
+            color: #e4e4e7;
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+            font-size: 16px;
+            line-height: 1.75;
+            min-height: 100vh;
+        }
+
+        /* ── Layout ────────────────────────────────────────────────── */
+        .document-wrapper {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 48px 32px 80px;
+        }
+
+        @media (max-width: 640px) {
+            .document-wrapper {
+                padding: 32px 18px 60px;
+            }
+        }
+
+        /* ── Header / Cover ────────────────────────────────────────── */
+        .cover {
+            text-align: center;
+            padding: 72px 0 56px;
+            border-bottom: 1px solid #27272a;
+            margin-bottom: 48px;
+        }
+
+        .cover-logo {
+            width: 120px;
+            height: 120px;
+            margin-bottom: 32px;
+            filter: drop-shadow(0 0 24px rgba(245, 158, 11, 0.25));
+        }
+
+        .cover-title {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: #ffffff;
+            letter-spacing: -0.02em;
+            line-height: 1.15;
+            margin-bottom: 8px;
+        }
+
+        .cover-title .accent {
+            color: #f59e0b;
+        }
+
+        .cover-subtitle {
+            font-size: 1.15rem;
+            color: #a1a1aa;
+            font-weight: 400;
+            margin-bottom: 24px;
+            letter-spacing: 0.02em;
+        }
+
+        .cover-meta {
+            font-size: 0.85rem;
+            color: #71717a;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        /* ── Table of Contents ─────────────────────────────────────── */
+        .toc {
+            background: #18181b;
+            border: 1px solid #27272a;
+            border-radius: 12px;
+            padding: 32px 36px;
+            margin-bottom: 56px;
+        }
+
+        .toc-heading {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #f59e0b;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
+        .toc ol {
+            list-style: none;
+            counter-reset: toc-counter;
+        }
+
+        .toc ol li {
+            counter-increment: toc-counter;
+            margin-bottom: 6px;
+        }
+
+        .toc ol li a {
+            color: #a1a1aa;
+            text-decoration: none;
+            font-size: 0.95rem;
+            transition: color 0.2s;
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+        }
+
+        .toc ol li a::before {
+            content: counter(toc-counter, decimal-leading-zero);
+            color: #52525b;
+            font-size: 0.8rem;
+            font-weight: 600;
+            min-width: 22px;
+        }
+
+        .toc ol li a:hover {
+            color: #f59e0b;
+        }
+
+        /* ── Section Headings ──────────────────────────────────────── */
+        .section {
+            margin-bottom: 56px;
+        }
+
+        .section-number {
+            display: block;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: #f59e0b;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        h2 {
+            font-size: 1.65rem;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 20px;
+            letter-spacing: -0.01em;
+            line-height: 1.25;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #27272a;
+        }
+
+        h3 {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: #f59e0b;
+            margin-top: 28px;
+            margin-bottom: 10px;
+        }
+
+        /* ── Body Text ─────────────────────────────────────────────── */
+        p {
+            margin-bottom: 16px;
+            color: #d4d4d8;
+        }
+
+        strong {
+            color: #ffffff;
+            font-weight: 600;
+        }
+
+        em {
+            font-style: italic;
+            color: #a1a1aa;
+        }
+
+        /* ── Lists ─────────────────────────────────────────────────── */
+        ul, ol {
+            margin-bottom: 16px;
+            padding-left: 24px;
+        }
+
+        li {
+            margin-bottom: 8px;
+            color: #d4d4d8;
+        }
+
+        li strong {
+            color: #ffffff;
+        }
+
+        ul.clean {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        ul.clean li {
+            position: relative;
+            padding-left: 20px;
+        }
+
+        ul.clean li::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 10px;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #f59e0b;
+        }
+
+        /* ── Data Table ────────────────────────────────────────────── */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0 24px;
+            font-size: 0.92rem;
+        }
+
+        .data-table th {
+            text-align: left;
+            padding: 10px 14px;
+            background: #18181b;
+            color: #f59e0b;
+            font-weight: 600;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            border-bottom: 2px solid #27272a;
+        }
+
+        .data-table td {
+            padding: 10px 14px;
+            border-bottom: 1px solid #1e1e22;
+            color: #d4d4d8;
+        }
+
+        .data-table tbody tr:hover {
+            background: #1a1a1f;
+        }
+
+        .data-table .mono {
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+            font-size: 0.85rem;
+            color: #f59e0b;
+        }
+
+        /* ── Info Cards ────────────────────────────────────────────── */
+        .info-card {
+            background: #18181b;
+            border: 1px solid #27272a;
+            border-radius: 10px;
+            padding: 20px 24px;
+            margin: 20px 0;
+        }
+
+        .info-card.accent {
+            border-left: 3px solid #f59e0b;
+        }
+
+        .info-card p:last-child {
+            margin-bottom: 0;
+        }
+
+        /* ── Code / Formula ────────────────────────────────────────── */
+        .formula-block {
+            background: #111113;
+            border: 1px solid #27272a;
+            border-radius: 8px;
+            padding: 16px 22px;
+            margin: 16px 0 20px;
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+            font-size: 0.88rem;
+            color: #f59e0b;
+            overflow-x: auto;
+            letter-spacing: 0.01em;
+        }
+
+        code {
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+            font-size: 0.88em;
+            background: #18181b;
+            color: #f59e0b;
+            padding: 2px 7px;
+            border-radius: 4px;
+        }
+
+        /* ── Distribution Chart (CSS-only) ─────────────────────────── */
+        .dist-bar {
+            display: flex;
+            height: 36px;
+            border-radius: 8px;
+            overflow: hidden;
+            margin: 16px 0 12px;
+            box-shadow: 0 0 0 1px #27272a;
+        }
+
+        .dist-bar .segment {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: #09090b;
+            letter-spacing: 0.03em;
+            transition: opacity 0.2s;
+        }
+
+        .dist-bar .segment:hover {
+            opacity: 0.85;
+        }
+
+        .dist-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 20px;
+            font-size: 0.85rem;
+        }
+
+        .dist-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #a1a1aa;
+        }
+
+        .dist-legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
+
+        /* ── Scarcity Engine Grid ──────────────────────────────────── */
+        .engines-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 14px;
+            margin: 20px 0;
+        }
+
+        .engine-card {
+            background: #18181b;
+            border: 1px solid #27272a;
+            border-radius: 10px;
+            padding: 18px 22px;
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+        }
+
+        .engine-num {
+            width: 30px;
+            height: 30px;
+            min-width: 30px;
+            border-radius: 50%;
+            background: #f59e0b;
+            color: #09090b;
+            font-weight: 800;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .engine-content h4 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 4px;
+        }
+
+        .engine-content p {
+            font-size: 0.88rem;
+            color: #a1a1aa;
+            margin-bottom: 0;
+        }
+
+        /* ── NFT Tier Cards ────────────────────────────────────────── */
+        .tier-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin: 20px 0;
+        }
+
+        @media (max-width: 640px) {
+            .tier-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .tier-card {
+            text-align: center;
+            border-radius: 10px;
+            padding: 18px 12px;
+            border: 1px solid #27272a;
+        }
+
+        .tier-card.diamond { background: linear-gradient(135deg, #1e1b30, #18181b); border-color: #7c3aed44; }
+        .tier-card.gold    { background: linear-gradient(135deg, #2a2414, #18181b); border-color: #f59e0b44; }
+        .tier-card.silver  { background: linear-gradient(135deg, #1e2024, #18181b); border-color: #9ca3af44; }
+        .tier-card.bronze  { background: linear-gradient(135deg, #241e18, #18181b); border-color: #b4540044; }
+
+        .tier-card .tier-name {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 4px;
+        }
+
+        .tier-card.diamond .tier-name { color: #a78bfa; }
+        .tier-card.gold    .tier-name { color: #f59e0b; }
+        .tier-card.silver  .tier-name { color: #9ca3af; }
+        .tier-card.bronze  .tier-name { color: #b45400; }
+
+        .tier-card .tier-boost {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: #ffffff;
+        }
+
+        .tier-card .tier-label {
+            font-size: 0.72rem;
+            color: #71717a;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        /* ── Fair Launch Grid ──────────────────────────────────────── */
+        .fair-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin: 20px 0;
+        }
+
+        @media (max-width: 480px) {
+            .fair-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .fair-card {
+            background: #18181b;
+            border: 1px solid #27272a;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .fair-card .big-num {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #f59e0b;
+            line-height: 1;
+            margin-bottom: 6px;
+        }
+
+        .fair-card .label {
+            font-size: 0.82rem;
+            color: #71717a;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        /* ── Separator ─────────────────────────────────────────────── */
+        .divider {
+            border: none;
+            border-top: 1px solid #27272a;
+            margin: 48px 0;
+        }
+
+        /* ── Footer ────────────────────────────────────────────────── */
+        .footer {
+            border-top: 1px solid #27272a;
+            padding-top: 32px;
+            margin-top: 56px;
+            text-align: center;
+            color: #52525b;
+            font-size: 0.82rem;
+            line-height: 1.8;
+        }
+
+        .footer a {
+            color: #f59e0b;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        .footer .brand {
+            color: #71717a;
+            margin-top: 12px;
+        }
+
+        /* ── Print Styles ──────────────────────────────────────────── */
+        @media print {
+            body { background: #fff; color: #111; }
+            .cover-title, h2, h3, strong { color: #111; }
+            .cover-title .accent, .section-number, code { color: #b45309; }
+            .info-card, .toc, .engine-card, .tier-card, .fair-card {
+                background: #f5f5f5;
+                border-color: #ddd;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="document-wrapper">
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         COVER
+         ═══════════════════════════════════════════════════════════════ -->
+    <header class="cover">
+        <img src="./bkc_logo_3d.png" alt="Backchain BKC Logo" class="cover-logo" />
+        <h1 class="cover-title">Backchain <span class="accent">$BKC</span></h1>
+        <p class="cover-subtitle">Tokenomics Paper V3 &mdash; Proof-of-Purchase Mining on Arbitrum</p>
+        <p class="cover-meta">2025&ndash;2026 &nbsp;&bull;&nbsp; Version 3.0</p>
+    </header>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         TABLE OF CONTENTS
+         ═══════════════════════════════════════════════════════════════ -->
+    <nav class="toc">
+        <div class="toc-heading">Table of Contents</div>
+        <ol>
+            <li><a href="#introduction">Introduction</a></li>
+            <li><a href="#token-overview">Token Overview</a></li>
+            <li><a href="#tge-distribution">TGE Distribution</a></li>
+            <li><a href="#pstake">The pStake System</a></li>
+            <li><a href="#proof-of-purchase">Proof-of-Purchase Mining</a></li>
+            <li><a href="#fee-system">Fee System</a></li>
+            <li><a href="#nft-boosters">NFT Booster System</a></li>
+            <li><a href="#scarcity-engines">Scarcity Engines</a></li>
+            <li><a href="#growth-programs">Growth Programs</a></li>
+            <li><a href="#fair-launch">Fair Launch Principles</a></li>
+        </ol>
+    </nav>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         1. INTRODUCTION
+         ═══════════════════════════════════════════════════════════════ -->
+    <section class="section" id="introduction">
+        <span class="section-number">Section 01</span>
+        <h2>Introduction</h2>
+
+        <p>
+            Backchain is an <strong>unstoppable, permissionless DeFi ecosystem</strong> deployed on
+            <strong>Arbitrum</strong> (Ethereum L2). It is designed from first principles to operate
+            without centralized control: <em>no admin keys, no pause functions, no blacklists</em>.
+            Once deployed, the protocol runs forever.
+        </p>
+        <p>
+            The <strong>$BKC</strong> token is not a speculative afterthought &mdash; it is a
+            <strong>real utility token from day zero</strong>. It serves as fuel, collateral, and
+            reward across every module in the ecosystem.
+        </p>
+        <p>
+            The architecture comprises <strong>16 smart contracts</strong> working together in a
+            <strong>hub &amp; spoke model</strong>, where the BackchainEcosystem contract acts as the
+            central orchestrator connecting all peripheral modules: staking, trading, NFTs, gaming,
+            social, governance, and more.
+        </p>
+
+        <div class="info-card accent">
+            <p>
+                <strong>Philosophy:</strong> Code is law. Every rule is enforced on-chain, every fee
+                split is immutable, and every interaction is permissionless. There is no off-switch.
+            </p>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         2. TOKEN OVERVIEW
+         ═══════════════════════════════════════════════════════════════ -->
+    <section class="section" id="token-overview">
+        <span class="section-number">Section 02</span>
+        <h2>Token Overview</h2>
+
+        <table class="data-table">
+            <tbody>
+                <tr>
+                    <td><strong>Name</strong></td>
+                    <td>Backchain</td>
+                </tr>
+                <tr>
+                    <td><strong>Ticker</strong></td>
+                    <td class="mono">$BKC</td>
+                </tr>
+                <tr>
+                    <td><strong>Standard</strong></td>
+                    <td>ERC-20 on Arbitrum</td>
+                </tr>
+                <tr>
+                    <td><strong>TGE Supply</strong></td>
+                    <td class="mono">40,000,000 BKC</td>
+                </tr>
+                <tr>
+                    <td><strong>Maximum Supply</strong></td>
+                    <td class="mono">200,000,000 BKC</td>
+                </tr>
+                <tr>
+                    <td><strong>Transfer Tax</strong></td>
+                    <td>None (fully DeFi-friendly)</td>
+                </tr>
+                <tr>
+                    <td><strong>Emission Model</strong></td>
+                    <td>Activity-based minting via BuybackMiner (scarcity curve)</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <p>
+            The token starts with a TGE supply of <strong>40 million BKC</strong>, which represents 20% of
+            the hard cap. The remaining 160 million BKC can only be minted through the
+            <strong>Proof-of-Purchase Mining</strong> mechanism &mdash; there is no team vesting, no
+            scheduled unlock, and no inflation schedule. New tokens enter circulation only when real
+            economic activity occurs.
+        </p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         3. TGE DISTRIBUTION
+         ═══════════════════════════════════════════════════════════════ -->
+    <section class="section" id="tge-distribution">
+        <span class="section-number">Section 03</span>
+        <h2>TGE Distribution</h2>
+
+        <!-- Visual bar -->
+        <div class="dist-bar">
+            <div class="segment" style="width:35%; background:#f59e0b;">35%</div>
+            <div class="segment" style="width:65%; background:#7c3aed; color:#fff;">65%</div>
+        </div>
+        <div class="dist-legend">
+            <div class="dist-legend-item">
+                <div class="dist-legend-dot" style="background:#f59e0b;"></div>
+                Community Airdrop (35%)
+            </div>
+            <div class="dist-legend-item">
+                <div class="dist-legend-dot" style="background:#7c3aed;"></div>
+                Liquidity Pool (65%)
+            </div>
+        </div>
+
+        <h3>Community Airdrop &mdash; 35% (14,000,000 BKC)</h3>
+        <ul class="clean">
+            <li>
+                <strong>Phase 1: 7,000,000 BKC</strong> &mdash; Active distribution. Earned through
+                social posts, platform quests, and engagement. Top 200 participants receive NFT Boosters.
+            </li>
+            <li>
+                <strong>Phase 2: 7,000,000 BKC</strong> &mdash; Future distribution. Criteria to be
+                announced based on ecosystem growth milestones.
+            </li>
+        </ul>
+
+        <h3>Liquidity Pool &mdash; 65% (26,000,000 BKC)</h3>
+        <p>
+            The majority of the TGE supply is deposited into the <strong>constant-product AMM</strong>
+            (LiquidityPool contract), establishing immediate ETH/BKC trading liquidity from day one.
+            This ensures that every user can buy and sell $BKC at a fair, market-driven price without
+            relying on centralized exchanges.
+        </p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         4. pSTAKE SYSTEM
+         ═══════════════════════════════════════════════════════════════ -->
+    <section class="section" id="pstake">
+        <span class="section-number">Section 04</span>
+        <h2>The pStake System (Time-Weighted Stake Power)</h2>
+
+        <p>
+            In the Backchain staking system, your share of rewards is not determined solely by how many
+            tokens you stake &mdash; it is determined by your <strong>pStake</strong> (power-stake), a
+            time-weighted metric that rewards long-term commitment.
+        </p>
+
+        <div class="formula-block">
+            pStake = amount &times; (10000 + lockDays &times; 5918 / 365) / 10000
+        </div>
+
+        <p>
+            The lock period ranges from <strong>1 day</strong> to <strong>3,650 days (10 years)</strong>.
+            Longer locks produce a higher pStake multiplier, granting a proportionally larger share of
+            the reward pool.
+        </p>
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Lock Period</th>
+                    <th>Multiplier</th>
+                    <th>pStake for 10,000 BKC</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>1 day</td>
+                    <td class="mono">1.0002x</td>
+                    <td class="mono">10,016</td>
+                </tr>
+                <tr>
+                    <td>30 days</td>
+                    <td class="mono">1.0486x</td>
+                    <td class="mono">10,486</td>
+                </tr>
+                <tr>
+                    <td>365 days</td>
+                    <td class="mono">1.5918x</td>
+                    <td class="mono">15,918</td>
+                </tr>
+                <tr>
+                    <td>1,825 days (5y)</td>
+                    <td class="mono">3.9590x</td>
+                    <td class="mono">39,590</td>
+                </tr>
+                <tr>
+                    <td>3,650 days (10y)</td>
+                    <td class="mono">6.9180x</td>
+                    <td class="mono">69,180</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="info-card accent">
+            <p>
+                <strong>Circulation scarcity:</strong> Staked tokens are locked and removed from
+                circulating supply for the chosen period. A 10-year lock produces nearly 7x the reward
+                power of an unlocked stake &mdash; creating a powerful incentive to reduce circulating supply.
+            </p>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         5. PROOF-OF-PURCHASE MINING
+         ═══════════════════════════════════════════════════════════════ -->
+    <section class="section" id="proof-of-purchase">
+        <span class="section-number">Section 05</span>
+        <h2>Proof-of-Purchase Mining (BuybackMiner)</h2>
+
+        <p>
+            Unlike proof-of-work or proof-of-stake, Backchain introduces
+            <strong>Proof-of-Purchase Mining</strong> &mdash; a novel emission model where new BKC tokens
+            are minted only when real economic activity occurs on the platform.
+        </p>
+
+        <h3>How It Works</h3>
+        <ol>
+            <li>Users interact with the protocol (buying NFT Boosters, trading, renting, etc.)</li>
+            <li>ETH fees generated by these actions flow to the <strong>BuybackMiner</strong> contract</li>
+            <li>The BuybackMiner converts ETH into newly minted BKC via a <strong>scarcity curve</strong></li>
+            <li>The more BKC that has been mined, the harder (more expensive) it becomes to mint the next unit &mdash; analogous to Bitcoin&rsquo;s halvings</li>
+        </ol>
+
+        <h3>Distribution of Mined BKC</h3>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Destination</th>
+                    <th>Share</th>
+                    <th>Purpose</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Stakers</strong></td>
+                    <td class="mono">70%</td>
+                    <td>Distributed proportionally based on pStake</td>
+                </tr>
+                <tr>
+                    <td><strong>Treasury</strong></td>
+                    <td class="mono">30%</td>
+                    <td>Funds ongoing protocol development</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="info-card accent">
+            <p>
+                <strong>Hard cap enforced:</strong> The BKCToken contract has an immutable maximum supply
+                of <strong>200,000,000 BKC</strong>. Once reached, no further minting can occur &mdash; ever.
+                The scarcity curve ensures this cap is approached asymptotically, not linearly.
+            </p>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         6. FEE SYSTEM
+         ═══════════════════════════════════════════════════════════════ -->
+    <section class="section" id="fee-system">
+        <span class="section-number">Section 06</span>
+        <h2>Fee System</h2>
+
+        <p>
+            Every protocol action &mdash; buying NFTs, renting boosters, notarizing documents, playing
+            FortunePool &mdash; generates a small ETH fee. The <strong>BackchainEcosystem</strong>
+            contract automatically splits each fee into five channels:
+        </p>
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Channel</th>
+                    <th>Share</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Tutor</strong></td>
+                    <td class="mono">10%</td>
+                    <td>Paid to the user&rsquo;s referrer. If no tutor is set, this share is <strong>burned</strong>.</td>
+                </tr>
+                <tr>
+                    <td><strong>Operator</strong></td>
+                    <td class="mono">10&ndash;20%</td>
+                    <td>Paid to the app builder who routed the transaction. If no operator, this share is <strong>burned</strong>.</td>
+                </tr>
+                <tr>
+                    <td><strong>Buyback</strong></td>
+                    <td class="mono">30&ndash;50%</td>
+                    <td>Used to buy and permanently burn BKC from the liquidity pool.</td>
+                </tr>
+                <tr>
+                    <td><strong>Treasury</strong></td>
+                    <td class="mono">10&ndash;30%</td>
+                    <td>Funds protocol development and ecosystem growth.</td>
+                </tr>
+                <tr>
+                    <td><strong>Custom</strong></td>
+                    <td class="mono">varies</td>
+                    <td>Module-specific allocation (e.g., FortunePool prize fund, charity pool).</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="info-card accent">
+            <p>
+                <strong>No leaks:</strong> If no tutor is registered, the tutor share is burned. If no
+                operator is passed, the operator share is burned. ETH never sits idle &mdash; it either
+                rewards participants or reduces supply. All fee splits are <strong>immutable on-chain</strong>.
+            </p>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         7. NFT BOOSTER SYSTEM
+         ═══════════════════════════════════════════════════════════════ -->
+    <section class="section" id="nft-boosters">
+        <span class="section-number">Section 07</span>
+        <h2>NFT Booster System</h2>
+
+        <p>
+            The RewardBooster NFTs are ERC-721 tokens that directly reduce the burn rate applied when
+            claiming staking rewards. Without an NFT, up to <strong>50% of your rewards are burned</strong>
+            on claim. With a Diamond NFT, you keep nearly 100%.
+        </p>
+
+        <!-- Tier cards -->
+        <div class="tier-grid">
+            <div class="tier-card diamond">
+                <div class="tier-name">Diamond</div>
+                <div class="tier-boost">50%</div>
+                <div class="tier-label">Boost</div>
+            </div>
+            <div class="tier-card gold">
+                <div class="tier-name">Gold</div>
+                <div class="tier-boost">40%</div>
+                <div class="tier-label">Boost</div>
+            </div>
+            <div class="tier-card silver">
+                <div class="tier-name">Silver</div>
+                <div class="tier-boost">25%</div>
+                <div class="tier-label">Boost</div>
+            </div>
+            <div class="tier-card bronze">
+                <div class="tier-name">Bronze</div>
+                <div class="tier-boost">10%</div>
+                <div class="tier-label">Boost</div>
+            </div>
+        </div>
+
+        <h3>NFT Trading (Bonding Curves)</h3>
+        <p>
+            Each tier has its own <strong>NFTPool</strong> contract implementing a bonding curve. The
+            price of each NFT is determined algorithmically by supply and demand &mdash; buy low when
+            supply is high, sell high when supply is low. No order books, no counterparty risk.
+        </p>
+
+        <h3>NFT Fusion</h3>
+        <p>
+            The <strong>NFTFusion</strong> contract enables tier upgrades and downgrades:
+        </p>
+        <ul class="clean">
+            <li><strong>Fuse:</strong> Combine 2 same-tier NFTs into 1 higher-tier NFT</li>
+            <li><strong>Split:</strong> Break 1 NFT into 2 lower-tier NFTs</li>
+            <li><strong>SplitTo:</strong> Cascade split 1 NFT down to a target tier (1 becomes 2<sup>N</sup>)</li>
+        </ul>
+
+        <h3>NFT Rental (AirBNFT)</h3>
+        <p>
+            The <strong>RentalManager</strong> contract enables a trustless NFT rental marketplace.
+            Booster owners can list their NFTs for rent, and stakers can temporarily access boost power
+            without purchasing. Rental fees generate ETH that flows through the same fee system.
+        </p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         8. SCARCITY ENGINES
+         ═══════════════════════════════════════════════════════════════ -->
+    <section class="section" id="scarcity-engines">
+        <span class="section-number">Section 08</span>
+        <h2>Scarcity Engines</h2>
+
+        <p>
+            Backchain employs five complementary mechanisms that continuously reduce supply and increase
+            the cost of acquiring new tokens:
+        </p>
+
+        <div class="engines-grid">
+            <div class="engine-card">
+                <div class="engine-num">1</div>
+                <div class="engine-content">
+                    <h4>Emission Scarcity</h4>
+                    <p>
+                        The BuybackMiner's scarcity curve makes each successive BKC exponentially more
+                        expensive to mint. Early participants benefit from lower costs.
+                    </p>
+                </div>
+            </div>
+            <div class="engine-card">
+                <div class="engine-num">2</div>
+                <div class="engine-content">
+                    <h4>Circulation Scarcity</h4>
+                    <p>
+                        The pStake system locks tokens for up to 10 years, physically removing them from
+                        circulating supply and reducing sell pressure.
+                    </p>
+                </div>
+            </div>
+            <div class="engine-card">
+                <div class="engine-num">3</div>
+                <div class="engine-content">
+                    <h4>Fee Scarcity (Buyback &amp; Burn)</h4>
+                    <p>
+                        30&ndash;50% of every ETH fee is used to buy BKC from the liquidity pool and permanently
+                        burn it, reducing total supply over time.
+                    </p>
+                </div>
+            </div>
+            <div class="engine-card">
+                <div class="engine-num">4</div>
+                <div class="engine-content">
+                    <h4>Burn-on-Claim</h4>
+                    <p>
+                        Claiming staking rewards without an NFT Booster burns up to 50% of the claim.
+                        This creates demand for NFTs and further reduces circulating supply.
+                    </p>
+                </div>
+            </div>
+            <div class="engine-card">
+                <div class="engine-num">5</div>
+                <div class="engine-content">
+                    <h4>No-Participant Burns</h4>
+                    <p>
+                        When a user has no tutor or no operator is specified, those fee shares are burned
+                        instead of accumulated. Every unclaimed referral is a permanent supply reduction.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         9. GROWTH PROGRAMS
+         ═══════════════════════════════════════════════════════════════ -->
+    <section class="section" id="growth-programs">
+        <span class="section-number">Section 09</span>
+        <h2>Growth Programs</h2>
+
+        <h3>Tutor System (Referrals)</h3>
+        <p>
+            Every user can invite friends by sharing their wallet address as a referral link. Once a
+            new user registers with a tutor, the tutor earns:
+        </p>
+        <ul class="clean">
+            <li><strong>10% of their student's ETH fees</strong> &mdash; every action the student takes, the tutor earns</li>
+            <li><strong>5% of their student's BKC claims</strong> &mdash; staking rewards, mining rewards, forever</li>
+        </ul>
+        <p>
+            The tutor relationship is permanent and on-chain. It includes <strong>gasless onboarding</strong>
+            for first-time users, removing the friction of needing ETH for gas before interacting with
+            the protocol.
+        </p>
+
+        <h3>Operator System (Builder Incentives)</h3>
+        <p>
+            Any developer can build a frontend, bot, or integration for Backchain and pass their wallet
+            address as the <code>operator</code> parameter in transactions. This earns them
+            <strong>10&ndash;20% of every ETH fee</strong> generated through their application.
+        </p>
+        <div class="info-card accent">
+            <p>
+                <strong>Permissionless:</strong> No registration, no approval, no API key. Just pass your
+                address. The smart contract handles everything. This turns every builder into a
+                stakeholder.
+            </p>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         10. FAIR LAUNCH
+         ═══════════════════════════════════════════════════════════════ -->
+    <section class="section" id="fair-launch">
+        <span class="section-number">Section 10</span>
+        <h2>Fair Launch Principles</h2>
+
+        <div class="fair-grid">
+            <div class="fair-card">
+                <div class="big-num">0%</div>
+                <div class="label">Team Allocation</div>
+            </div>
+            <div class="fair-card">
+                <div class="big-num">0%</div>
+                <div class="label">Private Investors</div>
+            </div>
+            <div class="fair-card">
+                <div class="big-num">0%</div>
+                <div class="label">VC Funding</div>
+            </div>
+            <div class="fair-card">
+                <div class="big-num">100%</div>
+                <div class="label">Self-Funded</div>
+            </div>
+        </div>
+
+        <p>
+            Backchain was built over <strong>10,000+ hours of development</strong> with zero external
+            funding. There are no team token allocations, no investor vesting schedules, and no venture
+            capital involvement.
+        </p>
+        <p>
+            The founding team earns the same way the community does &mdash; <strong>by using the
+            protocol</strong>. They stake, they trade, they earn rewards through the same mechanisms
+            available to every participant. This alignment of incentives ensures that protocol
+            improvements benefit everyone equally.
+        </p>
+
+        <div class="info-card accent">
+            <p>
+                <strong>Skin in the game:</strong> With no pre-allocated tokens, the team&rsquo;s economic
+                success is directly tied to building a protocol people actually want to use. There is no
+                &ldquo;dump and run&rdquo; scenario &mdash; only long-term alignment.
+            </p>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         FOOTER
+         ═══════════════════════════════════════════════════════════════ -->
+    <footer class="footer">
+        <p>
+            <a href="https://backcoin.org" target="_blank" rel="noopener">backcoin.org</a>
+        </p>
+        <p>
+            Network: Arbitrum (Sepolia Testnet &rarr; Arbitrum One Mainnet)<br />
+            Contracts: Verified on Arbiscan &bull; Open Source
+        </p>
+        <p class="brand">
+            &copy; 2025&ndash;2026 Backchain Project. All rights reserved.
+        </p>
+    </footer>
+
+</div>
+
+</body>
+</html>

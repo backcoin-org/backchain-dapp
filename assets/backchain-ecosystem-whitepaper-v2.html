@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backchain Ecosystem — Technical Whitepaper V2</title>
+    <style>
+        /* ── Reset & Base ─────────────────────────────────────── */
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        body {
+            background-color: #09090b;
+            color: #e4e4e7;
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+            font-size: 16px;
+            line-height: 1.75;
+        }
+
+        /* ── Layout ───────────────────────────────────────────── */
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 60px 24px 80px;
+        }
+
+        /* ── Header ───────────────────────────────────────────── */
+        .wp-header {
+            text-align: center;
+            padding-bottom: 48px;
+            margin-bottom: 48px;
+            border-bottom: 1px solid #27272a;
+        }
+
+        .wp-header .label {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #f59e0b;
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.25);
+            border-radius: 4px;
+            padding: 4px 14px;
+            margin-bottom: 24px;
+        }
+
+        .wp-header h1 {
+            font-size: 36px;
+            font-weight: 800;
+            color: #ffffff;
+            line-height: 1.2;
+            margin-bottom: 12px;
+            letter-spacing: -0.5px;
+        }
+
+        .wp-header .subtitle {
+            font-size: 18px;
+            color: #a1a1aa;
+            font-weight: 400;
+            margin-bottom: 28px;
+        }
+
+        .wp-header .status-block {
+            background: #18181b;
+            border: 1px solid #27272a;
+            border-radius: 8px;
+            padding: 16px 24px;
+            display: inline-block;
+            text-align: left;
+            font-size: 14px;
+            line-height: 1.8;
+        }
+
+        .wp-header .status-block .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #22c55e;
+            border-radius: 50%;
+            margin-right: 8px;
+            vertical-align: middle;
+            box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+        }
+
+        .wp-header .status-block .date {
+            color: #71717a;
+        }
+
+        /* ── Table of Contents ────────────────────────────────── */
+        .toc {
+            background: #18181b;
+            border: 1px solid #27272a;
+            border-radius: 8px;
+            padding: 28px 32px;
+            margin-bottom: 56px;
+        }
+
+        .toc h2 {
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: #f59e0b;
+            margin-bottom: 16px;
+        }
+
+        .toc ol {
+            list-style: none;
+            counter-reset: toc-counter;
+        }
+
+        .toc ol li {
+            counter-increment: toc-counter;
+            margin-bottom: 6px;
+        }
+
+        .toc ol li a {
+            color: #a1a1aa;
+            text-decoration: none;
+            font-size: 15px;
+            transition: color 0.2s;
+        }
+
+        .toc ol li a::before {
+            content: counter(toc-counter) ". ";
+            color: #52525b;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .toc ol li a:hover {
+            color: #f59e0b;
+        }
+
+        /* ── Sections ─────────────────────────────────────────── */
+        .section {
+            margin-bottom: 56px;
+        }
+
+        .section-number {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: #f59e0b;
+            margin-bottom: 8px;
+        }
+
+        h2 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 20px;
+            letter-spacing: -0.3px;
+            line-height: 1.3;
+        }
+
+        h3 {
+            font-size: 20px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-top: 36px;
+            margin-bottom: 12px;
+        }
+
+        h4 {
+            font-size: 17px;
+            font-weight: 600;
+            color: #f59e0b;
+            margin-top: 28px;
+            margin-bottom: 10px;
+        }
+
+        p {
+            margin-bottom: 14px;
+            color: #d4d4d8;
+        }
+
+        /* ── Lists ────────────────────────────────────────────── */
+        ul, ol {
+            margin-bottom: 16px;
+            padding-left: 24px;
+        }
+
+        li {
+            margin-bottom: 6px;
+            color: #d4d4d8;
+        }
+
+        li strong {
+            color: #ffffff;
+        }
+
+        /* ── Code & Contract Names ────────────────────────────── */
+        code {
+            font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+            font-size: 0.88em;
+            background: #1e1e22;
+            color: #f59e0b;
+            padding: 2px 7px;
+            border-radius: 4px;
+            border: 1px solid #2a2a2e;
+        }
+
+        pre {
+            background: #111113;
+            border: 1px solid #27272a;
+            border-radius: 8px;
+            padding: 20px 24px;
+            overflow-x: auto;
+            margin-bottom: 20px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        pre code {
+            background: none;
+            border: none;
+            padding: 0;
+            color: #a1a1aa;
+            font-size: 14px;
+        }
+
+        /* ── Contract Cards ───────────────────────────────────── */
+        .contract-card {
+            background: #111113;
+            border: 1px solid #27272a;
+            border-radius: 8px;
+            padding: 24px 28px;
+            margin-bottom: 20px;
+            transition: border-color 0.2s;
+        }
+
+        .contract-card:hover {
+            border-color: #3f3f46;
+        }
+
+        .contract-card .contract-name {
+            font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+            font-size: 16px;
+            font-weight: 700;
+            color: #f59e0b;
+            margin-bottom: 4px;
+        }
+
+        .contract-card .contract-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 10px;
+        }
+
+        .contract-card p {
+            font-size: 15px;
+            margin-bottom: 8px;
+        }
+
+        .contract-card ul {
+            margin-bottom: 0;
+        }
+
+        .contract-card li {
+            font-size: 15px;
+            margin-bottom: 4px;
+        }
+
+        /* ── Category Headers ─────────────────────────────────── */
+        .category-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #27272a;
+        }
+
+        .category-header .cat-icon {
+            font-size: 20px;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(245, 158, 11, 0.1);
+            border-radius: 8px;
+        }
+
+        .category-header h3 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: 0.3px;
+        }
+
+        /* ── Fee Flow Diagram ─────────────────────────────────── */
+        .flow-diagram {
+            background: #111113;
+            border: 1px solid #27272a;
+            border-radius: 8px;
+            padding: 28px;
+            margin: 24px 0;
+            text-align: center;
+            font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+            font-size: 13px;
+            line-height: 2;
+            color: #a1a1aa;
+            overflow-x: auto;
+        }
+
+        .flow-diagram .highlight {
+            color: #f59e0b;
+            font-weight: 600;
+        }
+
+        .flow-diagram .arrow {
+            color: #52525b;
+        }
+
+        /* ── Info Boxes ───────────────────────────────────────── */
+        .info-box {
+            background: rgba(245, 158, 11, 0.05);
+            border-left: 3px solid #f59e0b;
+            border-radius: 0 8px 8px 0;
+            padding: 16px 20px;
+            margin: 20px 0;
+            font-size: 15px;
+        }
+
+        .info-box strong {
+            color: #f59e0b;
+        }
+
+        /* ── Dividers ─────────────────────────────────────────── */
+        hr {
+            border: none;
+            border-top: 1px solid #27272a;
+            margin: 48px 0;
+        }
+
+        /* ── Footer ───────────────────────────────────────────── */
+        .wp-footer {
+            text-align: center;
+            padding-top: 48px;
+            margin-top: 64px;
+            border-top: 1px solid #27272a;
+        }
+
+        .wp-footer .logo-text {
+            font-size: 22px;
+            font-weight: 800;
+            color: #ffffff;
+            letter-spacing: -0.3px;
+            margin-bottom: 16px;
+        }
+
+        .wp-footer .logo-text span {
+            color: #f59e0b;
+        }
+
+        .wp-footer .links {
+            margin-bottom: 20px;
+        }
+
+        .wp-footer .links a {
+            color: #f59e0b;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .wp-footer .links a:hover {
+            color: #fbbf24;
+        }
+
+        .wp-footer .meta {
+            font-size: 13px;
+            color: #52525b;
+            line-height: 1.8;
+        }
+
+        /* ── Responsive ───────────────────────────────────────── */
+        @media (max-width: 640px) {
+            .container {
+                padding: 40px 16px 60px;
+            }
+
+            .wp-header h1 {
+                font-size: 26px;
+            }
+
+            .wp-header .subtitle {
+                font-size: 16px;
+            }
+
+            h2 {
+                font-size: 22px;
+            }
+
+            h3 {
+                font-size: 18px;
+            }
+
+            .contract-card {
+                padding: 18px 20px;
+            }
+
+            .flow-diagram {
+                font-size: 11px;
+                padding: 16px;
+            }
+
+            pre {
+                padding: 14px 16px;
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+
+        <!-- ════════════════════════════════════════════════════ -->
+        <!-- HEADER                                              -->
+        <!-- ════════════════════════════════════════════════════ -->
+        <header class="wp-header">
+            <div class="label">Technical Whitepaper V2</div>
+            <h1>Backchain Ecosystem</h1>
+            <p class="subtitle">Architecture, Smart Contracts &amp; Protocol Design</p>
+            <div class="status-block">
+                <div><span class="status-dot"></span> <strong>Status:</strong> Fully functional on Arbitrum Sepolia testnet. All contracts deployed and interconnected.</div>
+                <div class="date">Published: 2025&ndash;2026</div>
+            </div>
+        </header>
+
+        <!-- ════════════════════════════════════════════════════ -->
+        <!-- TABLE OF CONTENTS                                   -->
+        <!-- ════════════════════════════════════════════════════ -->
+        <nav class="toc">
+            <h2>Contents</h2>
+            <ol>
+                <li><a href="#overview">Overview</a></li>
+                <li><a href="#hub-spoke">Hub &amp; Spoke Architecture</a></li>
+                <li><a href="#contracts">Complete Contract Reference</a></li>
+                <li><a href="#fees">Fee System Architecture</a></li>
+                <li><a href="#growth">Growth Systems</a></li>
+                <li><a href="#tech-stack">Technology Stack</a></li>
+                <li><a href="#security">Security Model</a></li>
+            </ol>
+        </nav>
+
+        <!-- ════════════════════════════════════════════════════ -->
+        <!-- 1. OVERVIEW                                         -->
+        <!-- ════════════════════════════════════════════════════ -->
+        <section class="section" id="overview">
+            <div class="section-number">Section 1</div>
+            <h2>Overview</h2>
+            <p>
+                Backchain is an unstoppable DeFi ecosystem built on <strong>Arbitrum</strong> (Ethereum L2).
+                The protocol consists of <strong>16 interconnected Solidity smart contracts</strong> compiled with
+                Solidity v0.8.28, organized in a Hub &amp; Spoke architecture designed for infinite extensibility.
+            </p>
+            <ul>
+                <li><strong>Immutable and permissionless</strong> &mdash; no admin keys, no pause functions, no blacklists. Code is law.</li>
+                <li><strong>Hub &amp; Spoke design</strong> &mdash; a central orchestrator connects all modules; new spokes can be added without modifying existing contracts.</li>
+                <li><strong>Activity-based mining</strong> &mdash; using the platform <em>is</em> mining. Every interaction generates fees that convert to BKC rewards.</li>
+                <li><strong>Operator system</strong> &mdash; permissionless developer commissions. Any builder can earn by passing their wallet address as the <code>operator</code> parameter.</li>
+                <li><strong>Vanilla JS frontend</strong> &mdash; no framework, no React, no Vue. Pure ES modules with Hardhat for contracts and Vercel for hosting.</li>
+            </ul>
+
+            <div class="info-box">
+                <strong>Philosophy:</strong> Backchain is designed as unstoppable, permissionless DeFi infrastructure.
+                All contracts support the Operator System where third-party builders earn commissions simply by passing their wallet address into every transaction.
+            </div>
+        </section>
+
+        <hr>
+
+        <!-- ════════════════════════════════════════════════════ -->
+        <!-- 2. HUB & SPOKE ARCHITECTURE                         -->
+        <!-- ════════════════════════════════════════════════════ -->
+        <section class="section" id="hub-spoke">
+            <div class="section-number">Section 2</div>
+            <h2>Hub &amp; Spoke Architecture</h2>
+
+            <h3>2.1 &mdash; The Hub: BackchainEcosystem</h3>
+            <p>
+                Contract: <code>BackchainEcosystem.sol</code> (formerly EcosystemManager)
+            </p>
+            <p>
+                The Hub is the central orchestrator for the entire ecosystem. Every spoke contract
+                sends its fees to the Hub, which handles distribution according to per-module
+                configurations. This design allows new modules to be added without modifying any
+                existing contract.
+            </p>
+            <ul>
+                <li>Manages <strong>per-module fee configurations</strong> &mdash; <code>operatorBps</code>, <code>treasuryBps</code>, <code>buybackBps</code>, <code>customBps</code></li>
+                <li>Collects all ETH fees via <code>collectFee(moduleId, operator)</code></li>
+                <li><strong>Automatic fee distribution</strong> &mdash; splits to operator, tutor, buyback, treasury, and custom destinations</li>
+                <li><strong>Tutor referral system</strong> &mdash; stores tutor-student relationships on-chain</li>
+                <li><strong>Operator system</strong> &mdash; permissionless developer commissions</li>
+                <li><code>pendingEth[address]</code> tracks withdrawable operator earnings</li>
+            </ul>
+
+            <h3>2.2 &mdash; The Spokes: 15 Module Contracts</h3>
+            <p>
+                Every spoke generates fees that flow back to the Hub. The spoke contracts are fully
+                independent &mdash; they only need a reference to the Hub address. New spokes can be
+                deployed and registered at any time without modifying existing contracts.
+            </p>
+
+            <div class="flow-diagram">
+                <div><span class="highlight">[ Any Spoke Contract ]</span></div>
+                <div><span class="arrow">&darr;&ensp;</span>calls <code>collectFee(moduleId, operator)</code></div>
+                <div><span class="highlight">[ BackchainEcosystem (Hub) ]</span></div>
+                <div><span class="arrow">&darr;&ensp;&darr;&ensp;&darr;&ensp;&darr;&ensp;&darr;</span></div>
+                <div>
+                    <span class="highlight">Tutor</span> &ensp;|&ensp;
+                    <span class="highlight">Operator</span> &ensp;|&ensp;
+                    <span class="highlight">BuybackMiner</span> &ensp;|&ensp;
+                    <span class="highlight">Treasury</span> &ensp;|&ensp;
+                    <span class="highlight">Custom</span>
+                </div>
+            </div>
+        </section>
+
+        <hr>
+
+        <!-- ════════════════════════════════════════════════════ -->
+        <!-- 3. COMPLETE CONTRACT REFERENCE                      -->
+        <!-- ════════════════════════════════════════════════════ -->
+        <section class="section" id="contracts">
+            <div class="section-number">Section 3</div>
+            <h2>Complete Contract Reference</h2>
+            <p>All 16 contracts that compose the Backchain ecosystem, organized by functional category.</p>
+
+            <!-- ── DeFi Core ──────────────────────────────────── -->
+            <div class="category-header">
+                <div class="cat-icon">&#9670;</div>
+                <h3>DeFi Core</h3>
+            </div>
+
+            <div class="contract-card">
+                <div class="contract-name">IBackchain.sol</div>
+                <div class="contract-label">Shared Interfaces</div>
+                <ul>
+                    <li>Defines all struct types, events, and function signatures shared across the ecosystem</li>
+                    <li>Ensures type safety across all 16 contracts</li>
+                </ul>
+            </div>
+
+            <div class="contract-card">
+                <div class="contract-name">BKCToken.sol</div>
+                <div class="contract-label">ERC-20 Token</div>
+                <ul>
+                    <li><strong>Standard:</strong> ERC-20 on Arbitrum</li>
+                    <li><strong>Maximum supply:</strong> 200,000,000 BKC</li>
+                    <li>Activity-based minting &mdash; only <code>BuybackMiner</code> can mint new tokens</li>
+                    <li>No transfer tax, no blacklists, no pause</li>
+                    <li>DeFi-friendly: compatible with any DEX or protocol</li>
+                </ul>
+            </div>
+
+            <div class="contract-card">
+                <div class="contract-name">BackchainEcosystem.sol</div>
+                <div class="contract-label">Central Orchestrator (The Hub)</div>
+                <ul>
+                    <li>Master orchestrator that manages fees, operators, and referrals</li>
+                    <li>Per-module fee configuration with immutable percentages</li>
+                    <li>Automatic fee splitting on every protocol action</li>
+                    <li>Tutor referral system stored on-chain</li>
+                    <li>Permissionless operator commission system</li>
+                </ul>
+            </div>
+
+            <div class="contract-card">
+                <div class="contract-name">LiquidityPool.sol</div>
+                <div class="contract-label">Constant-Product AMM</div>
+                <ul>
+                    <li>ETH/BKC trading pair</li>
+                    <li>Classic <code>x * y = k</code> automated market maker</li>
+                    <li>Provides price discovery and immediate liquidity for the BKC token</li>
+                </ul>
+            </div>
+
+            <div class="contract-card">
+                <div class="contract-name">StakingPool.sol</div>
+                <div class="contract-label">Delegation &amp; Rewards</div>
+                <ul>
+                    <li>Users delegate BKC with time-locks (1 day to 10 years)</li>
+                    <li>Generates <strong>pStake</strong> (Time-Weighted Stake Power)</li>
+                    <li>pStake formula: <code>amount &times; (10000 + lockDays &times; 5918 / 365) / 10000</code></li>
+                    <li>MasterChef-style reward distribution proportional to pStake</li>
+                    <li>Receives ETH + BKC rewards from protocol activity</li>
+                    <li>Claim rewards with burn rate reduction via NFT Boosters</li>
+                </ul>
+            </div>
+
+            <div class="contract-card">
+                <div class="contract-name">BuybackMiner.sol</div>
+                <div class="contract-label">ETH &rarr; BKC Conversion Engine</div>
+                <ul>
+                    <li>Receives ETH from protocol fees</li>
+                    <li>Mints new BKC using a <strong>scarcity curve</strong> (harder as supply approaches 200M cap)</li>
+                    <li>Distribution: <strong>70%</strong> to StakingPool rewards, <strong>30%</strong> to Treasury</li>
+                    <li>Proof-of-Purchase mining &mdash; using the platform <em>is</em> mining</li>
+                </ul>
+            </div>
+
+            <!-- ── NFT Ecosystem ──────────────────────────────── -->
+            <div class="category-header">
+                <div class="cat-icon">&#9674;</div>
+                <h3>NFT Ecosystem</h3>
+            </div>
+
+            <div class="contract-card">
+                <div class="contract-name">RewardBooster.sol</div>
+                <div class="contract-label">ERC-721 Utility NFTs</div>
+                <ul>
+                    <li>4 tiers: <strong>Diamond (50%)</strong>, <strong>Gold (40%)</strong>, <strong>Silver (25%)</strong>, <strong>Bronze (10%)</strong></li>
+                    <li>Boost = reduces burn rate when claiming staking rewards</li>
+                    <li>Without NFT: up to 50% burned on claim. With Diamond: ~0% burned</li>
+                    <li>One-time authorization for <code>NFTFusion</code> contract via <code>setFusionContract()</code> (irreversible)</li>
+                </ul>
+            </div>
+
+            <div class="contract-card">
+                <div class="contract-name">NFTPool.sol</div>
+                <div class="contract-label">Bonding Curve NFT Market</div>
+                <ul>
+                    <li>One pool per tier (4 pools total)</li>
+                    <li>Buy/sell NFTs against the bonding curve</li>
+                    <li>Price increases as supply decreases (buy), decreases as supply increases (sell)</li>
+                    <li>Fees on buy/sell flow to <code>BackchainEcosystem</code></li>
+                </ul>
+            </div>
+
+            <div class="contract-card">
+                <div class="contract-name">NFTFusion.sol</div>
+                <div class="contract-label">NFT Crafting System</div>
+                <ul>
+                    <li><strong>Fuse:</strong> 2 same-tier NFTs &rarr; 1 higher-tier NFT</li>
+                    <li><strong>Split:</strong> 1 NFT &rarr; 2 lower-tier NFTs</li>
+                    <li><strong>SplitTo:</strong> 1 NFT &rarr; 2<sup>N</sup> target-tier NFTs</li>
+                    <li>ETH fees per operation (gas-based)</li>
+                    <li>Authorized via <code>RewardBooster.setFusionContract()</code> (one-time, irreversible)</li>
+                </ul>
+            </div>
+
+            <div class="contract-card">
+                <div class="contract-name">RentalManager.sol</div>
+                <div class="contract-label">NFT Rental Marketplace (AirBNFT)</div>
+                <ul>
+                    <li>List NFTs for rent at a set price per day</li>
+                    <li>Renters get the boost benefit without buying</li>
+                    <li>Owners earn passive income from their NFTs</li>
+                    <li>Automatic return after rental period expires</li>
+                </ul>
+            </div>
+
+            <!-- ── Community & Services ───────────────────────── -->
+            <div class="category-header">
+                <div class="cat-icon">&#9733;</div>
+                <h3>Community &amp; Services</h3>
+            </div>
+
+            <div class="contract-card">
+                <div class="contract-name">FortunePool.sol</div>
+                <div class="contract-label">Commit-Reveal Game</div>
+                <ul>
+                    <li>3 tiers with different entry costs and prize pools</li>
+                    <li>Commit-reveal pattern for provably fair randomness</li>
+                    <li>Win up to <strong>4.5x</strong> your entry</li>
+                    <li>Fees split via <code>BackchainEcosystem</code></li>
+                </ul>
+            </div>
+
+            <div class="contract-card">
+                <div class="contract-name">Agora.sol</div>
+                <div class="contract-label">Decentralized Social Protocol</div>
+                <ul>
+                    <li>Create posts, like, follow &mdash; all on-chain</li>
+                    <li>Profile metadata stored on Arweave (permanent) or IPFS</li>
+                    <li>Media support: images, videos, audio</li>
+                    <li>Language filtering system</li>
+                    <li>Largest contract in the ecosystem</li>
+                </ul>
+            </div>
+
+            <div class="contract-card">
+                <div class="contract-name">Notary.sol</div>
+                <div class="contract-label">On-Chain Document Certification</div>
+                <ul>
+                    <li>Upload document hash to blockchain for immutable proof of existence</li>
+                    <li>Certify with title, description, and file metadata</li>
+                    <li>Verification: anyone can check if a document was certified and when</li>
+                    <li>Files stored on Arweave (permanent decentralized storage)</li>
+                </ul>
+            </div>
+
+            <div class="contract-card">
+                <div class="contract-name">CharityPool.sol</div>
+                <div class="contract-label">Transparent Fundraising</div>
+                <ul>
+                    <li>Create charity campaigns with goal amounts</li>
+                    <li>100% on-chain donation tracking</li>
+                    <li>Variable boost system for donors</li>
+                    <li>Multi-media gallery for campaign storytelling</li>
+                    <li>Viral sharing features</li>
+                </ul>
+            </div>
+
+            <!-- ── Infrastructure & Governance ────────────────── -->
+            <div class="category-header">
+                <div class="cat-icon">&#9881;</div>
+                <h3>Infrastructure &amp; Governance</h3>
+            </div>
+
+            <div class="contract-card">
+                <div class="contract-name">BackchainGovernance.sol</div>
+                <div class="contract-label">Progressive Decentralization</div>
+                <ul>
+                    <li><strong>Phase 1:</strong> Admin (current &mdash; testnet)</li>
+                    <li><strong>Phase 2:</strong> Multisig</li>
+                    <li><strong>Phase 3:</strong> Timelock</li>
+                    <li><strong>Phase 4:</strong> Full DAO governance</li>
+                    <li>Designed for gradual transition to community control</li>
+                </ul>
+            </div>
+
+            <div class="contract-card">
+                <div class="contract-name">SimpleBKCFaucet.sol</div>
+                <div class="contract-label">Testnet Token Distribution</div>
+                <ul>
+                    <li>Free BKC tokens for testing on Arbitrum Sepolia</li>
+                    <li>Server-side relayer pays gas fees</li>
+                    <li>Rate-limited to prevent abuse</li>
+                </ul>
+            </div>
+        </section>
+
+        <hr>
+
+        <!-- ════════════════════════════════════════════════════ -->
+        <!-- 4. FEE SYSTEM ARCHITECTURE                          -->
+        <!-- ════════════════════════════════════════════════════ -->
+        <section class="section" id="fees">
+            <div class="section-number">Section 4</div>
+            <h2>Fee System Architecture</h2>
+            <p>
+                Every protocol action calls <code>BackchainEcosystem.collectFee(moduleId, operator)</code>.
+                Fees are split per module configuration with a two-stage waterfall:
+            </p>
+
+            <h3>Stage 1 &mdash; Tutor Cut</h3>
+            <p>
+                <strong>10% off the top</strong> goes to the user's Tutor (referrer). If the user has no tutor,
+                this 10% is burned instead. This creates a strong incentive for community growth.
+            </p>
+
+            <h3>Stage 2 &mdash; Remaining 90% Split</h3>
+            <p>The remaining 90% is distributed according to each module's immutable configuration:</p>
+            <ul>
+                <li><code>operatorBps</code> &rarr; <strong>Operator wallet</strong> (or burned if no operator)</li>
+                <li><code>buybackBps</code> &rarr; <strong>BuybackMiner</strong> (converts ETH to BKC rewards)</li>
+                <li><code>treasuryBps</code> &rarr; <strong>Treasury</strong></li>
+                <li><code>customBps</code> &rarr; <strong>Module-specific</strong> (e.g., prize pool for FortunePool)</li>
+            </ul>
+
+            <div class="flow-diagram">
+                <div><span class="highlight">User performs action</span> (swap, stake, buy NFT, etc.)</div>
+                <div><span class="arrow">&darr;</span></div>
+                <div>ETH fee sent to <span class="highlight">BackchainEcosystem</span></div>
+                <div><span class="arrow">&darr;</span></div>
+                <div><span class="highlight">10%</span> <span class="arrow">&rarr;</span> Tutor (or burned)</div>
+                <div><span class="arrow">&darr;</span></div>
+                <div>Remaining <span class="highlight">90%</span> split by module config:</div>
+                <div><span class="arrow">&darr;&ensp;&darr;&ensp;&darr;&ensp;&darr;</span></div>
+                <div>
+                    <span class="highlight">Operator</span> &ensp;|&ensp;
+                    <span class="highlight">Buyback</span> &ensp;|&ensp;
+                    <span class="highlight">Treasury</span> &ensp;|&ensp;
+                    <span class="highlight">Custom</span>
+                </div>
+            </div>
+
+            <div class="info-box">
+                <strong>Zero leakage guarantee:</strong> All percentages are immutable per module.
+                Every wei is accounted for &mdash; there are no unallocated funds and no admin-controlled drains.
+            </div>
+        </section>
+
+        <hr>
+
+        <!-- ════════════════════════════════════════════════════ -->
+        <!-- 5. GROWTH SYSTEMS                                   -->
+        <!-- ════════════════════════════════════════════════════ -->
+        <section class="section" id="growth">
+            <div class="section-number">Section 5</div>
+            <h2>Growth Systems</h2>
+
+            <h3>Tutor System</h3>
+            <p>
+                The Tutor system is Backchain's on-chain referral program. Any user can become a tutor
+                by sharing their referral link, creating a permanent economic relationship with their referrals.
+            </p>
+            <ul>
+                <li><strong>Link format:</strong> <code>backcoin.org/#dashboard?ref=0xADDRESS</code></li>
+                <li><strong>First-time setup:</strong> gasless (server relayer pays)</li>
+                <li><strong>Tutor earns:</strong> 10% of student's ETH fees + 5% of student's BKC claims</li>
+                <li><strong>Relationship:</strong> stored on-chain, permanent (but student can change tutor for 0.0001 ETH)</li>
+                <li><strong>No tutor:</strong> the 10% cut is burned instead</li>
+            </ul>
+
+            <h3>Operator System</h3>
+            <p>
+                The Operator system allows any developer to build on Backchain and earn commissions.
+                There is no registration, no API key, and no approval needed &mdash; it is fully permissionless.
+            </p>
+            <ul>
+                <li><strong>Integration:</strong> set via <code>window.BACKCHAIN_OPERATOR</code> or <code>localStorage.setItem('bkc_operator', addr)</code></li>
+                <li>Every transaction includes the operator address in contract calls</li>
+                <li><strong>Operator earns:</strong> 10&ndash;20% of every fee generated from their app</li>
+                <li>ETH accumulates in <code>pendingEth[operator]</code>, withdrawable at any time</li>
+                <li><strong>No registration, no API key, no approval needed</strong></li>
+            </ul>
+
+            <div class="info-box">
+                <strong>Builder-friendly by design:</strong> The Operator system means any developer
+                can fork the frontend, customize the UI, and earn commissions from every transaction
+                their users make &mdash; without needing permission from anyone.
+            </div>
+        </section>
+
+        <hr>
+
+        <!-- ════════════════════════════════════════════════════ -->
+        <!-- 6. TECHNOLOGY STACK                                 -->
+        <!-- ════════════════════════════════════════════════════ -->
+        <section class="section" id="tech-stack">
+            <div class="section-number">Section 6</div>
+            <h2>Technology Stack</h2>
+
+            <div class="contract-card">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tbody>
+                        <tr style="border-bottom: 1px solid #27272a;">
+                            <td style="padding: 10px 0; color: #71717a; width: 160px; vertical-align: top; font-size: 14px;">Blockchain</td>
+                            <td style="padding: 10px 0; color: #e4e4e7; font-size: 14px;"><strong>Arbitrum</strong> (Ethereum L2)</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #27272a;">
+                            <td style="padding: 10px 0; color: #71717a; vertical-align: top; font-size: 14px;">Smart Contracts</td>
+                            <td style="padding: 10px 0; color: #e4e4e7; font-size: 14px;"><strong>Solidity 0.8.28</strong>, Hardhat, optimizer <code>runs: 1</code> + <code>viaIR: true</code></td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #27272a;">
+                            <td style="padding: 10px 0; color: #71717a; vertical-align: top; font-size: 14px;">Frontend</td>
+                            <td style="padding: 10px 0; color: #e4e4e7; font-size: 14px;"><strong>Vanilla JS</strong> (ES modules), no framework</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #27272a;">
+                            <td style="padding: 10px 0; color: #71717a; vertical-align: top; font-size: 14px;">Wallet</td>
+                            <td style="padding: 10px 0; color: #e4e4e7; font-size: 14px;"><strong>MetaMask</strong> via ethers.js v6</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #27272a;">
+                            <td style="padding: 10px 0; color: #71717a; vertical-align: top; font-size: 14px;">RPC</td>
+                            <td style="padding: 10px 0; color: #e4e4e7; font-size: 14px;"><strong>Alchemy</strong> (dual provider pattern &mdash; MetaMask for signing, Alchemy for reads)</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #27272a;">
+                            <td style="padding: 10px 0; color: #71717a; vertical-align: top; font-size: 14px;">Storage</td>
+                            <td style="padding: 10px 0; color: #e4e4e7; font-size: 14px;"><strong>Arweave</strong> (via Irys) for permanent content, <strong>IPFS</strong> for NFT metadata</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #27272a;">
+                            <td style="padding: 10px 0; color: #71717a; vertical-align: top; font-size: 14px;">Hosting</td>
+                            <td style="padding: 10px 0; color: #e4e4e7; font-size: 14px;"><strong>Vercel</strong></td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px 0; color: #71717a; vertical-align: top; font-size: 14px;">Backend</td>
+                            <td style="padding: 10px 0; color: #e4e4e7; font-size: 14px;"><strong>Firebase</strong> (Auth + Realtime DB)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3>Dual Provider Pattern</h3>
+            <p>
+                The frontend maintains two independent sets of contract instances at all times:
+            </p>
+            <ul>
+                <li><strong>Signer contracts</strong> &mdash; connected to MetaMask, used exclusively for write transactions (signing)</li>
+                <li><strong>Public contracts</strong> &mdash; connected to Alchemy RPC, used for all read operations without triggering MetaMask popups</li>
+            </ul>
+            <p>
+                This separation eliminates MetaMask rate-limiting errors (<code>-32002</code>) and ensures
+                background data polling never interrupts the user experience.
+            </p>
+        </section>
+
+        <hr>
+
+        <!-- ════════════════════════════════════════════════════ -->
+        <!-- 7. SECURITY MODEL                                   -->
+        <!-- ════════════════════════════════════════════════════ -->
+        <section class="section" id="security">
+            <div class="section-number">Section 7</div>
+            <h2>Security Model</h2>
+            <p>
+                Backchain's security model prioritizes immutability and trustlessness over administrative
+                flexibility. Once deployed, the contracts cannot be altered, paused, or censored by anyone.
+            </p>
+            <ul>
+                <li><strong>No admin keys</strong> on deployed contracts</li>
+                <li><strong>No pause/unpause</strong> functions</li>
+                <li><strong>No token blacklists</strong></li>
+                <li><strong>No proxy upgrades</strong> &mdash; immutable deployment</li>
+                <li><strong>All contracts verified</strong> on Arbiscan</li>
+            </ul>
+
+            <h3>Progressive Governance</h3>
+            <p>
+                While the contracts themselves are immutable, governance parameters follow a progressive
+                decentralization path managed by <code>BackchainGovernance.sol</code>:
+            </p>
+
+            <div class="contract-card">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tbody>
+                        <tr style="border-bottom: 1px solid #27272a;">
+                            <td style="padding: 8px 0; color: #f59e0b; width: 100px; font-size: 14px; font-weight: 600;">Phase 1</td>
+                            <td style="padding: 8px 0; color: #e4e4e7; font-size: 14px;"><strong>Admin</strong> &mdash; current phase (testnet)</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #27272a;">
+                            <td style="padding: 8px 0; color: #f59e0b; font-size: 14px; font-weight: 600;">Phase 2</td>
+                            <td style="padding: 8px 0; color: #e4e4e7; font-size: 14px;"><strong>Multisig</strong> &mdash; shared control</td>
+                        </tr>
+                        <tr style="border-bottom: 1px solid #27272a;">
+                            <td style="padding: 8px 0; color: #f59e0b; font-size: 14px; font-weight: 600;">Phase 3</td>
+                            <td style="padding: 8px 0; color: #e4e4e7; font-size: 14px;"><strong>Timelock</strong> &mdash; delayed execution</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px 0; color: #f59e0b; font-size: 14px; font-weight: 600;">Phase 4</td>
+                            <td style="padding: 8px 0; color: #e4e4e7; font-size: 14px;"><strong>Full DAO</strong> &mdash; community governance</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- ════════════════════════════════════════════════════ -->
+        <!-- FOOTER                                              -->
+        <!-- ════════════════════════════════════════════════════ -->
+        <footer class="wp-footer">
+            <div class="logo-text">Back<span>chain</span></div>
+            <div class="links">
+                <a href="https://backcoin.org" target="_blank" rel="noopener">backcoin.org</a>
+            </div>
+            <div class="meta">
+                Network: Arbitrum Sepolia (testnet) &rarr; Arbitrum One (mainnet)<br>
+                All contracts verified on Arbiscan<br><br>
+                &copy; 2025&ndash;2026 Backchain Project. All rights reserved.
+            </div>
+        </footer>
+
+    </div>
+</body>
+</html>

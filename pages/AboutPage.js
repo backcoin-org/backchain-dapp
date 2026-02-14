@@ -861,28 +861,28 @@ function renderWhitepaperModal() {
                 </div>
 
                 <div class="space-y-3">
-                    <a href="./assets/Backchain ($BKC) en V2.pdf" target="_blank"
+                    <a href="./assets/backchain-tokenomics-v3.html" target="_blank"
                         class="flex items-center gap-4 p-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-amber-500/50 transition-all group">
                         <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
                             <i class="fa-solid fa-coins text-amber-400"></i>
                         </div>
                         <div class="flex-1">
-                            <p class="text-white font-bold text-sm group-hover:text-amber-400 transition-colors">Tokenomics Paper</p>
-                            <p class="text-zinc-500 text-xs">Distribution & Economics</p>
+                            <p class="text-white font-bold text-sm group-hover:text-amber-400 transition-colors">Tokenomics Paper V3</p>
+                            <p class="text-zinc-500 text-xs">Distribution, Mining & Scarcity Engines</p>
                         </div>
-                        <i class="fa-solid fa-download text-zinc-600 group-hover:text-white"></i>
+                        <i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-white"></i>
                     </a>
 
-                    <a href="./assets/whitepaper_bkc_ecosystem_english.pdf" target="_blank"
+                    <a href="./assets/backchain-ecosystem-whitepaper-v2.html" target="_blank"
                         class="flex items-center gap-4 p-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-cyan-500/50 transition-all group">
                         <div class="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
                             <i class="fa-solid fa-network-wired text-cyan-400"></i>
                         </div>
                         <div class="flex-1">
-                            <p class="text-white font-bold text-sm group-hover:text-cyan-400 transition-colors">Technical Whitepaper</p>
-                            <p class="text-zinc-500 text-xs">Architecture & Smart Contracts</p>
+                            <p class="text-white font-bold text-sm group-hover:text-cyan-400 transition-colors">Technical Whitepaper V2</p>
+                            <p class="text-zinc-500 text-xs">Architecture, Contracts & Fee System</p>
                         </div>
-                        <i class="fa-solid fa-download text-zinc-600 group-hover:text-white"></i>
+                        <i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-white"></i>
                     </a>
                 </div>
             </div>
