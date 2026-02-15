@@ -147,6 +147,7 @@ const BC = {
     followCounts: new Map(),
     pendingImage: null,
     pendingImagePreview: null,
+    pendingMediaType: null,
     isUploadingImage: false,
     selectedPost: null,
     selectedProfile: null,
@@ -284,6 +285,7 @@ function injectStyles() {
         .bc-post-body { margin-top:10px; margin-left:56px; color:var(--bc-text); font-size:15px; line-height:1.6; white-space:pre-wrap; word-break:break-word; }
         .bc-post-media { margin-top:14px; margin-left:56px; border-radius:var(--bc-radius); overflow:hidden; border:1px solid var(--bc-border); }
         .bc-post-media img { width:100%; max-height:420px; object-fit:cover; display:block; }
+        .bc-post-media video { width:100%; max-height:480px; display:block; background:#000; }
         .bc-post-deleted { margin-top:10px; margin-left:56px; color:var(--bc-text-3); font-size:14px; font-style:italic; }
         .bc-pinned-banner { display:flex; align-items:center; gap:6px; padding:8px 20px 0 68px; font-size:12px; color:var(--bc-accent); font-weight:600; }
         .bc-pinned-banner i { font-size:11px; }
@@ -447,6 +449,8 @@ function injectStyles() {
         .bc-image-remove { position:absolute; top:8px; right:8px; width:28px; height:28px; border-radius:50%; background:rgba(0,0,0,0.7); border:none; color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:14px; }
         .bc-image-remove:hover { background:var(--bc-red); }
         .bc-uploading-badge { display:inline-flex; align-items:center; gap:6px; padding:4px 12px; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.2); border-radius:20px; color:var(--bc-accent); font-size:12px; margin-top:8px; }
+        .bc-video-badge { position:absolute; bottom:8px; left:8px; display:flex; align-items:center; gap:4px; padding:3px 10px; background:rgba(0,0,0,0.75); border-radius:12px; color:#fff; font-size:11px; font-weight:600; }
+        .bc-video-badge i { font-size:9px; }
 
         /* Profile Create Banner */
         .bc-profile-create-banner { margin:16px 20px; padding:16px; background:var(--bc-accent-glow); border:1px solid rgba(245,158,11,0.2); border-radius:var(--bc-radius); text-align:center; animation:bc-fadeIn 0.4s ease-out; }
@@ -627,12 +631,16 @@ function isUserBadged(address) {
 }
 
 function parsePostContent(content) {
-    if (!content) return { text: '', mediaCID: '' };
+    if (!content) return { text: '', mediaCID: '', isVideo: false };
+    const vidIdx = content.indexOf('\n[vid]');
+    if (vidIdx !== -1) {
+        return { text: content.slice(0, vidIdx), mediaCID: content.slice(vidIdx + 6).trim(), isVideo: true };
+    }
     const imgIdx = content.indexOf('\n[img]');
     if (imgIdx !== -1) {
-        return { text: content.slice(0, imgIdx), mediaCID: content.slice(imgIdx + 6).trim() };
+        return { text: content.slice(0, imgIdx), mediaCID: content.slice(imgIdx + 6).trim(), isVideo: false };
     }
-    return { text: content, mediaCID: '' };
+    return { text: content, mediaCID: '', isVideo: false };
 }
 
 function getTagInfo(tagId) {
@@ -919,11 +927,11 @@ async function loadPosts() {
             const postTag = meta ? meta.tag : 0;
 
             if (type === 'post') {
-                const { text, mediaCID } = parsePostContent(ev.args.contentHash || ev.args.content || '');
+                const { text, mediaCID, isVideo } = parsePostContent(ev.args.contentHash || ev.args.content || '');
                 const post = {
                     id: pid, type: 'post',
                     author: ev.args.author || (meta ? meta.author : null),
-                    content: text, mediaCID,
+                    content: text, mediaCID, isVideo,
                     tag: ev.args.tag != null ? Number(ev.args.tag) : postTag,
                     timestamp, superLikeETH, editedAt,
                     likesCount, downvotesCount, repliesCount, repostsCount,
@@ -934,11 +942,11 @@ async function loadPosts() {
                 BC.postsById.set(pid, post);
             } else if (type === 'reply') {
                 const parentId = ev.args.parentId.toString();
-                const { text, mediaCID } = parsePostContent(ev.args.contentHash || ev.args.content || '');
+                const { text, mediaCID, isVideo } = parsePostContent(ev.args.contentHash || ev.args.content || '');
                 const reply = {
                     id: pid, type: 'reply', parentId,
                     author: ev.args.author || (meta ? meta.author : null),
-                    content: text, mediaCID,
+                    content: text, mediaCID, isVideo,
                     tag: ev.args.tag != null ? Number(ev.args.tag) : postTag,
                     timestamp, superLikeETH, editedAt,
                     likesCount, downvotesCount,
@@ -980,7 +988,35 @@ async function loadPosts() {
             }
         }
 
-        feedPosts.sort((a, b) => b.timestamp - a.timestamp);
+        // ── Smart Feed Algorithm ──────────────────────────────────────
+        // Score = recency + follow bonus + language bonus + engagement
+        const nowSec = Math.floor(Date.now() / 1000);
+        const myLang = BC.userProfile?.language || BC.wizLanguage || '';
+        const isConnected = State.isConnected && State.userAddress;
+
+        function feedScore(post) {
+            const author = (post.type === 'repost'
+                ? BC.postsById.get(post.originalPostId)?.author
+                : post.author)?.toLowerCase() || '';
+            const age = Math.max(nowSec - post.timestamp, 1);
+            // Recency: exponential decay — halves every 6h
+            const recency = 1000 / (1 + age / 21600);
+            // Follow bonus: +500 if you follow the author
+            const followBonus = (isConnected && BC.following.has(author)) ? 500 : 0;
+            // Language bonus: +300 if author's language matches yours
+            const authorProfile = BC.profiles.get(author);
+            const langBonus = (myLang && authorProfile?.language === myLang) ? 300 : 0;
+            // Engagement: likes + replies*2 + reposts*1.5 + superLike (capped)
+            const likes = post.likesCount || 0;
+            const replies = post.repliesCount || BC.replyCountMap.get(post.id) || 0;
+            const reposts = post.repostsCount || BC.repostCountMap.get(post.id) || 0;
+            const superETH = Number(ethers.formatEther(post.superLikeETH || 0n));
+            const engagement = likes + replies * 2 + reposts * 1.5 + Math.min(superETH * 100, 200);
+            return recency + followBonus + langBonus + engagement;
+        }
+
+        feedPosts.forEach(p => { p._score = feedScore(p); });
+        feedPosts.sort((a, b) => b._score - a._score);
 
         // Filter out blocked authors
         const filterBlocked = (posts) => {
@@ -990,13 +1026,23 @@ async function loadPosts() {
 
         BC.posts = filterBlocked(feedPosts);
         BC.allItems = allItems;
+
+        // ── Discover: Velocity-weighted trending ─────────────────────
+        // Score = (superLikeETH × engagement_multiplier) / sqrt(age_hours)
+        // Newer trending posts surface faster
         BC.trendingPosts = filterBlocked([...allItems]
-            .filter(p => p.type !== 'repost' && p.superLikeETH > 0n))
-            .sort((a, b) => {
-                const aVal = BigInt(a.superLikeETH || 0);
-                const bVal = BigInt(b.superLikeETH || 0);
-                return bVal > aVal ? 1 : bVal < aVal ? -1 : 0;
-            });
+            .filter(p => p.type !== 'repost' && (p.superLikeETH || 0n) > 0n))
+            .map(p => {
+                const ageH = Math.max((nowSec - p.timestamp) / 3600, 0.5);
+                const ethVal = Number(ethers.formatEther(p.superLikeETH || 0n));
+                const likes = p.likesCount || 0;
+                const replies = p.repliesCount || BC.replyCountMap.get(p.id) || 0;
+                const reposts = p.repostsCount || BC.repostCountMap.get(p.id) || 0;
+                const engMul = 1 + likes * 0.1 + replies * 0.2 + reposts * 0.15;
+                p._trendScore = (ethVal * engMul) / Math.sqrt(ageH);
+                return p;
+            })
+            .sort((a, b) => b._trendScore - a._trendScore);
 
         console.log(`[Agora] Loaded: ${BC.posts.length} feed posts, ${BC.allItems.length} total items, ${BC.trendingPosts.length} trending`);
     } catch (e) {
@@ -1025,18 +1071,19 @@ async function doCreatePost() {
     let contentType = 0;
 
     if (BC.pendingImage) {
+        const isVideo = BC.pendingMediaType === 'video';
         try {
             BC.isUploadingImage = true;
             renderContent();
-            const result = await uploadImageToIPFS(BC.pendingImage);
+            const result = await uploadMediaToStorage(BC.pendingImage);
             const cid = result.ipfsHash || '';
             if (cid) {
-                finalContent = content + '\n[img]' + cid;
-                contentType = 1;
+                finalContent = content + (isVideo ? '\n[vid]' : '\n[img]') + cid;
+                contentType = isVideo ? 2 : 1;
             }
         } catch (e) {
-            console.error('[Agora] Image upload failed:', e);
-            showToast('Image upload failed: ' + e.message, 'error');
+            console.error('[Agora] Media upload failed:', e);
+            showToast('Upload failed: ' + e.message, 'error');
             BC.isPosting = false;
             BC.isUploadingImage = false;
             renderContent();
@@ -1057,6 +1104,7 @@ async function doCreatePost() {
             if (input) input.value = '';
             BC.pendingImage = null;
             BC.pendingImagePreview = null;
+            BC.pendingMediaType = null;
             BC.composeTag = 0;
             BC.isPosting = false;
             showToast('Post created!', 'success');
@@ -1685,27 +1733,59 @@ async function loadActiveRooms() {
 // IMAGE UPLOAD
 // ============================================================================
 
-async function uploadImageToIPFS(file) {
+const MEDIA_LIMITS = {
+    image: { max: 10 * 1024 * 1024, types: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'], label: '10MB' },
+    video: { max: 100 * 1024 * 1024, types: ['video/mp4', 'video/webm', 'video/ogg'], label: '100MB' }
+};
+
+async function uploadMediaToStorage(file) {
+    const isVideo = file.type.startsWith('video/');
     const result = await irysUploadFile(file, {
-        tags: [{ name: 'Type', value: 'agora-image' }]
+        tags: [{ name: 'Type', value: isVideo ? 'agora-video' : 'agora-image' }, { name: 'Content-Type', value: file.type }]
     });
-    return { success: true, ipfsHash: result.id };
+    return { success: true, ipfsHash: result.id, isVideo };
 }
 
 function handleImageSelect(e) {
     const file = e.target?.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { showToast('Image too large. Maximum 5MB.', 'error'); return; }
-    if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)) { showToast('Invalid image type.', 'error'); return; }
+    const isImage = file.type.startsWith('image/');
+    const isVideo = file.type.startsWith('video/');
+    if (!isImage && !isVideo) { showToast('Unsupported file type. Use images or videos.', 'error'); return; }
+    const limit = isVideo ? MEDIA_LIMITS.video : MEDIA_LIMITS.image;
+    if (!limit.types.includes(file.type)) { showToast(`Invalid ${isVideo ? 'video' : 'image'} format.`, 'error'); return; }
+    if (file.size > limit.max) { showToast(`File too large. Maximum ${limit.label}.`, 'error'); return; }
     BC.pendingImage = file;
-    const reader = new FileReader();
-    reader.onload = (ev) => { BC.pendingImagePreview = ev.target.result; renderContent(); };
-    reader.readAsDataURL(file);
+    if (isVideo) {
+        // Video thumbnail: use first frame
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+        video.onloadeddata = () => {
+            video.currentTime = 1;
+        };
+        video.onseeked = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            BC.pendingImagePreview = canvas.toDataURL('image/jpeg');
+            BC.pendingMediaType = 'video';
+            renderContent();
+            URL.revokeObjectURL(video.src);
+        };
+        video.src = URL.createObjectURL(file);
+    } else {
+        BC.pendingMediaType = 'image';
+        const reader = new FileReader();
+        reader.onload = (ev) => { BC.pendingImagePreview = ev.target.result; renderContent(); };
+        reader.readAsDataURL(file);
+    }
 }
 
 function removeImage() {
     BC.pendingImage = null;
     BC.pendingImagePreview = null;
+    BC.pendingMediaType = null;
     const input = document.getElementById('bc-image-input');
     if (input) input.value = '';
     renderContent();
@@ -1875,9 +1955,10 @@ function renderCompose() {
                     ${BC.pendingImagePreview ? `
                         <div class="bc-image-preview">
                             <img src="${BC.pendingImagePreview}" alt="Preview">
+                            ${BC.pendingMediaType === 'video' ? '<div class="bc-video-badge"><i class="fa-solid fa-play"></i> Video</div>' : ''}
                             <button class="bc-image-remove" onclick="BackchatPage.removeImage()"><i class="fa-solid fa-xmark"></i></button>
                         </div>` : ''}
-                    ${BC.isUploadingImage ? '<div class="bc-uploading-badge"><i class="fa-solid fa-spinner fa-spin"></i> Uploading image...</div>' : ''}
+                    ${BC.isUploadingImage ? `<div class="bc-uploading-badge"><i class="fa-solid fa-spinner fa-spin"></i> Uploading ${BC.pendingMediaType === 'video' ? 'video' : 'image'}...</div>` : ''}
                     ${renderComposeTagPicker()}
                 </div>
             </div>
@@ -1885,7 +1966,7 @@ function renderCompose() {
             <div class="bc-compose-bottom">
                 <div class="bc-compose-tools">
                     <button class="bc-compose-tool" title="Add image" onclick="document.getElementById('bc-image-input').click()"><i class="fa-solid fa-image"></i></button>
-                    <input type="file" id="bc-image-input" hidden accept="image/jpeg,image/png,image/gif,image/webp" onchange="BackchatPage.handleImageSelect(event)">
+                    <input type="file" id="bc-image-input" hidden accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/ogg" onchange="BackchatPage.handleImageSelect(event)">
                     <button class="bc-go-live-btn" title="Go Live" onclick="BackchatPage.goLive()" ${BC.isLive ? 'disabled' : ''}>
                         <i class="fa-solid fa-video"></i> ${BC.isLive ? 'LIVE' : 'Go Live'}
                     </button>
@@ -1997,7 +2078,10 @@ function renderPost(post, index = 0, options = {}) {
                 ${renderPostMenu(post)}
             </div>
             ${post.content ? `<div class="bc-post-body">${linkifyContent(escapeHtml(post.content))}</div>` : ''}
-            ${post.mediaCID ? `<div class="bc-post-media"><img src="${resolveContentUrl(post.mediaCID) || ''}" alt="Media" loading="lazy" onerror="this.style.display='none'"></div>` : ''}
+            ${post.mediaCID ? `<div class="bc-post-media">${post.isVideo
+                ? `<video src="${resolveContentUrl(post.mediaCID) || ''}" controls playsinline preload="metadata" onerror="this.style.display='none'"></video>`
+                : `<img src="${resolveContentUrl(post.mediaCID) || ''}" alt="Media" loading="lazy" onerror="this.style.display='none'">`
+            }</div>` : ''}
             <div class="bc-actions" onclick="event.stopPropagation()">
                 <button class="bc-action act-reply" onclick="BackchatPage.openReply('${post.id}')" title="Reply">
                     <i class="fa-regular fa-comment"></i>${replyCount > 0 ? `<span class="count">${replyCount}</span>` : ''}
