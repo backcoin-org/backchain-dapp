@@ -673,11 +673,11 @@ export const StorePage = {
                         </div>
                     </div>
 
-                    <!-- TRADE HISTORY (open by default) -->
+                    <!-- NFT ACTIVITY (open by default) -->
                     <div class="nft-card">
                         <div id="nft-hist-toggle" class="nft-card-header">
                             <div class="nft-card-title">
-                                <i class="fa-solid fa-clock-rotate-left"></i> Trade History
+                                <i class="fa-solid fa-clock-rotate-left"></i> NFT Activity
                                 <span id="nft-hist-count" class="nft-card-badge">0</span>
                             </div>
                             <i id="nft-hist-chevron" class="fa-solid fa-chevron-down nft-card-chevron" style="transform:rotate(180deg)"></i>
@@ -1485,8 +1485,27 @@ function renderInventory() {
 }
 
 // ============================================================================
-// TRADE HISTORY
+// NFT ACTIVITY HISTORY
 // ============================================================================
+const NFT_EVENT_TYPES = new Set([
+    'NFTBOUGHT', 'NFTSOLD', 'NFT_BOUGHT', 'NFT_SOLD', 'NFTPURCHASED', 'NFT_PURCHASED',
+    'NFTFUSED', 'NFTSPLIT',
+    'RENTALLISTED', 'RENTALRENTED', 'RENTALWITHDRAWN', 'RENTALEARNINGSWITHDRAWN'
+]);
+
+function getEventMeta(type) {
+    const t = type.toUpperCase();
+    if (t.includes('BOUGHT') || t.includes('PURCHASED')) return { icon: 'fa-cart-plus', color: '#22c55e', bg: 'rgba(34,197,94,0.12)', label: 'Bought' };
+    if (t.includes('SOLD'))     return { icon: 'fa-money-bill-transfer', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', label: 'Sold' };
+    if (t.includes('FUSE'))     return { icon: 'fa-fire', color: '#f97316', bg: 'rgba(249,115,22,0.12)', label: 'Forged' };
+    if (t.includes('SPLIT'))    return { icon: 'fa-scissors', color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', label: 'Split' };
+    if (t === 'RENTALRENTED')   return { icon: 'fa-handshake', color: '#3b82f6', bg: 'rgba(59,130,246,0.12)', label: 'Rented' };
+    if (t === 'RENTALLISTED')   return { icon: 'fa-tag', color: '#14b8a6', bg: 'rgba(20,184,166,0.12)', label: 'Listed' };
+    if (t === 'RENTALWITHDRAWN') return { icon: 'fa-rotate-left', color: '#6b7280', bg: 'rgba(107,114,128,0.12)', label: 'Unlisted' };
+    if (t === 'RENTALEARNINGSWITHDRAWN') return { icon: 'fa-coins', color: '#eab308', bg: 'rgba(234,179,8,0.12)', label: 'Earnings' };
+    return { icon: 'fa-circle-info', color: '#9ca3af', bg: 'rgba(156,163,175,0.08)', label: type };
+}
+
 async function loadTradeHistory() {
     const container = document.getElementById('nft-hist-list');
 
@@ -1503,9 +1522,9 @@ async function loadTradeHistory() {
         const data = await response.json();
         tradeHistory = (data || []).filter(item => {
             const t = (item.type || '').toUpperCase();
-            return t === 'NFTBOUGHT' || t === 'NFTSOLD' || t === 'NFT_BOUGHT' || t === 'NFT_SOLD' ||
-                   t === 'NFTPURCHASED' || t === 'NFT_PURCHASED' ||
-                   t.includes('NFTBOUGHT') || t.includes('NFTSOLD') || t.includes('NFTPURCHASED');
+            return NFT_EVENT_TYPES.has(t) ||
+                   t.includes('NFTBOUGHT') || t.includes('NFTSOLD') || t.includes('NFTPURCHASED') ||
+                   t.includes('NFTFUSE') || t.includes('NFTSPLIT');
         });
 
         const countEl = document.getElementById('nft-hist-count');
@@ -1532,52 +1551,64 @@ function renderTradeHistory() {
         container.innerHTML = `
             <div class="nft-empty">
                 <i class="fa-solid fa-receipt"></i>
-                <p>No NFT trades yet</p>
+                <p>No NFT activity yet</p>
             </div>
         `;
         return;
     }
 
-    container.innerHTML = tradeHistory.slice(0, 20).map(item => {
+    container.innerHTML = tradeHistory.slice(0, 30).map(item => {
         const t = (item.type || '').toUpperCase();
         const details = item.details || {};
         const dateStr = formatDate(item.timestamp || item.createdAt);
-        const isBuy = t.includes('BOUGHT') || t.includes('PURCHASED');
-
-        const icon = isBuy ? 'fa-cart-plus' : 'fa-money-bill-transfer';
-        const iconColor = isBuy ? '#22c55e' : '#f59e0b';
-        const iconBg = isBuy ? 'rgba(34,197,94,0.12)' : 'rgba(245,158,11,0.12)';
-        const label = isBuy ? 'Bought NFT' : 'Sold NFT';
-
+        const meta = getEventMeta(t);
         const txLink = item.txHash ? `${EXPLORER_TX}${item.txHash}` : '#';
 
-        let amountDisplay = '';
+        // Build detail text based on event type
+        let detailHtml = '';
+        const tokenId = details.tokenId || details.burnedTokenId || '';
+
+        if (t.includes('FUSE')) {
+            detailHtml = `<span style="font-family:monospace;font-size:9px;color:var(--nft-text-2)">#${details.tokenId1} + #${details.tokenId2}</span>
+                <i class="fa-solid fa-arrow-right" style="font-size:7px;color:var(--nft-text-3);margin:0 3px"></i>
+                <span style="font-size:9px;font-weight:700;color:#f97316">${details.resultTier || ''} #${details.newTokenId || ''}</span>`;
+        } else if (t.includes('SPLIT')) {
+            const ids = (details.newTokenIds || []).map(id => `#${id}`).join(', ');
+            detailHtml = `<span style="font-family:monospace;font-size:9px;color:var(--nft-text-2)">${details.sourceTier || ''} #${details.burnedTokenId || ''}</span>
+                <i class="fa-solid fa-arrow-right" style="font-size:7px;color:var(--nft-text-3);margin:0 3px"></i>
+                <span style="font-size:9px;font-weight:700;color:#a78bfa">${details.mintCount || ''}x ${details.targetTier || ''}</span>`;
+        } else if (tokenId) {
+            detailHtml = `<span style="font-size:9px;color:var(--nft-accent);font-family:monospace">#${tokenId}</span>`;
+        }
+
+        // Amount display
+        let amountHtml = '';
         try {
-            const rawAmount = item.amount || details.amount || details.price || details.payout || "0";
+            const rawAmount = details.price || details.payout || details.rentalCost || details.amount || "0";
             if (typeof rawAmount === 'string' && rawAmount !== "0") {
-                const amountNum = formatBigNumber(BigInt(rawAmount));
-                if (amountNum > 0.001) amountDisplay = amountNum.toFixed(2);
+                const val = formatBigNumber(BigInt(rawAmount));
+                if (val > 0.001) {
+                    const isIncome = t.includes('SOLD') || t === 'RENTALEARNINGSWITHDRAWN' || t === 'RENTALRENTED';
+                    const unit = t === 'RENTALEARNINGSWITHDRAWN' ? 'BKC' : (t.includes('BOUGHT') || t.includes('SOLD') ? 'BKC' : 'BKC');
+                    amountHtml = `<span class="nft-hist-amount" style="color:${isIncome ? 'var(--nft-green)' : 'var(--nft-text)'}">${isIncome ? '+' : '-'}${val.toFixed(2)} <span style="font-size:8px;color:var(--nft-text-3)">${unit}</span></span>`;
+                }
             }
         } catch {}
 
-        const tokenId = details.tokenId || '';
-        const boostBips = details.boostBips || details.boost || '';
-
         return `
             <a href="${txLink}" target="_blank" class="nft-hist-item">
-                <div class="nft-hist-icon" style="background:${iconBg}">
-                    <i class="fa-solid ${icon}" style="color:${iconColor}"></i>
+                <div class="nft-hist-icon" style="background:${meta.bg}">
+                    <i class="fa-solid ${meta.icon}" style="color:${meta.color}"></i>
                 </div>
                 <div class="nft-hist-info">
                     <div class="nft-hist-label">
-                        ${label}
-                        ${tokenId ? `<span style="font-size:9px;color:var(--nft-accent);font-family:monospace;margin-left:4px">#${tokenId}</span>` : ''}
-                        ${boostBips ? `<span style="font-size:8px;color:var(--nft-purple);margin-left:4px">+${Number(boostBips)/100}%</span>` : ''}
+                        ${meta.label}
+                        ${detailHtml}
                     </div>
                     <div class="nft-hist-date">${dateStr}</div>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px">
-                    ${amountDisplay ? `<span class="nft-hist-amount" style="color:${isBuy ? 'var(--nft-text)' : 'var(--nft-green)'}">${isBuy ? '-' : '+'}${amountDisplay} <span style="font-size:9px;color:var(--nft-text-3)">BKC</span></span>` : ''}
+                    ${amountHtml}
                     <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:8px;color:var(--nft-text-3)"></i>
                 </div>
             </a>
