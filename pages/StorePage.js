@@ -61,6 +61,31 @@ function getTierStyle(tierName) {
     return TIER_CONFIG[tierName] || TIER_CONFIG['Bronze'];
 }
 
+// Tier index → boostBips mapping for optimistic updates
+const TIER_TO_BOOST = { 0: 1000, 1: 2500, 2: 4000, 3: 5000 };
+const BOOST_TO_TIER = { 1000: 0, 2500: 1, 4000: 2, 5000: 3 };
+
+/**
+ * Optimistically update State.myBoosters after a transaction,
+ * then sync with API in background. This avoids the indexer delay
+ * that causes stale fusion/inventory UI.
+ */
+function optimisticBoosterUpdate({ add = [], remove = [] }) {
+    let boosters = [...(State.myBoosters || [])];
+    // Remove by tokenId
+    for (const tokenId of remove) {
+        const tid = BigInt(tokenId);
+        boosters = boosters.filter(b => BigInt(b.tokenId) !== tid);
+    }
+    // Add new entries
+    for (const entry of add) {
+        boosters.push({ tokenId: BigInt(entry.tokenId), boostBips: entry.boostBips });
+    }
+    State.myBoosters = boosters;
+    // Background sync — will eventually overwrite with real data
+    loadMyBoostersFromAPI(true).catch(() => {});
+}
+
 // ============================================================================
 // LOCAL STATE
 // ============================================================================
@@ -1578,9 +1603,14 @@ function setupEventListeners() {
                     onSuccess: async ({ newTokenId, resultTier }) => {
                         const tierName = TIER_NAMES_MAP[resultTier] || 'NFT';
                         showToast(`Fused into ${tierName} #${newTokenId}!`, "success");
+                        // Optimistic: remove 2 source NFTs, add 1 higher-tier
+                        optimisticBoosterUpdate({
+                            remove: [t1, t2],
+                            add: [{ tokenId: newTokenId, boostBips: TIER_TO_BOOST[resultTier] || 1000 }]
+                        });
                         fuseSelected = [];
                         invalidateAllPoolCaches();
-                        await Promise.all([loadMyBoostersFromAPI(true), loadAllPoolsData()]);
+                        await loadAllPoolsData();
                         renderTierCards(); renderInventory(); renderImpactPreview(); renderFusionSection();
                     },
                     onError: (error) => {
@@ -1658,11 +1688,16 @@ function setupEventListeners() {
                     onSuccess: async ({ newTokenIds, targetTier: tt }) => {
                         const tierName = TIER_NAMES_MAP[tt] || 'NFT';
                         showToast(`Split into ${newTokenIds.length}x ${tierName}!`, "success");
+                        // Optimistic: remove source NFT, add new lower-tier NFTs
+                        optimisticBoosterUpdate({
+                            remove: [tokenId],
+                            add: newTokenIds.map(id => ({ tokenId: id, boostBips: TIER_TO_BOOST[tt] || 1000 }))
+                        });
                         splitSelectedTokenId = null;
                         splitTargetTier = null;
                         splitConfirmPending = false;
                         invalidateAllPoolCaches();
-                        await Promise.all([loadMyBoostersFromAPI(true), loadAllPoolsData()]);
+                        await loadAllPoolsData();
                         renderTierCards(); renderInventory(); renderImpactPreview(); renderFusionSection();
                     },
                     onError: (error) => {
@@ -1717,10 +1752,14 @@ function setupEventListeners() {
                     await NftTx.buyFromPool({
                         poolAddress,
                         button: actionBtn,
-                        onSuccess: async () => {
+                        onSuccess: async (receipt, tokenId) => {
                             showToast(`${tier.name} NFT purchased!`, "success");
                             invalidateAllPoolCaches();
-                            await Promise.all([loadMyBoostersFromAPI(true), loadAllPoolsData()]);
+                            // Optimistic: add new NFT immediately
+                            if (tokenId != null) {
+                                optimisticBoosterUpdate({ add: [{ tokenId, boostBips: boostBips }] });
+                            }
+                            await loadAllPoolsData();
                             renderTierCards();
                             renderInventory();
                             renderImpactPreview();
@@ -1749,7 +1788,9 @@ function setupEventListeners() {
                         onSuccess: async () => {
                             showToast(`${tier.name} NFT sold!`, "success");
                             invalidateAllPoolCaches();
-                            await Promise.all([loadMyBoostersFromAPI(true), loadAllPoolsData()]);
+                            // Optimistic: remove sold NFT immediately
+                            optimisticBoosterUpdate({ remove: [tokenId] });
+                            await loadAllPoolsData();
                             renderTierCards();
                             renderInventory();
                             renderImpactPreview();
