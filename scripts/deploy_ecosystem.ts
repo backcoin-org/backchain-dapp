@@ -189,6 +189,7 @@ const RETRY_DELAY_MS = 5000;
 // Pool mints NFTs via RewardBooster.poolMint() when users buy.
 // Higher tiers obtained via NFTFusion (2→1 fuse).
 const NFT_POOL_MINTABLE_RESERVES = 10_000; // 10,000 Bronze NFTs mintable on-demand
+const NFT_POOL_VIRTUAL_RESERVES  = 100;    // Phantom depth — keeps spread ≤ 2% permanently
 
 // ════════════════════════════════════════════════════════════════════════════
 //                    💧 LIQUIDEZ INICIAL
@@ -706,10 +707,11 @@ async function main() {
         // NFTPool V3 constructor: (ecosystem, bkcToken, rewardBooster, tier, virtualReserves, mintableReserves)
         const NFTPool = await ethers.getContractFactory("NFTPool");
         const bronzeMintable = NFT_POOL_MINTABLE_RESERVES;
+        const bronzeVirtual  = NFT_POOL_VIRTUAL_RESERVES;
         const bronzeBkcAmount = LIQUIDITY_CONFIG.NFT_POOL_BKC;
 
         const { contract: bronzePool, address: bronzePoolAddr } = await deployContractWithRetry(
-            NFTPool, [ecoAddr, bkcAddr, boosterAddr, 0, 0, bronzeMintable], "NFTPool_bronze"
+            NFTPool, [ecoAddr, bkcAddr, boosterAddr, 0, bronzeVirtual, bronzeMintable], "NFTPool_bronze"
         );
         addresses.pool_bronze = bronzePoolAddr;
         updateAddressJSON("pool_bronze", bronzePoolAddr);
@@ -726,7 +728,7 @@ async function main() {
 
         // Initialize Bronze pool: 0 real NFTs + 1M BKC (10,000 mintable on-demand)
         {
-            console.log(`\n   📦 Inicializando BRONZE Pool: ${bronzeMintable} mintable NFTs + ${ethers.formatEther(bronzeBkcAmount)} BKC`);
+            console.log(`\n   📦 Inicializando BRONZE Pool: ${bronzeMintable} mintable + ${bronzeVirtual} virtual + ${ethers.formatEther(bronzeBkcAmount)} BKC (spread ≤ ${(200 / (bronzeVirtual + bronzeMintable - 1)).toFixed(1)}%)`);
 
             await sendTxWithRetry(
                 async () => await bkc.approve(bronzePoolAddr, bronzeBkcAmount),
@@ -734,9 +736,9 @@ async function main() {
             );
             await sendTxWithRetry(
                 async () => await bronzePool.initializePool([], bronzeBkcAmount),
-                `initializePool bronze: 0 real + ${bronzeMintable} mintable + ${ethers.formatEther(bronzeBkcAmount)} BKC`
+                `initializePool bronze: 0 real + ${bronzeMintable} mintable + ${bronzeVirtual} virtual + ${ethers.formatEther(bronzeBkcAmount)} BKC`
             );
-            console.log(`   ✅ Bronze pool inicializado! (${bronzeMintable} NFTs mintáveis sob demanda)`);
+            console.log(`   ✅ Bronze pool inicializado! (${bronzeMintable} mintable + ${bronzeVirtual} virtual reserves)`);
         }
 
         // ══════════════════════════════════════════════════════════════════════
