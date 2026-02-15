@@ -64,6 +64,13 @@ Nao estamos construindo so para nos. Estamos construindo infraestrutura que qual
 
 ## Documentacao
 
+### Para Desenvolvedores
+
+- [SDK — Guia para Desenvolvedores](./SDK_Developer-Guide.md) — 17 pacotes, indexador, API, exemplos praticos
+- [Guia do Operador](./Operators_Build-and-Earn.md) — Construa e ganhe comissoes
+
+### Para Usuarios
+
 - [Como Ganhar com Backcoin](./How-to-Earn_Three-Income-Streams.md) — Guia completo de ganhos
 - [Comece Aqui](./Get-Started_5-Minutes.md) — Seus primeiros 5 minutos
 - [Token BKC](./BKC-Token_Ecosystem-Fuel.md) — Especificacoes do token
