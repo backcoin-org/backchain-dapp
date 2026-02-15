@@ -35,6 +35,8 @@ export function generateProject(dir, config) {
         rental: genRentalPage,
         swap: genSwapPage,
         faucet: genFaucetPage,
+        fusion: genFusionPage,
+        buyback: genBuybackPage,
     };
 
     for (const mod of config.modules) {
@@ -58,7 +60,7 @@ function genPackageJson(config) {
             preview: 'vite preview',
         },
         dependencies: {
-            '@backchain/sdk': '^0.1.0',
+            '@backchain/sdk': '^0.2.0',
             ethers: '^6.13.0',
         },
         devDependencies: {
@@ -340,6 +342,8 @@ function genIndexHtml(config) {
         rental: { icon: '&#8962;', label: 'Rental' },
         swap: { icon: '&#8646;', label: 'Swap' },
         faucet: { icon: '&#9751;', label: 'Faucet' },
+        fusion: { icon: '&#9878;', label: 'Fusion' },
+        buyback: { icon: '&#8635;', label: 'Buyback' },
     };
 
     for (const mod of config.modules) {
@@ -1075,6 +1079,133 @@ export async function render(el, bkc) {
         try {
             await bkc.faucet.claim();
             toast('Claimed!', 'success');
+        } catch (err) { toast(err.message, 'error'); }
+    };
+}
+`;
+}
+
+function genFusionPage() {
+    return `// NFT Fusion Module
+import { ethers } from 'ethers';
+import { toast } from '../main.js';
+
+let _stats = null;
+
+export async function load(bkc) {
+    _stats = await bkc.fusion.getStats();
+}
+
+export async function render(el, bkc) {
+    if (!_stats) await load(bkc);
+
+    el.innerHTML = \`
+        <h1 class="page-title">NFT Fusion — Fuse & Split</h1>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Total Fusions</div>
+                <div class="stat-value accent">\${_stats.totalFusions.toString()}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total Splits</div>
+                <div class="stat-value">\${_stats.totalSplits.toString()}</div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-title">Fuse 2 NFTs → 1 Higher Tier</div>
+            <p style="color:var(--text-dim);margin-bottom:12px;">Burn 2 same-tier NFTs to mint 1 of the next tier up (e.g., 2 Bronze → 1 Silver).</p>
+            <div class="form-group">
+                <label class="form-label">Token ID #1</label>
+                <input type="number" id="fuseToken1" class="input" placeholder="101" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Token ID #2</label>
+                <input type="number" id="fuseToken2" class="input" placeholder="102" />
+            </div>
+            <button id="fuseBtn" class="btn btn-primary">Fuse</button>
+        </div>
+        <div class="card">
+            <div class="card-title">Split 1 NFT → 2 Lower Tier</div>
+            <p style="color:var(--text-dim);margin-bottom:12px;">Burn 1 NFT to mint 2 of the next tier down (e.g., 1 Silver → 2 Bronze).</p>
+            <div class="form-group">
+                <label class="form-label">Token ID to Split</label>
+                <input type="number" id="splitToken" class="input" placeholder="201" />
+            </div>
+            <button id="splitBtn" class="btn btn-primary">Split</button>
+        </div>
+    \`;
+
+    el.querySelector('#fuseBtn').onclick = async () => {
+        try {
+            const t1 = BigInt(el.querySelector('#fuseToken1').value);
+            const t2 = BigInt(el.querySelector('#fuseToken2').value);
+            const result = await bkc.fusion.fuse(t1, t2);
+            toast(\`Fused! New token: #\${result.newTokenId}\`, 'success');
+            await load(bkc);
+            render(el, bkc);
+        } catch (err) { toast(err.message, 'error'); }
+    };
+
+    el.querySelector('#splitBtn').onclick = async () => {
+        try {
+            const tokenId = BigInt(el.querySelector('#splitToken').value);
+            const result = await bkc.fusion.split(tokenId);
+            toast(\`Split! New tokens: \${result.newTokenIds.map(id => '#' + id).join(', ')}\`, 'success');
+            await load(bkc);
+            render(el, bkc);
+        } catch (err) { toast(err.message, 'error'); }
+    };
+}
+`;
+}
+
+function genBuybackPage() {
+    return `// Buyback Mining Module
+import { ethers } from 'ethers';
+import { toast } from '../main.js';
+
+let _preview = null;
+
+export async function load(bkc) {
+    _preview = await bkc.buyback.preview();
+}
+
+export async function render(el, bkc) {
+    if (!_preview) await load(bkc);
+
+    el.innerHTML = \`
+        <h1 class="page-title">Buyback Mining</h1>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">ETH Available</div>
+                <div class="stat-value accent">\${Number(ethers.formatEther(_preview.ethAvailable)).toFixed(6)} ETH</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Mining Rate</div>
+                <div class="stat-value">\${Number(_preview.currentMiningRateBps) / 100}%</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Caller Reward</div>
+                <div class="stat-value">\${Number(ethers.formatEther(_preview.estimatedCallerReward)).toFixed(2)} BKC</div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-title">Execute Buyback</div>
+            <p style="color:var(--text-dim);margin-bottom:12px;">
+                Convert accumulated ETH fees into BKC. You earn 5% of mined BKC as a caller reward.
+            </p>
+            <button id="buybackBtn" class="btn btn-primary" \${_preview.isReady ? '' : 'disabled'}>
+                \${_preview.isReady ? 'Execute Buyback' : 'Not Ready Yet'}
+            </button>
+        </div>
+    \`;
+
+    el.querySelector('#buybackBtn').onclick = async () => {
+        try {
+            await bkc.buyback.execute();
+            toast('Buyback executed! Check your BKC balance.', 'success');
+            await load(bkc);
+            render(el, bkc);
         } catch (err) { toast(err.message, 'error'); }
     };
 }

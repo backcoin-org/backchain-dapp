@@ -1,7 +1,7 @@
 {
-  "name": "@backchain/sdk",
-  "version": "0.1.0",
-  "description": "Backchain SDK — Build DeFi frontends on the Backchain ecosystem and earn operator commissions",
+  "name": "@backchain/core",
+  "version": "0.2.0",
+  "description": "Backchain Core — Provider, fees, types, ABIs, and context for the Backchain DeFi ecosystem",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -36,9 +36,7 @@
     "arbitrum",
     "web3",
     "sdk",
-    "nft",
-    "staking",
-    "operator"
+    "core"
   ],
   "license": "MIT",
   "repository": {

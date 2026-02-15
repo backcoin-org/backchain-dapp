@@ -1,0 +1,36 @@
+{
+  "name": "@backchain/monorepo",
+  "private": true,
+  "version": "0.2.0",
+  "description": "Backchain SDK — Modular packages for the Backchain DeFi ecosystem",
+  "workspaces": [
+    "packages/core",
+    "packages/staking",
+    "packages/nft",
+    "packages/fusion",
+    "packages/fortune",
+    "packages/notary",
+    "packages/agora",
+    "packages/charity",
+    "packages/rental",
+    "packages/swap",
+    "packages/faucet",
+    "packages/buyback",
+    "packages/sdk",
+    "packages/cli"
+  ],
+  "scripts": {
+    "build:core": "cd packages/core && npm run build",
+    "build:modules": "npm run build --workspace=packages/staking --workspace=packages/nft --workspace=packages/fusion --workspace=packages/fortune --workspace=packages/notary --workspace=packages/agora --workspace=packages/charity --workspace=packages/rental --workspace=packages/swap --workspace=packages/faucet --workspace=packages/buyback",
+    "build:sdk": "cd packages/sdk && npm run build",
+    "build:all": "npm run build:core && npm run build:modules && npm run build:sdk",
+    "clean": "npm run clean --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/backcoin-org/backchain-dapp.git",
+    "directory": "sdk"
+  }
+}

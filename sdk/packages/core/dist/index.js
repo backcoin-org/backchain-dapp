@@ -1,32 +1,20 @@
-// @backchain/sdk — Main Barrel Export
+// @backchain/core — Core Infrastructure
 // ============================================================================
 //
+// The foundation package. All module packages depend on this.
+//
 // Usage:
-//   import { Backchain } from '@backchain/sdk';
-//
-//   const bkc = new Backchain({ operator: '0xYOUR_WALLET' });
-//   await bkc.connect();
-//   await bkc.staking.delegate(ethers.parseEther('100'), 365);
-//
-// ── Core ────────────────────────────────────────────────────────────────────
-export { Backchain } from './backchain.js';
+//   import { createContext, ProviderManager, calculateFee } from '@backchain/core';
+//   import type { BackchainContext, ContractAddresses } from '@backchain/core';
+// ── Context (the decoupling layer) ───────────────────────────────────────────
+export { createContext } from './context.js';
+// ── Provider ─────────────────────────────────────────────────────────────────
 export { ProviderManager, getNetworkConfig } from './provider.js';
+// ── Fees ─────────────────────────────────────────────────────────────────────
 export { calculateFee, actionId, nftActionId, notaryActionId, ACTION_IDS } from './fees.js';
-// ── Modules ─────────────────────────────────────────────────────────────────
-export { StakingModule } from './modules/staking.js';
-export { NftModule } from './modules/nft.js';
-export { FortuneModule } from './modules/fortune.js';
-export { NotaryModule } from './modules/notary.js';
-export { AgoraModule } from './modules/agora.js';
-export { CharityModule } from './modules/charity.js';
-export { RentalModule } from './modules/rental.js';
-export { SwapModule } from './modules/swap.js';
-export { FaucetModule } from './modules/faucet.js';
-export { FusionModule } from './modules/fusion.js';
-export { BuybackModule } from './modules/buyback.js';
-// ── Contracts ───────────────────────────────────────────────────────────────
+// ── Contracts ────────────────────────────────────────────────────────────────
 export { getAddresses, getPoolAddress } from './contracts/addresses.js';
 export * from './contracts/abis.js';
-// Re-export enums (these need value exports, not just type exports)
+// Re-export enums (value exports)
 export { DocType, CampaignStatus, ContentType, BadgeTier, TierNames, TierBoosts } from './types/index.js';
 //# sourceMappingURL=index.js.map
