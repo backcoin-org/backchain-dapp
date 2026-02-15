@@ -81,6 +81,19 @@ const TS = {
 
     ethBalance: 0n,
     bkcBalance: 0n,
+
+    // Chart
+    chartRange: '1H',
+    priceHistory: [],        // [{ t: timestamp_ms, p: bkcUsd, e: bkcEth }]
+};
+
+const CHART_STORAGE_KEY = 'bkc_price_history';
+const CHART_MAX_POINTS = 5000;   // ~20h at 15s intervals
+const CHART_RANGES = {
+    '1H':  3600_000,
+    '4H':  14400_000,
+    '24H': 86400_000,
+    'ALL': Infinity,
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -189,6 +202,62 @@ function injectStyles() {
             border-radius: 8px; min-height: 2rem; min-width: 100px;
         }
         @keyframes trade-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+        /* ── Price Chart ── */
+        .trade-chart-card {
+            margin-top: 12px; border-radius: 16px; background: #131517;
+            border: 1px solid #2c2f36; overflow: hidden;
+        }
+        .trade-chart-header {
+            display: flex; justify-content: space-between; align-items: flex-start;
+            padding: 16px 20px 8px;
+        }
+        .trade-chart-price-block { display: flex; flex-direction: column; gap: 2px; }
+        .trade-chart-label { font-size: 11px; color: #98a1c0; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+        .trade-chart-current { font-size: 22px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
+        .trade-chart-change {
+            font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 3px;
+        }
+        .trade-chart-change.up { color: #22c55e; }
+        .trade-chart-change.down { color: #ef4444; }
+        .trade-chart-change.flat { color: #98a1c0; }
+        .trade-chart-ranges {
+            display: flex; gap: 4px; padding-top: 4px;
+        }
+        .trade-chart-range-btn {
+            padding: 4px 10px; border-radius: 8px; border: none;
+            background: transparent; color: #98a1c0; font-size: 11px;
+            font-weight: 600; cursor: pointer; transition: all 0.15s;
+        }
+        .trade-chart-range-btn:hover { color: #fff; background: rgba(76,130,251,0.1); }
+        .trade-chart-range-btn.active { color: #fff; background: #4c82fb; }
+        .trade-chart-canvas-wrap {
+            position: relative; width: 100%; height: 180px; padding: 0 4px 8px;
+        }
+        .trade-chart-canvas-wrap canvas {
+            width: 100%; height: 100%; display: block;
+        }
+        .trade-chart-empty {
+            display: flex; align-items: center; justify-content: center;
+            height: 180px; color: #98a1c0; font-size: 12px;
+            flex-direction: column; gap: 6px;
+        }
+        .trade-chart-empty i { font-size: 24px; opacity: 0.3; }
+        .trade-chart-tooltip {
+            position: absolute; pointer-events: none;
+            background: #1e2025; border: 1px solid #3c3f46;
+            border-radius: 8px; padding: 6px 10px;
+            font-size: 11px; color: #fff; white-space: nowrap;
+            transform: translate(-50%, -100%); margin-top: -10px;
+            z-index: 10; opacity: 0; transition: opacity 0.15s;
+        }
+        .trade-chart-tooltip.visible { opacity: 1; }
+        .trade-chart-crosshair {
+            position: absolute; top: 0; width: 1px; height: 100%;
+            background: rgba(76,130,251,0.3); pointer-events: none;
+            opacity: 0; transition: opacity 0.15s;
+        }
+        .trade-chart-crosshair.visible { opacity: 1; }
     `;
     document.head.appendChild(s);
 }
@@ -233,6 +302,7 @@ async function getPoolPrice() {
 
         updatePriceDisplay();
         recalcOutput();
+        recordPricePoint();
     } catch (e) {
         console.error('[Trade] getPoolPrice failed:', e);
     }
@@ -747,7 +817,283 @@ function renderSwapCard() {
             <span>Fee: 0.3%</span>
             <span class="trade-uni-badge"><i class="fa-solid fa-droplet"></i> Uniswap V3</span>
         </div>
+
+        <!-- Price Chart -->
+        <div class="trade-chart-card">
+            <div class="trade-chart-header">
+                <div class="trade-chart-price-block">
+                    <span class="trade-chart-label">BKC Price</span>
+                    <span id="chart-current-price" class="trade-chart-current">--</span>
+                    <span id="chart-change" class="trade-chart-change flat">--</span>
+                </div>
+                <div class="trade-chart-ranges">
+                    ${Object.keys(CHART_RANGES).map(r => `<button class="trade-chart-range-btn ${r === TS.chartRange ? 'active' : ''}" data-range="${r}">${r}</button>`).join('')}
+                </div>
+            </div>
+            <div class="trade-chart-canvas-wrap" id="chart-wrap">
+                <canvas id="trade-chart-canvas"></canvas>
+                <div class="trade-chart-crosshair" id="chart-crosshair"></div>
+                <div class="trade-chart-tooltip" id="chart-tooltip"></div>
+            </div>
+        </div>
     </div>`;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PRICE CHART
+// ════════════════════════════════════════════════════════════════════════════
+
+function loadPriceHistory() {
+    try {
+        const raw = localStorage.getItem(CHART_STORAGE_KEY);
+        if (raw) TS.priceHistory = JSON.parse(raw);
+    } catch (_) { TS.priceHistory = []; }
+}
+
+function savePriceHistory() {
+    try {
+        // Trim to max points
+        if (TS.priceHistory.length > CHART_MAX_POINTS) {
+            TS.priceHistory = TS.priceHistory.slice(-CHART_MAX_POINTS);
+        }
+        localStorage.setItem(CHART_STORAGE_KEY, JSON.stringify(TS.priceHistory));
+    } catch (_) {}
+}
+
+function recordPricePoint() {
+    const provider = State.publicProvider || State.provider;
+    if (!provider || TS.priceEthPerBkc <= 0) return;
+
+    getBkcPrice(provider).then(price => {
+        const now = Date.now();
+        // Avoid duplicates within 10s
+        const last = TS.priceHistory[TS.priceHistory.length - 1];
+        if (last && now - last.t < 10_000) return;
+
+        TS.priceHistory.push({ t: now, p: price.bkcUsd, e: price.bkcEth });
+        savePriceHistory();
+        drawChart();
+    }).catch(() => {});
+}
+
+function getChartData() {
+    const rangeMs = CHART_RANGES[TS.chartRange];
+    if (rangeMs === Infinity) return [...TS.priceHistory];
+    const cutoff = Date.now() - rangeMs;
+    return TS.priceHistory.filter(pt => pt.t >= cutoff);
+}
+
+function drawChart() {
+    const canvas = document.getElementById('trade-chart-canvas');
+    const wrap = document.getElementById('chart-wrap');
+    if (!canvas || !wrap) return;
+
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const rect = wrap.getBoundingClientRect();
+    const W = rect.width;
+    const H = rect.height;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, W, H);
+
+    const data = getChartData();
+
+    // Update header
+    updateChartHeader(data);
+
+    if (data.length < 2) {
+        // Show empty state message on canvas
+        ctx.fillStyle = '#98a1c0';
+        ctx.font = '12px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Collecting price data...', W / 2, H / 2 - 8);
+        ctx.font = '11px system-ui, sans-serif';
+        ctx.fillStyle = '#6b7280';
+        ctx.fillText('Chart updates every 15 seconds', W / 2, H / 2 + 12);
+        return;
+    }
+
+    // Determine price field — prefer USD, fall back to ETH
+    const useUsd = data.some(d => d.p > 0);
+    const prices = data.map(d => useUsd ? d.p : d.e);
+    const times = data.map(d => d.t);
+
+    const minP = Math.min(...prices);
+    const maxP = Math.max(...prices);
+    const range = maxP - minP || maxP * 0.01 || 0.0001;
+
+    const padX = 8;
+    const padTop = 10;
+    const padBot = 22;
+    const chartW = W - padX * 2;
+    const chartH = H - padTop - padBot;
+
+    const toX = (i) => padX + (i / (data.length - 1)) * chartW;
+    const toY = (p) => padTop + (1 - (p - minP) / range) * chartH;
+
+    // Gradient fill
+    const isUp = prices[prices.length - 1] >= prices[0];
+    const lineColor = isUp ? '#22c55e' : '#ef4444';
+    const gradTop = isUp ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)';
+    const gradBot = isUp ? 'rgba(34,197,94,0)' : 'rgba(239,68,68,0)';
+
+    // Draw fill
+    const gradient = ctx.createLinearGradient(0, padTop, 0, H - padBot);
+    gradient.addColorStop(0, gradTop);
+    gradient.addColorStop(1, gradBot);
+
+    ctx.beginPath();
+    ctx.moveTo(toX(0), toY(prices[0]));
+    for (let i = 1; i < prices.length; i++) {
+        ctx.lineTo(toX(i), toY(prices[i]));
+    }
+    ctx.lineTo(toX(prices.length - 1), H - padBot);
+    ctx.lineTo(toX(0), H - padBot);
+    ctx.closePath();
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    // Draw line
+    ctx.beginPath();
+    ctx.moveTo(toX(0), toY(prices[0]));
+    for (let i = 1; i < prices.length; i++) {
+        ctx.lineTo(toX(i), toY(prices[i]));
+    }
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 1.8;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    // Endpoint dot
+    const lastX = toX(prices.length - 1);
+    const lastY = toY(prices[prices.length - 1]);
+    ctx.beginPath();
+    ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = lineColor;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(lastX, lastY, 6, 0, Math.PI * 2);
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.3;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // Time labels
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '10px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    const labelCount = Math.min(5, data.length);
+    for (let i = 0; i < labelCount; i++) {
+        const idx = Math.round(i * (data.length - 1) / (labelCount - 1));
+        const date = new Date(times[idx]);
+        const label = date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
+        ctx.fillText(label, toX(idx), H - 4);
+    }
+
+    // Price labels (min/max)
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#4b5563';
+    ctx.font = '9px system-ui, sans-serif';
+    const prefix = useUsd ? '$' : '';
+    const decimals = useUsd ? (maxP < 0.01 ? 6 : 4) : 8;
+    ctx.fillText(prefix + maxP.toFixed(decimals), W - padX, padTop + 10);
+    ctx.fillText(prefix + minP.toFixed(decimals), W - padX, H - padBot - 4);
+
+    // Store chart layout for hover
+    canvas._chartMeta = { data, prices, times, useUsd, toX, toY, padX, padTop, padBot, chartW, chartH, W, H };
+}
+
+function updateChartHeader(data) {
+    const currentEl = document.getElementById('chart-current-price');
+    const changeEl = document.getElementById('chart-change');
+    if (!currentEl || !changeEl) return;
+
+    if (data.length === 0) {
+        currentEl.textContent = '--';
+        changeEl.textContent = '--';
+        changeEl.className = 'trade-chart-change flat';
+        return;
+    }
+
+    const last = data[data.length - 1];
+    const useUsd = data.some(d => d.p > 0);
+    const currentPrice = useUsd ? last.p : last.e;
+    const firstPrice = useUsd ? data[0].p : data[0].e;
+
+    if (useUsd) {
+        currentEl.textContent = formatUsd(currentPrice);
+    } else {
+        currentEl.textContent = currentPrice.toFixed(8) + ' ETH';
+    }
+
+    if (data.length >= 2 && firstPrice > 0) {
+        const changePct = ((currentPrice - firstPrice) / firstPrice) * 100;
+        const arrow = changePct >= 0 ? '\u25B2' : '\u25BC';
+        changeEl.textContent = `${arrow} ${Math.abs(changePct).toFixed(2)}% (${TS.chartRange})`;
+        changeEl.className = `trade-chart-change ${changePct > 0 ? 'up' : changePct < 0 ? 'down' : 'flat'}`;
+    } else {
+        changeEl.textContent = '--';
+        changeEl.className = 'trade-chart-change flat';
+    }
+}
+
+function setupChartEvents() {
+    const canvas = document.getElementById('trade-chart-canvas');
+    const wrap = document.getElementById('chart-wrap');
+    if (!canvas || !wrap) return;
+
+    // Range buttons
+    wrap.closest('.trade-chart-card')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-range]');
+        if (!btn) return;
+        TS.chartRange = btn.dataset.range;
+        wrap.closest('.trade-chart-card').querySelectorAll('.trade-chart-range-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        drawChart();
+    });
+
+    // Hover tooltip
+    canvas.addEventListener('mousemove', (e) => {
+        const meta = canvas._chartMeta;
+        if (!meta || meta.data.length < 2) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const ratio = (x - meta.padX) / meta.chartW;
+        const idx = Math.round(ratio * (meta.data.length - 1));
+        if (idx < 0 || idx >= meta.data.length) return;
+
+        const pt = meta.data[idx];
+        const price = meta.useUsd ? pt.p : pt.e;
+        const prefix = meta.useUsd ? '$' : '';
+        const decimals = meta.useUsd ? (price < 0.01 ? 6 : 4) : 8;
+        const suffix = meta.useUsd ? '' : ' ETH';
+        const date = new Date(pt.t);
+        const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+        const tooltip = document.getElementById('chart-tooltip');
+        const crosshair = document.getElementById('chart-crosshair');
+        if (tooltip) {
+            tooltip.textContent = `${prefix}${price.toFixed(decimals)}${suffix}  ·  ${timeStr}`;
+            tooltip.style.left = meta.toX(idx) + 'px';
+            tooltip.style.top = meta.toY(price) + 'px';
+            tooltip.classList.add('visible');
+        }
+        if (crosshair) {
+            crosshair.style.left = meta.toX(idx) + 'px';
+            crosshair.classList.add('visible');
+        }
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+        const tooltip = document.getElementById('chart-tooltip');
+        const crosshair = document.getElementById('chart-crosshair');
+        if (tooltip) tooltip.classList.remove('visible');
+        if (crosshair) crosshair.classList.remove('visible');
+    });
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -890,11 +1236,14 @@ function render(isNewPage) {
     if (!container) return;
 
     if (isNewPage) {
+        loadPriceHistory();
         renderSwapCard();
         setupEvents();
+        setupChartEvents();
         getPoolPrice();
         loadBalances();
         startPriceRefresh();
+        drawChart();
     }
 
     updateSwapButton();
