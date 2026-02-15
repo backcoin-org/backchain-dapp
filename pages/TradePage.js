@@ -267,7 +267,7 @@ function calculateEstimatedOutput() {
     }
 
     const effectiveInput = val * (1 - fee);
-    const outputNum = effectiveInput * reserveOut / (reserveIn + effectiveInput);
+    let outputNum = effectiveInput * reserveOut / (reserveIn + effectiveInput);
 
     if (outputNum <= 0) {
         TS.estimatedOutput = 0n;
@@ -275,6 +275,11 @@ function calculateEstimatedOutput() {
         TS.priceImpact = 0;
         return;
     }
+
+    // V3 concentrated liquidity: virtual reserves overestimate output when
+    // swap crosses tick boundaries. Apply conservative 5% buffer for UI estimate.
+    // Actual execution uses staticCall for exact output.
+    outputNum *= 0.95;
 
     // Price impact
     const midPrice = reserveOut / reserveIn;
@@ -334,9 +339,6 @@ async function executeBuySwap(btn) {
         const amountIn = ethers.parseEther(TS.inputAmount);
         if (amountIn === 0n) throw new Error('Enter an amount');
 
-        const slippageBps = BigInt(Math.floor(TS.slippage * 100));
-        const amountOutMin = TS.estimatedOutput * (10000n - slippageBps) / 10000n;
-
         // Validate
         if (TS.ethBalance < amountIn + GAS_RESERVE) {
             throw new Error('Insufficient ETH (need amount + gas)');
@@ -359,16 +361,27 @@ async function executeBuySwap(btn) {
             await appTx.wait();
         }
 
-        // Step 3: Swap
-        setSwapBtn(btn, 'Confirm in Wallet...', true);
-        const swapTx = await router.exactInputSingle({
+        // Step 3: Get real output via staticCall, then apply slippage
+        setSwapBtn(btn, 'Getting quote...', true);
+        const swapParams = {
             tokenIn: WETH9,
             tokenOut: BKC_TOKEN,
             fee: FEE_TIER,
             recipient: State.userAddress,
             amountIn,
-            amountOutMinimum: amountOutMin,
+            amountOutMinimum: 0n,
             sqrtPriceLimitX96: 0n,
+        };
+        const realOutput = await router.exactInputSingle.staticCall(swapParams, { from: State.userAddress });
+        const slippageBps = BigInt(Math.floor(TS.slippage * 100));
+        const amountOutMin = realOutput * (10000n - slippageBps) / 10000n;
+        console.log(`[Trade] Buy quote: real=${ethers.formatEther(realOutput)} BKC, min=${ethers.formatEther(amountOutMin)} BKC`);
+
+        // Step 4: Swap
+        setSwapBtn(btn, 'Confirm in Wallet...', true);
+        const swapTx = await router.exactInputSingle({
+            ...swapParams,
+            amountOutMinimum: amountOutMin,
         });
 
         setSwapBtn(btn, 'Processing...', true);
@@ -394,9 +407,6 @@ async function executeSellSwap(btn) {
         const amountIn = ethers.parseEther(TS.inputAmount);
         if (amountIn === 0n) throw new Error('Enter an amount');
 
-        const slippageBps = BigInt(Math.floor(TS.slippage * 100));
-        const amountOutMin = TS.estimatedOutput * (10000n - slippageBps) / 10000n;
-
         // Validate
         if (TS.bkcBalance < amountIn) {
             throw new Error(`Insufficient BKC`);
@@ -414,7 +424,22 @@ async function executeSellSwap(btn) {
             await appTx.wait();
         }
 
-        // Step 2: Multicall (exactInputSingle + unwrapWETH9)
+        // Step 2: Get real output via staticCall, then apply slippage
+        setSwapBtn(btn, 'Getting quote...', true);
+        const realOutput = await router.exactInputSingle.staticCall({
+            tokenIn: BKC_TOKEN,
+            tokenOut: WETH9,
+            fee: FEE_TIER,
+            recipient: SWAP_ROUTER,
+            amountIn,
+            amountOutMinimum: 0n,
+            sqrtPriceLimitX96: 0n,
+        }, { from: State.userAddress });
+        const slippageBps = BigInt(Math.floor(TS.slippage * 100));
+        const amountOutMin = realOutput * (10000n - slippageBps) / 10000n;
+        console.log(`[Trade] Sell quote: real=${ethers.formatEther(realOutput)} ETH, min=${ethers.formatEther(amountOutMin)} ETH`);
+
+        // Step 3: Multicall (exactInputSingle + unwrapWETH9)
         setSwapBtn(btn, 'Confirm in Wallet...', true);
         const iface = new ethers.Interface(SWAP_ROUTER_ABI);
 
@@ -422,7 +447,7 @@ async function executeSellSwap(btn) {
             tokenIn: BKC_TOKEN,
             tokenOut: WETH9,
             fee: FEE_TIER,
-            recipient: SWAP_ROUTER,   // router holds WETH temporarily
+            recipient: SWAP_ROUTER,
             amountIn,
             amountOutMinimum: amountOutMin,
             sqrtPriceLimitX96: 0n,
