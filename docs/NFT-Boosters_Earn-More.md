@@ -1,75 +1,87 @@
-# NFT Boosters — Ganhe Mais com seus Tokens
+# NFT Boosters — O Item Mais Importante do Ecossistema
 
-Quatro tiers de NFTs utilitarios que aumentam diretamente seus ganhos de staking. Eles reduzem a taxa de burn quando voce clama recompensas de mineracao — quanto melhor o NFT, mais voce recebe.
+Se voce faz staking no Backcoin e nao tem um NFT Booster, voce esta **perdendo metade das suas recompensas**. Literalmente. Sem NFT, 50% de tudo que voce ganha e queimado no claim. Com um Diamond, voce recebe 100%.
 
-Contrato: 0x5507F70c71b8e1C694841E214fe8F9Dd7c899448 (ERC-721)
+Booster NFTs nao sao itens cosmeticos. Sao a diferenca entre ganhar e ganhar o dobro.
+
+> **Contrato:** `0x5507F70c71b8e1C694841E214fe8F9Dd7c899448` (ERC-721)
 
 ---
 
 ## Os Quatro Tiers
 
-| Tier | Boost | Taxa de Burn | Voce Recebe | Cor |
-|------|-------|-------------|-------------|-----|
-| Diamond | 50% | 0% | 100% | Ciano |
-| Gold | 40% | 10% | 90% | Amarelo |
-| Silver | 25% | 25% | 75% | Cinza |
-| Bronze | 10% | 40% | 60% | Ambar |
+| Tier | Boost | Burn no Claim | Voce Recebe | Cor |
+|------|-------|--------------|-------------|-----|
+| **Diamond** | 50% | 0% | **100%** | Ciano |
+| **Gold** | 40% | 10% | **90%** | Amarelo |
+| **Silver** | 25% | 25% | 75% | Cinza |
+| **Bronze** | 10% | 40% | 60% | Ambar |
 
-Sem nenhum NFT, a taxa de burn padrao e 50% — voce perde metade das suas recompensas toda vez que clama. Ate um Bronze ja salva 10% em cada claim, e em centenas de claims, essa diferenca e enorme.
+Sem NFT, o burn padrao e **50%**. Voce trabalha pra acumular recompensas e perde metade toda vez que clama.
 
 ---
 
-## Por Que Importam
+## O Impacto Real nos Seus Ganhos
 
-Considere um delegador ganhando 10.000 BKC em recompensas:
+Numeros falam mais alto. Imagine que voce acumulou 10.000 BKC em recompensas:
 
-| NFT | Queimado | Voce Recebe | Economia vs Sem NFT |
-|-----|----------|------------|---------------------|
+| Seu NFT | Queimado | Voce Recebe | Diferenca |
+|---------|----------|------------|-----------|
 | Nenhum | 5.000 BKC | 5.000 BKC | — |
-| Bronze | 4.000 BKC | 6.000 BKC | +1.000 BKC |
-| Silver | 2.500 BKC | 7.500 BKC | +2.500 BKC |
-| Gold | 1.000 BKC | 9.000 BKC | +4.000 BKC |
-| Diamond | 0 BKC | 10.000 BKC | +5.000 BKC |
+| Bronze | 4.000 BKC | **6.000 BKC** | +1.000 BKC |
+| Silver | 2.500 BKC | **7.500 BKC** | +2.500 BKC |
+| Gold | 1.000 BKC | **9.000 BKC** | +4.000 BKC |
+| Diamond | 0 BKC | **10.000 BKC** | +5.000 BKC |
 
-Um holder de Diamond ganha o dobro de alguem sem NFT, com a mesma posicao de staking.
+Agora multiplique isso por dezenas de claims ao longo de meses. A diferenca entre nao ter NFT e ter um Diamond **se acumula exponencialmente** — especialmente se voce re-delega as recompensas extras.
+
+> **A conta que importa:** Se voce ganha 10.000 BKC por mes e re-delega, em 1 ano sem NFT voce teria acumulado ~60.000 BKC em recompensas liquidas. Com Diamond, ~120.000 BKC. Dobro. Mesmo staking, mesma quantidade, mesmo periodo.
 
 ---
 
 ## Como Conseguir Um
 
-Booster NFTs sao negociados em pools de bonding curve. O preco muda baseado em oferta e demanda — sem listings, sem leiloes, trades instantaneos.
+NFT Boosters sao negociados em **pools de bonding curve** — mercados automaticos onde o preco se move baseado em oferta e demanda. Sem listings, sem leiloes, sem espera. Compra e venda instantanea.
 
 | Pool | Endereco |
 |------|---------|
-| Bronze Pool | 0xeE0953171514608f8b8F7B5A343c8123b2BfE8bD |
-| Silver Pool | 0xA8e76C5E21235fC2889A25Dff0769fFf5C784639 |
-| Gold Pool | 0xbcDc78a2C985722C170153015957Acb73df08F89 |
-| Diamond Pool | 0x2d9fb50A5d147598fBb1151F75B8C3E261fb1Dea |
+| Bronze | `0xeE0953171514608f8b8F7B5A343c8123b2BfE8bD` |
+| Silver | `0xA8e76C5E21235fC2889A25Dff0769fFf5C784639` |
+| Gold | `0xbcDc78a2C985722C170153015957Acb73df08F89` |
+| Diamond | `0x2d9fb50A5d147598fBb1151F75B8C3E261fb1Dea` |
 
-Veja [Trading de NFT](./NFT-Trading_Instant-Buy-Sell.md) pra detalhes de como as bonding curves funcionam.
+> Entenda como os precos funcionam: [Trading de NFT](./NFT-Trading_Instant-Buy-Sell.md)
 
 ---
 
-## Alugar ao Inves de Comprar
+## Nao Pode Comprar? Alugue.
 
-Nao tem grana pra um NFT de tier alto? Alugue um. O Mercado de Aluguel deixa voce aproveitar o boost de staking sem comprar o NFT. Donos ganham ETH passivo, locatarios economizam no burn.
+Nao tem capital pra um Diamond agora? O **Mercado de Aluguel** existe exatamente pra isso. Alugue um NFT de tier alto por um periodo, aproveite o boost no staking, e devolva automaticamente quando acabar.
 
-Veja [Aluguel de NFT](./NFT-Rental_Affordable-Boost.md) pra detalhes.
+A estrategia mais inteligente: alugue um Diamond **logo antes de clamar** um acumulo grande de recompensas. O custo do aluguel e uma fracao do que voce economiza no burn.
+
+> Detalhes: [Aluguel de NFT](./NFT-Rental_Affordable-Boost.md)
 
 ---
 
 ## Fatos Importantes
 
-- Padrao ERC-721 — Compativel com qualquer marketplace de NFTs
-- Supply fixo — Uma vez mintados, nenhum NFT novo pode ser criado
-- Um boost ativo por carteira — Seu melhor NFT (proprio ou alugado) e usado automaticamente
-- Sem funcoes de admin — Supply e permanente, sem mint depois da configuracao
-- Totalmente negociaveis — Compre, venda, alugue ou transfira livremente
+| Caracteristica | Detalhe |
+|---------------|---------|
+| **Padrao** | ERC-721 — compativel com qualquer marketplace |
+| **Supply** | Fixo — uma vez mintados, nenhum novo pode ser criado |
+| **Boost ativo** | Um por carteira — seu melhor NFT (proprio ou alugado) se aplica automaticamente |
+| **Admin** | Nenhum — sem funcoes de mint, pause ou blacklist |
+| **Negociabilidade** | Total — compre, venda, alugue, transfira livremente |
 
 ---
 
-## Pra Builders
+## Pra Builders: Uma Mina de Comissoes
 
-NFT Pools suportam o Sistema de Operadores. Cada transacao de compra e venda pelo seu frontend te ganha comissao na taxa ETH. Como trading de NFT e frequente e de alto valor, essa e uma das oportunidades mais lucrativas pra operadores.
+NFT Pools suportam o Sistema de Operadores. Cada trade de compra/venda de NFT pelo seu frontend gera comissao ETH pra voce.
 
-Veja tambem: [Trading de NFT](./NFT-Trading_Instant-Buy-Sell.md) | [Aluguel de NFT](./NFT-Rental_Affordable-Boost.md) | [Staking](./Staking_Lock-and-Earn.md)
+Trading de NFT e uma das atividades de **maior valor e maior frequencia** no ecossistema — usuarios compram e vendem regularmente conforme os precos da bonding curve se movem. Pra operadores, isso se traduz em receita consistente.
+
+---
+
+Continue: [Trading de NFT](./NFT-Trading_Instant-Buy-Sell.md) | [Aluguel de NFT](./NFT-Rental_Affordable-Boost.md) | [Staking](./Staking_Lock-and-Earn.md)

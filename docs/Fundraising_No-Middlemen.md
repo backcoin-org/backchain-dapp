@@ -1,82 +1,92 @@
 # Arrecadacao — Vaquinha sem Intermediarios
 
-Lance campanhas de arrecadacao sem ninguem no meio. Criadores recebem 100% das doacoes (menos uma pequena taxa de rede). Sem corte de plataforma, sem processo de aprovacao, sem atrasos de saque.
+Plataformas de crowdfunding cobram 5-10% de taxa, exigem aprovacao, atrasam saques e decidem quem pode arrecadar. O Backcoin resolve isso com um contrato inteligente: crie uma campanha em 30 segundos, receba 100% das doacoes, e saque quando quiser. Sem empresa no meio.
 
-Contrato: 0x31E8B7F825610aFd3d5d25C11e9C062D27289BB2
+> **Contrato:** `0x31E8B7F825610aFd3d5d25C11e9C062D27289BB2`
 
 ---
 
 ## Como Funciona
 
-Pra Criadores de Campanha:
-1. Crie uma campanha com titulo e descricao → Pequena taxa ETH pra prevencao de spam
-2. Compartilhe o link da sua campanha → Qualquer pessoa pode doar
-3. Feche a campanha quando quiser (ou deixe aberta indefinidamente)
-4. Saque todo o ETH acumulado pra sua carteira
+**Pra quem cria a campanha:**
+1. **Crie** — Titulo, descricao, e uma pequena taxa ETH pra prevenir spam
+2. **Compartilhe** — Qualquer pessoa pode doar pelo link
+3. **Receba** — Doacoes vao direto pro contrato, vinculadas a sua campanha
+4. **Saque** — Retire o ETH acumulado pra sua carteira quando quiser
+5. **Feche** — Encerre a campanha quando alcancou seu objetivo (ou deixe aberta)
 
-Pra Doadores:
-1. Navegue pelas campanhas ativas
-2. Doe qualquer valor em ETH
-3. Sua doacao (menos uma pequena taxa) vai direto pro criador da campanha
-4. Sem reembolso, sem tudo-ou-nada — modelo de doacao pura
+**Pra quem doa:**
+1. **Navegue** pelas campanhas ativas
+2. **Doe** qualquer valor em ETH
+3. **Transparencia total** — veja exatamente quanto foi arrecadado e sacado, on-chain
 
 ---
 
-## Principios
+## O Que Torna Diferente
 
-Sem meta minima. Crowdfunding tradicional exige bater uma meta ou perder tudo. A Arrecadacao e mais simples — cada doacao vai pro criador imediatamente. Se voce arrecada 0.01 ETH ou 100 ETH, e seu.
+**Sem meta minima.** Crowdfunding tradicional exige atingir uma meta ou perder tudo. Aqui cada doacao e sua — arrecadou 0.01 ETH ou 100 ETH, e tudo seu.
 
-Sem corte de plataforma. O contrato cobra uma pequena taxa ETH pro ecossistema (que alimenta buyback, operadores e referenciadores), mas nao tem taxa percentual de plataforma sobre doacoes. Criadores recebem a grande maioria do que e doado.
+**Sem corte de plataforma.** Nao tem taxa percentual sobre doacoes. Existe uma pequena taxa ETH pro ecossistema (que alimenta operadores, referenciadores e buyback), mas o criador recebe a grande maioria.
 
-Sem aprovacao. Qualquer pessoa pode criar campanha. Nao tem processo de revisao, nao tem termos de servico, nao tem moderacao de conteudo. Esse e um protocolo sem permissao — funciona igual pra todo mundo.
+**Sem aprovacao.** Qualquer pessoa pode criar campanha. Sem revisao editorial, sem termos de uso, sem moderacao. E um protocolo sem permissao — funciona igual pra todo mundo.
 
-Saques por demanda. Criadores de campanha sacam fundos no seu proprio ritmo. ETH acumula seguramente no contrato ate o criador estar pronto pra clamar.
+**Saque por demanda.** Nao precisa esperar a campanha fechar. ETH acumula seguramente no contrato ate voce decidir sacar.
 
 ---
 
 ## Taxas
 
-| Acao | Tipo de Taxa |
-|------|-------------|
-| Criar Campanha | Pequena taxa ETH (prevencao de spam) |
+| Acao | Custo |
+|------|-------|
+| Criar campanha | Pequena taxa ETH (anti-spam) |
 | Doar | Taxa ETH baseada em valor (porcentagem da doacao) |
-| Fechar Campanha | Gratis |
-| Sacar Fundos | Gratis |
+| Fechar campanha | **Gratis** |
+| Sacar fundos | **Gratis** |
 
-Taxas suportam o ecossistema: operadores ganham comissoes, referenciadores ganham recompensas, e o restante vai pra tesouro e buyback.
+As taxas alimentam o ecossistema: operadores ganham comissao, referenciadores ganham recompensas, e o restante vai pra tesouro e buyback.
 
 ---
 
 ## Casos de Uso
 
-- Projetos comunitarios — Financie desenvolvimento, infraestrutura ou eventos
-- Ajuda emergencial — Setup rapido, acesso imediato aos fundos
-- Projetos criativos — Arte, musica, criacao de conteudo
-- Open source — Financie bens publicos sem intermediarios
-- Causas pessoais — Despesas medicas, educacao, eventos de vida
+| Tipo | Exemplos |
+|------|---------|
+| **Projetos comunitarios** | Financie desenvolvimento, infraestrutura, eventos locais |
+| **Emergencias** | Setup rapido, acesso imediato aos fundos, sem burocracia |
+| **Projetos criativos** | Arte, musica, podcasts, documentarios |
+| **Open source** | Financie bens publicos sem intermediarios ou taxas de plataforma |
+| **Causas pessoais** | Despesas medicas, educacao, eventos de vida |
+| **DAOs** | Financiamento de tesouro comunitario |
 
 ---
 
-## Suporte a Operadores
+## Transparencia On-Chain
 
-Tanto criacao de campanhas quanto doacoes suportam o Sistema de Operadores. Construa uma plataforma de arrecadacao e ganhe comissoes em cada doacao fluindo pela sua interface.
+Tudo esta visivel na blockchain:
 
-Negocios potenciais pra operadores:
-- Plataforma de arrecadacao regional (sirva sua comunidade local)
-- Plataforma por causa (ambiental, medico, educacao)
-- Ferramenta de financiamento de tesouro DAO
-- Coordenacao de resposta emergencial
+| O Que | Onde |
+|-------|-----|
+| Total arrecadado por campanha | Verificavel no contrato |
+| Historico de saques | Rastreavel on-chain |
+| Valores de taxas | Verificaveis no Ecosystem |
+| Cada doacao individual | Registrada como transacao |
+
+Nao tem custos escondidos, nao tem cobrancas surpresa. Doadores veem exatamente quanto foi pro criador e quanto foi pra taxas, diretamente no Arbiscan.
 
 ---
 
-## Transparencia
+## Pra Operadores: Monte uma Plataforma de Arrecadacao
 
-Tudo esta on-chain:
-- Total de doacoes visivel pra cada campanha
-- Historico de saques rastreavel
-- Valores de taxas verificaveis
-- Sem custos escondidos ou cobrancas surpresa
+Doacoes e criacao de campanhas suportam o Sistema de Operadores. Construa uma plataforma e ganhe comissao em cada doacao que flui pelo seu frontend.
 
-Doadores podem verificar exatamente quanto foi pro criador e quanto foi pra taxas, diretamente na blockchain.
+**Ideias de negocio:**
+- Plataforma de arrecadacao regional (sirva sua cidade ou comunidade)
+- Plataforma tematica (ambiental, educacao, saude)
+- Ferramenta de funding pra DAOs e comunidades crypto
+- Sistema de resposta emergencial com arrecadacao rapida
 
-Veja tambem: [Taxas](./Fees_Complete-Table.md) | [Operadores](./Operators_Build-and-Earn.md) | [Enderecos](./Addresses_All-Contracts.md)
+Campanhas recebem multiplas doacoes — cada uma gera comissao. Uma campanha popular pode gerar **dezenas de transacoes**, todas gerando receita pro operador.
+
+---
+
+Continue: [Taxas](./Fees_Complete-Table.md) | [Operadores](./Operators_Build-and-Earn.md) | [Enderecos](./Addresses_All-Contracts.md)

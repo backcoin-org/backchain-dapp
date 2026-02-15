@@ -1,89 +1,106 @@
-# Governanca — O Poder Vai pra Comunidade
+# Governanca — Do Admin ao DAO, Sem Volta
 
-Backcoin segue um modelo de descentralizacao progressiva. O sistema comeca com um admin pra iteracao rapida, e gradualmente transfere controle pra comunidade em etapas irreversiveis.
+O Backcoin segue um modelo de **descentralizacao progressiva**. Comeca com um admin pra iterar rapido, e gradualmente transfere controle total pra comunidade em quatro fases. Cada transicao e **irreversivel** — uma vez que o poder e distribuido, nunca pode ser recentralizado.
 
-Contrato: 0xA82F69f079566958c16F601A9625E40AeEeFbFf8
+> **Contrato:** `0xA82F69f079566958c16F601A9625E40AeEeFbFf8`
 
 ---
 
 ## As Quatro Fases
 
-Cada fase e uma transicao de mao unica. Uma vez que avanca, nao tem volta.
+Cada fase e uma transicao de mao unica. O poder so flui numa direcao: do centro pra comunidade.
 
-Fase 1: Admin (Atual)
+### Fase 1: Admin (Atual)
 - Uma carteira admin controla parametros do ecossistema
 - Mudancas executam instantaneamente
-- Permite iteracao rapida durante testnet e mainnet inicial
+- Necessario pra iteracao rapida durante testnet e mainnet inicial
 
-Fase 2: Multisig
-- Admin transfere controle pra um Gnosis Safe (carteira multi-assinatura)
+### Fase 2: Multisig
+- Controle transferido pra um Gnosis Safe (carteira multi-assinatura)
 - Multiplos signatarios precisam concordar em qualquer mudanca
-- Execucao ainda instantanea, mas nenhuma pessoa sozinha pode agir
+- Nenhuma pessoa sozinha pode agir unilateralmente
 
-Fase 3: Timelock
-- Todas as mudancas precisam ser enfileiradas com atraso (1 hora a 30 dias)
+### Fase 3: Timelock
+- Todas as mudancas sao **enfileiradas com atraso** (1 hora a 30 dias)
 - Qualquer pessoa pode inspecionar mudancas pendentes antes de executarem
-- Periodo de graca de 7 dias — se uma mudanca nao e executada a tempo, expira
-- Comunidade tem tempo pra reagir a qualquer proposta de mudanca
+- Periodo de graca de 7 dias — se nao executada a tempo, expira
+- A comunidade tem tempo real pra reagir a qualquer proposta
 
-Fase 4: DAO
-- Membros da comunidade propoem e votam em mudancas
-- Propostas executam pelo timelock
-- Controle total da comunidade sobre parametros do ecossistema
-- O time original nao tem privilegios especiais
+### Fase 4: DAO
+- Membros da comunidade **propoem e votam** em mudancas
+- Propostas aprovadas executam pelo timelock
+- Controle total da comunidade sobre parametros
+- O time original nao tem nenhum privilegio especial
+
+> **A garantia:** Cada transicao e gravada na blockchain e **impossivel de reverter**. Uma vez na Fase 4, ninguem — nem o time original — pode voltar atras.
 
 ---
 
 ## O Que Governanca Pode Mudar
 
-Governanca controla apenas parametros do contrato BackchainEcosystem:
-- Valores e multiplicadores de taxas
-- Divisao de distribuicao de taxas (operador, referenciador, tesouro, buyback)
-- Parametros de distribuicao BKC (burn, delegadores, tesouro)
-- Enderecos de tesouro e buyback
+Governanca controla **apenas** os parametros do contrato BackchainEcosystem:
+
+| Parametro | Exemplo |
+|-----------|---------|
+| Valores e multiplicadores de taxas | Ajustar custo de cada acao |
+| Divisao de taxas ETH | Proporcao entre operador, referenciador, tesouro, buyback |
+| Divisao de taxas BKC | Proporcao entre burn, delegadores, tesouro |
+| Enderecos de tesouro e buyback | Alterar destino de fundos |
 
 ---
 
-## O Que Governanca Nao Pode Mudar
+## O Que Governanca NAO Pode Mudar
 
-Todos os outros contratos sao imutaveis. Governanca nao pode:
-- Pausar ou congelar nenhum contrato
-- Mudar o supply do token BKC ou regras de mint
-- Modificar a mecanica do Staking Pool
-- Alterar tiers ou probabilidades do Fortune Pool
-- Mudar taxas de burn dos NFT Boosters
-- Modificar a taxa de swap do Pool de Liquidez
-- Criar blacklist ou congelar tokens de nenhum usuario
-- Fazer upgrade ou substituir nenhum contrato deployado
+E aqui esta o mais importante. **Todos os outros contratos sao imutaveis.** Governanca nao tem poder pra:
 
-Isso e por design. O protocolo central e imparavel — governanca so ajusta parametros economicos.
+| Acao Impossivel | Por Que |
+|----------------|---------|
+| Pausar ou congelar qualquer contrato | Nao existe funcao de pause |
+| Mudar supply do BKC ou regras de mint | Codificado no token |
+| Modificar mecanica do Staking Pool | Contrato imutavel |
+| Alterar probabilidades do Fortune Pool | Codificado no contrato |
+| Mudar taxas de burn dos NFT Boosters | Codificado no contrato |
+| Modificar taxa de swap do Pool de Liquidez | Codificado no contrato |
+| Blacklist ou congelar tokens de usuarios | Nao existe funcao |
+| Fazer upgrade de qualquer contrato | Nao sao upgradeable |
 
----
-
-## Limites de Seguranca
-
-Mesmo com controle total da DAO, o ecossistema impoe limites codificados:
-- Taxa ETH maxima: 50% (nao pode cobrar mais)
-- Multiplicador de gas maximo: 2.000.000x
-- Estimativa de gas maxima: 30.000.000
-
-Esses limites estao no codigo do contrato e nao podem ser mudados por governanca ou nenhum admin.
+Isso e por design. O protocolo central e **imparavel**. Governanca ajusta parametros economicos, nao as regras do jogo.
 
 ---
 
-## Por Que Progressiva?
+## Limites de Seguranca (Mesmo com DAO)
 
-Governanca DAO desde o dia um soa otimo na teoria, mas na pratica:
-- Protocolos em estagio inicial precisam iterar rapido
-- Distribuicao de tokens precisa de tempo pra ficar ampla o suficiente pra votacao justa
-- Parametros de smart contracts precisam de testes antes de travar
+Mesmo com controle total da comunidade, existem limites **codificados no contrato** que ninguem pode ultrapassar:
 
-Comecando centralizado e descentralizando progressivamente, o Backcoin pega o melhor dos dois mundos: agilidade quando necessario, e controle total da comunidade quando o sistema esta maduro.
+| Limite | Valor |
+|--------|-------|
+| Taxa ETH maxima | 50% (5.000 basis points) |
+| Multiplicador de gas maximo | 2.000.000x |
+| Estimativa de gas maxima | 30.000.000 |
+
+Esses limites sao hardcoded. Nem governanca, nem admin, nem nenhum exploit pode exceder.
+
+---
+
+## Por Que Progressiva (E Nao Dia Um)?
+
+DAO desde o dia um soa otimo em teoria. Na pratica, e uma receita pra problemas:
+
+| Realidade | Por Que Descentralizacao Gradual Funciona Melhor |
+|-----------|-----------------------------------------------|
+| Iteracao rapida | Protocolos novos precisam ajustar parametros constantemente |
+| Distribuicao de tokens | Leva tempo pra tokens estarem bem distribuidos pra votacao justa |
+| Testes | Parametros precisam de calibragem antes de travar |
+| Seguranca | Governanca imatura pode ser explorada por whales |
+
+Comecando centralizado e descentralizando **de forma irreversivel**, o Backcoin captura o melhor dos dois mundos: agilidade quando o protocolo e jovem, e controle total da comunidade quando o sistema esta maduro.
 
 ---
 
 ## Cronograma
 
-Nao tem cronograma fixo pra transicoes de fase. Cada avanco acontece quando a comunidade e o ecossistema estao prontos. A garantia chave e que cada transicao e irreversivel — uma vez que o controle e distribuido, nunca pode ser recentralizado.
+Nao tem data fixa pra cada transicao. Cada avanco acontece quando a comunidade e o ecossistema estao prontos. O que **e** garantido e que cada transicao so vai numa direcao — uma vez que o controle e distribuido, ele nunca volta.
 
-Veja tambem: [Economia](./Economy_How-It-Works.md) | [Enderecos](./Addresses_All-Contracts.md)
+---
+
+Continue: [Economia](./Economy_How-It-Works.md) | [Enderecos](./Addresses_All-Contracts.md)

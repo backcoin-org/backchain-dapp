@@ -1,77 +1,109 @@
 # Mineracao — De Taxas a Recompensas
 
-O Buyback Miner e o motor economico do Backcoin. Ele converte taxas do protocolo em recompensas de staking, cria pressao de compra no BKC, e reduz supply com burns. Tudo automatico e sem permissao.
+O Buyback Miner e o coracao economico do Backcoin. Ele faz tres coisas ao mesmo tempo: compra BKC do mercado (pressao de alta), minta novos BKC como recompensa (incentivo), e queima uma parte (deflacao). Tudo automatico, sem permissao, e qualquer pessoa pode acionar — e ganhar por fazer isso.
 
-Contrato: 0xD0B684Be70213dFbdeFaecaFECB50232897EC843
-
----
-
-## Como Funciona
-
-1. Usuarios interagem com os servicos Backcoin → taxas ETH acumulam no ecossistema
-2. Qualquer pessoa pode chamar executeBuyback() pra iniciar um ciclo de mineracao
-3. Quem chama ganha 5% do ETH como incentivo (sem whitelist, sem permissao)
-4. Os 95% restantes compram BKC do Pool de Liquidez
-5. Novos BKC sao mintados baseado na curva de escassez
-6. 5% do total de BKC (comprado + mintado) e queimado permanentemente
-7. 95% vai pro Staking Pool como recompensas pros delegadores
-
-Esse ciclo roda toda vez que alguem aciona. Nao tem agenda, nao tem admin, nao tem gatekeeper. Se tem ETH pra converter, qualquer pessoa pode fazer e ganhar o incentivo de 5%.
+> **Contrato:** `0xD0B684Be70213dFbdeFaecaFECB50232897EC843`
 
 ---
 
-## Curva de Escassez
+## O Ciclo em 7 Passos
 
-A quantidade de novos BKC mintados por ciclo diminui conforme o supply cresce:
+```
+1. Usuarios usam o Backcoin (staking, jogos, NFTs, posts...)
+       ↓
+2. Taxas ETH acumulam no contrato do ecossistema
+       ↓
+3. Qualquer pessoa chama executeBuyback()
+       ↓
+4. Quem chamou ganha 5% do ETH como incentivo
+       ↓
+5. Os 95% restantes compram BKC do Pool de Liquidez
+       ↓
+6. Novos BKC sao mintados baseado na curva de escassez
+       ↓
+7. 5% do BKC total e queimado | 95% vai como recompensas
+```
+
+Nao tem agenda. Nao tem admin. Nao tem whitelist. Se tem ETH acumulado, **qualquer pessoa** pode acionar o ciclo e ficar com 5% do valor. O restante vira recompensas pros delegadores.
+
+---
+
+## A Curva de Escassez: Por Que Entrar Cedo Importa
+
+A quantidade de novos BKC mintados por ciclo diminui conforme o supply cresce. Isso e intencional — cria escassez natural e recompensa participantes que entram cedo.
 
 ```
 Taxa de Mineracao = (200M - Supply Atual) / 160M
 
-Inicio (supply 40M):   100% — 1 BKC comprado = 1 BKC mintado
-Meio (supply 120M):     50% — 1 BKC comprado = 0.5 BKC mintado
-Fim (supply 180M):    12.5% — 1 BKC comprado = 0.125 BKC mintado
-Teto (supply 200M):      0% — sem novo mint, yield real puro
+Supply 40M  → 100% — Cada 1 BKC comprado = 1 BKC mintado extra
+Supply 80M  →  75%
+Supply 120M →  50% — Mineracao cai pela metade
+Supply 160M →  25%
+Supply 200M →   0% — Teto alcancado, yield real puro
 ```
 
-Isso e importante: recompensas nunca param. Quando o teto de 200M e alcancado, delegadores ainda ganham com a parte de buyback (BKC comprado do pool). Apenas o bonus de mineracao vai a zero.
+**O ponto crucial:** recompensas **nunca param**. Quando o teto de 200M e alcancado, nenhum BKC novo e mintado — mas os buybacks continuam. Delegadores ainda ganham com BKC comprado do pool de liquidez. Apenas o bonus de mineracao vai a zero.
+
+Isso significa que staking no Backcoin gera **yield real** baseado em atividade real do protocolo, nao em impressao inflacionaria.
 
 ---
 
-## Por Que Isso Importa
+## Os Tres Efeitos Simultaneos
 
-O Buyback Miner cria tres forcas poderosas:
+Cada ciclo de buyback cria tres forcas que trabalham juntas:
 
-1. Pressao de compra constante — Taxas do protocolo compram BKC do mercado continuamente
-2. Reducao de supply — 5% de burn por ciclo remove BKC de circulacao permanentemente
-3. Recompensas pros delegadores — Participantes ativos ganham yield real baseado em uso real do protocolo
+| Efeito | O Que Acontece | Por Que Importa |
+|--------|---------------|-----------------|
+| **Pressao de compra** | ETH compra BKC do pool de liquidez | Demanda constante no mercado |
+| **Burn permanente** | 5% de todo BKC (comprado + mintado) e destruido | Supply circulante encolhe |
+| **Recompensas** | 95% vai pros delegadores como yield | Incentivo real pra participar |
 
-Isso nao e impressao inflacionaria. Novos BKC so sao mintados quando taxas do protocolo justificam, e a taxa diminui com o tempo. Eventualmente, todas as recompensas vem de buybacks.
-
----
-
-## O Incentivo de 5% pro Caller
-
-Qualquer pessoa pode chamar executeBuyback() e ganhar 5% do ETH acumulado. Isso e intencional — transforma o buyback numa oportunidade sem permissao que mantem o sistema rodando sem nenhum operador centralizado.
-
-Na pratica, bots e usuarios ativos competem pra acionar buybacks quando o ETH acumulado e grande o suficiente pra justificar o custo de gas. Isso e saudavel — significa que o ciclo de mineracao roda sozinho.
+Nao e inflacao disfaracada de recompensa. E um mecanismo que converte **atividade real** (taxas ETH) em **valor real** (BKC) pra quem participa.
 
 ---
 
-## Numeros
+## O Incentivo de 5%: Uma Oportunidade Aberta
+
+Qualquer pessoa pode chamar `executeBuyback()` e levar 5% do ETH acumulado. Sem whitelist. Sem permissao. Sem fila.
+
+Na pratica, isso cria um mercado competitivo saudavel:
+- **Bots** monitoram o ETH acumulado e acionam quando o lucro justifica o gas
+- **Usuarios atentos** podem acionar manualmente quando o acumulo esta alto
+- **O resultado:** o ciclo roda sozinho, sem nenhum operador centralizado
+
+Se voce montar um bot que detecta quando o ETH acumulado esta suficientemente alto, voce tem uma fonte de renda automatica que funciona 24/7.
+
+---
+
+## Os Numeros
 
 | Parametro | Valor |
 |-----------|-------|
 | Maximo Mintavel | 160.000.000 BKC |
-| Incentivo pro Caller | 5% do ETH |
+| Incentivo pro Caller | 5% do ETH acumulado |
 | Burn por Ciclo | 5% do total de BKC (comprado + mintado) |
 | Recompensas por Ciclo | 95% do total de BKC |
-| Supply Minimo pra Mineracao | 40.000.000 BKC (TGE) |
+| Supply Minimo | 40.000.000 BKC (lancamento) |
 | Supply Maximo | 200.000.000 BKC |
 
 ---
 
-## Pra Operadores
+## Pra Operadores: Efeito Cascata
 
-O ciclo de buyback em si suporta operadores. Quando voce constroi um frontend, a atividade dos seus usuarios gera taxas que alimentam o miner. Mais usuarios na sua plataforma significa mais ETH acumulado, mais buybacks, e mais recompensas pra todo mundo no ecossistema.
+O Buyback Miner transforma atividade dos seus usuarios em valor pro ecossistema inteiro:
 
-Veja tambem: [Economia](./Economy_How-It-Works.md) | [Staking](./Staking_Lock-and-Earn.md)
+```
+Seus usuarios usam seu frontend
+    → Geram taxas ETH
+    → ETH alimenta o Buyback Miner
+    → Miner gera recompensas
+    → Recompensas atraem mais delegadores
+    → Mais usuarios descobrem o Backcoin
+    → Mais gente usa seu frontend
+```
+
+Mais usuarios na sua plataforma nao so geram comissoes diretas — tambem alimentam o motor economico que atrai mais usuarios pro ecossistema todo.
+
+---
+
+Continue: [Economia](./Economy_How-It-Works.md) | [Staking](./Staking_Lock-and-Earn.md) | [Taxas](./Fees_Complete-Table.md)

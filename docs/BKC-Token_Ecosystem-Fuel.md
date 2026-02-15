@@ -1,87 +1,118 @@
 # Token BKC — O Combustivel do Ecossistema
 
-BKC e o token nativo do Backcoin. Ele movimenta staking, jogos, trading, rede social e governanca em todos os servicos do protocolo.
+Tudo no Backcoin gira em torno do BKC. Staking, jogos, trading de NFTs, rede social, certificacao de documentos — cada servico usa BKC de alguma forma. Mas diferente da maioria dos tokens DeFi, o BKC foi desenhado pra ficar **mais escasso** com o tempo, nao mais inflacionado.
 
-Contrato: 0x1c8B7951ae769871470e9a8951d01dB39AA34123
+> **Endereco do contrato:** `0x1c8B7951ae769871470e9a8951d01dB39AA34123`
 
 ---
 
-## Especificacoes
+## Numeros que Importam
 
 | Propriedade | Valor |
 |-------------|-------|
 | Nome | Backcoin |
 | Simbolo | BKC |
 | Decimais | 18 |
-| Supply Maximo | 200.000.000 BKC (teto fixo, pra sempre) |
+| Supply Maximo | **200.000.000 BKC** — teto fixo, impossivel de aumentar |
 | Padrao | ERC-20 + EIP-2612 Permit |
+| Alocacao pro time | **0%** |
+| Alocacao pra VCs | **0%** |
+
+Voce leu certo. Zero tokens pro time. Zero pra investidores privados. 80% de todo o supply vai direto pra usuarios ativos atraves de recompensas de mineracao.
 
 ---
 
-## Distribuicao
+## Distribuicao: Sem Privilegios
 
-O supply e dividido em duas partes:
+O supply e dividido em duas partes simples:
 
-- 40M BKC (20%) — Mintados no lancamento pra liquidez inicial, crescimento do ecossistema e faucet
-- 160M BKC (80%) — Liberados gradualmente pelo Buyback Miner como recompensas de atividade
+**40M BKC (20%)** — Mintados no lancamento
+- Liquidez inicial no pool ETH/BKC
+- Faucet pra novos usuarios
+- Crescimento do ecossistema
 
-Zero alocacao pra time, advisors, VCs ou investidores privados. Cada token BKC ou foi pra liquidez ou vai direto pra usuarios ativos.
+**160M BKC (80%)** — Liberados gradualmente pelo Buyback Miner
+- So sao criados quando taxas reais do protocolo justificam
+- Vao direto pra quem participa ativamente (delegadores)
+- A taxa de mineracao **diminui** com o tempo (curva de escassez)
 
----
-
-## Caracteristicas Principais
-
-Teto fixo. O limite de 200M esta codificado no contrato e nao pode ser alterado. Nenhuma inflacao, nenhum mint surpresa, nenhuma votacao de governanca pode aumentar. Nunca.
-
-Mint por atividade. Novos BKC so sao criados quando o Buyback Miner converte taxas do protocolo em recompensas. Quanto mais gente usa o Backcoin, mais BKC entra em circulacao — mas sempre dentro do teto de 200M.
-
-Pressao deflacionaria. Multiplos mecanismos de burn reduzem o supply circulante com o tempo:
-- Burn no claim de staking (ate 50% sem NFT boost)
-- Buyback Miner queima 5% por ciclo
-- Taxas BKC do Fortune Pool incluem componente de burn
-- Qualquer pessoa pode queimar seus proprios tokens voluntariamente
-
-Aprovacoes sem gas. BKC suporta EIP-2612 Permit, entao usuarios podem aprovar gasto de tokens sem transacao separada. Isso economiza gas e melhora a experiencia.
-
-Sem backdoors. Uma vez deployado, o contrato do token nao tem funcao de pausa, nao tem blacklist, nao tem restricao de transferencia. Funciona igual pra todo mundo, pra sempre.
+Nenhum insider, nenhum VC, nenhum advisor recebeu tokens. O time ganha da mesma forma que qualquer outro usuario — participando.
 
 ---
 
-## Como o BKC e Criado
+## O Que Torna o BKC Diferente
 
-1. Usuarios interagem com os servicos Backcoin (staking, jogos, trading, etc.)
+**Teto fixo, de verdade.** O limite de 200M esta codificado no smart contract. Nenhuma funcao de mint, nenhuma votacao de governanca, nenhum multisig pode aumentar. O supply maximo e 200M hoje, amanha e daqui a 100 anos.
+
+**Mint por atividade, nao por cronograma.** Novos BKC so entram em circulacao quando o Buyback Miner converte taxas reais do protocolo em recompensas. Sem uso, sem mint. Quanto mais gente usa o Backcoin, mais BKC entra — mas sempre dentro do teto.
+
+**Multiplos mecanismos de burn.** Enquanto o supply cresce com a mineracao, multiplas forcas trabalham contra:
+- Burn no claim de staking — ate 50% sem NFT Booster
+- Burn no Buyback Miner — 5% por ciclo
+- Fortune Pool — taxa de 20% BKC inclui burn
+- Burn voluntario — qualquer pessoa pode queimar seus tokens
+
+O resultado? Conforme o ecossistema amadurece, mais BKC e queimado do que mintado. O supply circulante **encolhe**.
+
+**Aprovacoes sem gas.** BKC suporta EIP-2612 Permit — usuarios podem aprovar gasto de tokens assinando uma mensagem, sem transacao separada. Economiza gas e melhora a experiencia.
+
+**Sem backdoors.** Uma vez deployado, ninguem pode pausar o token, criar blacklist, ou restringir transferencias. Funciona igual pra todo mundo. Pra sempre.
+
+---
+
+## De Onde Vem Cada BKC
+
+O ciclo de criacao e elegante:
+
+```
+1. Usuarios interagem com o Backcoin (staking, jogos, trading...)
+       ↓
 2. Cada interacao gera taxas em ETH
+       ↓
 3. ETH acumula no contrato do ecossistema
-4. Qualquer pessoa pode acionar o Buyback Miner (e ganhar 5% por fazer isso)
-5. O Miner compra BKC do pool de liquidez e minta novos BKC baseado na escassez
-6. Recompensas vao para os delegadores
+       ↓
+4. Qualquer pessoa aciona o Buyback Miner (e ganha 5% por fazer isso)
+       ↓
+5. O Miner compra BKC do pool de liquidez + minta novos BKC
+       ↓
+6. Recompensas vao pros delegadores
+```
 
-A taxa de mineracao diminui conforme o supply cresce — essa e a curva de escassez. Quando o supply e baixo, a mineracao e generosa. Conforme se aproxima do teto, o mint desacelera e eventualmente para. Depois disso, recompensas vem puramente de buybacks (yield real).
+A **curva de escassez** e a peca chave: quando o supply e baixo, a mineracao e generosa. Conforme se aproxima de 200M, o mint desacelera e eventualmente para. Depois disso, recompensas vem puramente de buybacks — yield real de atividade real.
 
 ---
 
 ## Onde o BKC e Usado
 
-| Servico | Uso do BKC |
-|---------|-----------|
-| Staking | Trava BKC pra ganhar recompensas |
-| Fortune Pool | Aposta BKC (20% taxa, 80% pro prize pool) |
-| NFT Pools | Compra/vende Booster NFTs com BKC |
-| Agora | Paga taxas BKC por funcoes sociais |
-| Notary | Paga taxas BKC por certificacoes |
+| Servico | Como o BKC e Usado |
+|---------|-------------------|
+| **Staking** | Trave BKC pra ganhar recompensas de mineracao |
+| **Fortune Pool** | Aposte BKC (20% taxa, 80% vai pro prize pool) |
+| **NFT Pools** | Compre e venda Booster NFTs com BKC |
+| **Agora** | Pague taxas BKC por funcoes sociais |
+| **Cartorio** | Pague taxas BKC por certificacoes |
+| **Governanca** | Participe de votacoes (futuro) |
 
 ---
 
-## Para Desenvolvedores
+## Pra Desenvolvedores
+
+Adicionar BKC ao MetaMask programaticamente:
 
 ```javascript
-// Adicionar BKC ao MetaMask
 const BKC = {
     address: "0x1c8B7951ae769871470e9a8951d01dB39AA34123",
     symbol: "BKC",
     decimals: 18,
     image: "https://backcoin.org/assets/bkc_logo.png"
 };
+
+await ethereum.request({
+    method: 'wallet_watchAsset',
+    params: { type: 'ERC20', options: BKC }
+});
 ```
 
-Veja tambem: [Economia](./Economy_How-It-Works.md) | [Mineracao](./Mining_From-Fees-to-Rewards.md) | [Staking](./Staking_Lock-and-Earn.md)
+---
+
+Proximo passo: Entenda como o valor flui no ecossistema → [Economia](./Economy_How-It-Works.md) | [Mineracao](./Mining_From-Fees-to-Rewards.md) | [Staking](./Staking_Lock-and-Earn.md)

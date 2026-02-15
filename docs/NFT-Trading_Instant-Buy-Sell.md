@@ -1,23 +1,25 @@
 # Trading de NFT — Compra e Venda Instantanea
 
-Mercados automaticos de bonding curve pra negociar Reward Booster NFTs. Sem listings, sem leiloes, sem espera — compra e venda instantanea a preco de mercado.
+Esqueca listings, leiloes e espera. Os NFT Pools do Backcoin usam **bonding curves** — mercados automaticos onde voce compra e vende Booster NFTs instantaneamente, a qualquer hora, com preco determinado por oferta e demanda. Sem contraparte necessaria.
 
 ---
 
-## Enderecos dos Pools
+## Os Pools
+
+Cada tier de NFT Booster tem seu proprio pool com liquidez independente:
 
 | Tier | Endereco |
 |------|---------|
-| Bronze | 0xeE0953171514608f8b8F7B5A343c8123b2BfE8bD |
-| Silver | 0xA8e76C5E21235fC2889A25Dff0769fFf5C784639 |
-| Gold | 0xbcDc78a2C985722C170153015957Acb73df08F89 |
-| Diamond | 0x2d9fb50A5d147598fBb1151F75B8C3E261fb1Dea |
+| Bronze | `0xeE0953171514608f8b8F7B5A343c8123b2BfE8bD` |
+| Silver | `0xA8e76C5E21235fC2889A25Dff0769fFf5C784639` |
+| Gold | `0xbcDc78a2C985722C170153015957Acb73df08F89` |
+| Diamond | `0x2d9fb50A5d147598fBb1151F75B8C3E261fb1Dea` |
 
 ---
 
 ## Como Bonding Curves Funcionam
 
-Cada pool usa a formula de produto constante (XY=K):
+Cada pool usa a formula de **produto constante** (a mesma matematica do Uniswap):
 
 ```
 K = QUANTIDADE_NFT x SALDO_BKC
@@ -26,53 +28,62 @@ Preco de Compra  = K / (QUANTIDADE_NFT - 1) - SALDO_BKC
 Preco de Venda   = SALDO_BKC - K / (QUANTIDADE_NFT + 1)
 ```
 
-O ponto chave: precos se movem automaticamente baseados em oferta e demanda. Quando mais gente compra, o preco sobe. Quando mais gente vende, o preco desce. Sem order book necessario.
+A ideia e simples: quando mais gente compra, sobram menos NFTs no pool, e o preco **sobe**. Quando mais gente vende, tem mais NFTs, e o preco **desce**. O mercado se auto-regula.
 
-Exemplo de Preco
+**Exemplo concreto:**
 
-Suponha que um pool tem 10 NFTs e 50.000 BKC (K = 500.000):
+Um pool com 10 NFTs e 50.000 BKC (K = 500.000):
 
-| Acao | NFTs Depois | BKC Depois | Preco |
-|------|------------|-----------|-------|
-| Comprar 1 NFT | 9 | ~55.556 BKC | 5.556 BKC |
-| Comprar mais 1 | 8 | ~62.500 BKC | 6.944 BKC |
-| Vender 1 NFT | 11 | ~45.455 BKC | 4.545 BKC |
+| Acao | NFTs no Pool | BKC no Pool | Preco da Operacao |
+|------|-------------|------------|-------------------|
+| Comprar 1 NFT | 9 | ~55.556 | **5.556 BKC** |
+| Comprar mais 1 | 8 | ~62.500 | **6.944 BKC** |
+| Vender 1 NFT | 11 | ~45.455 | **4.545 BKC** |
 
-Precos aumentam a cada compra e diminuem a cada venda — o comportamento classico de bonding curve.
+Cada compra encarece o proximo NFT. Cada venda barateia. Isso e bonding curve em acao.
+
+> **Por que isso importa:** Voce nunca precisa esperar um comprador ou vendedor. O pool sempre esta la, com liquidez, 24/7. Compra e venda sao instantaneas.
 
 ---
 
 ## Taxas
 
-Trades de NFT Pool pagam apenas taxas ETH (baseadas em gas):
-- Cada tier pode ter taxas ETH diferentes
-- Taxas vao pro ecossistema (operador, referenciador, tesouro, buyback)
-- Sem taxa BKC nos trades
+Trades de NFT pagam apenas taxas ETH (baseadas em gas):
+- Cada tier pode ter multiplicadores diferentes
+- Taxas fluem pro ecossistema (operador, referenciador, tesouro, buyback)
+- **Sem taxa BKC** nos trades — voce paga o preco da bonding curve e a taxa ETH, nada mais
 
 ---
 
-## Seguranca
+## Seguranca: Sem Rug Pull, Sem Surpresas
 
-- Protecao do ultimo NFT — O pool nao vende seu ultimo NFT (sempre mantem liquidez)
-- Protecao contra slippage — Sete maxPrice nas compras e minPayout nas vendas pra evitar surpresas
-- Sem rug pull — Liquidez do pool (BKC) nao pode ser removida por ninguem, nunca
-- Imutavel — Sem funcoes de admin, sem mudanca de parametros depois do deploy
+| Protecao | O Que Garante |
+|----------|--------------|
+| **Protecao do ultimo NFT** | O pool nunca vende seu ultimo NFT — sempre mantem liquidez |
+| **Protecao contra slippage** | Use `maxPrice` nas compras e `minPayout` nas vendas |
+| **Sem rug pull** | A liquidez (BKC) do pool nao pode ser removida. Por ninguem. Nunca. |
+| **Imutavel** | Sem funcoes de admin. Parametros sao fixos apos o deploy. |
 
----
-
-## Estrategia de Trading
-
-Como precos se movem a cada trade:
-- Compradores iniciais pegam precos mais baixos quando o pool tem mais NFTs
-- Vendedores conseguem precos melhores quando o pool tem menos NFTs (alta demanda)
-- Arbitragem e possivel entre bonding curves e o mercado de aluguel
+Os pools nao tem dono. Nao tem admin. Nao tem botao de emergencia. A liquidez esta la e vai ficar la.
 
 ---
 
-## Suporte a Operadores
+## Estrategias de Trading
 
-Cada transacao de compra e venda de NFT suporta o Sistema de Operadores. Passe sua carteira como operador pra ganhar comissoes ETH nos trades pelo seu frontend.
+Como precos se movem a cada trade, oportunidades surgem naturalmente:
 
-Esse e um dos mercados de trading mais ativos no ecossistema — otimo pra operadores que querem receita de comissao consistente.
+**Compradores iniciais** pegam precos mais baixos quando o pool tem muitos NFTs. Se a demanda subir, voce pagou barato por um NFT que agora vale mais.
 
-Veja tambem: [NFT Boosters](./NFT-Boosters_Earn-More.md) | [Aluguel de NFT](./NFT-Rental_Affordable-Boost.md) | [Taxas](./Fees_Complete-Table.md)
+**Vendedores estrategicos** conseguem precos melhores quando o pool tem poucos NFTs (alta demanda). Comprou na baixa? Venda quando o pool estiver esvaziando.
+
+**Arbitragem** entre a bonding curve e o mercado de aluguel: se o custo de comprar + alugar + vender for positivo, tem lucro na mesa.
+
+---
+
+## Pra Operadores: Receita Consistente
+
+Cada compra e venda de NFT pelo seu frontend gera comissao ETH. Trading de NFT e uma das atividades mais frequentes e de maior valor no ecossistema — usuarios compram e vendem conforme precos se movem, criando **receita recorrente** pro operador.
+
+---
+
+Continue: [NFT Boosters](./NFT-Boosters_Earn-More.md) | [Aluguel de NFT](./NFT-Rental_Affordable-Boost.md) | [Taxas](./Fees_Complete-Table.md)
