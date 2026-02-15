@@ -1817,7 +1817,7 @@ function updateBoosterDisplay(data, claimDetails) {
     const statusDesc = isRented ? 'Active rental' : 'In your wallet';
 
     container.innerHTML = `
-        <div class="nft-clickable-image" data-address="${addresses.rewardBooster}" data-tokenid="${data.tokenId}" style="width:100%;cursor:pointer;transition:all 0.2s">
+        <div class="nft-clickable-image" data-tokenid="${data.tokenId}" data-tier="${tierName}" style="width:100%;cursor:pointer;transition:all 0.2s">
             <div style="display:flex;align-items:center;gap:10px;background:var(--dash-surface-2);border:1px solid ${statusBorder};border-radius:12px;padding:10px 12px;margin-bottom:8px">
                 <div style="position:relative;width:48px;height:48px;flex-shrink:0">
                     <img src="${nftImageUrl}" style="width:48px;height:48px;border-radius:10px;object-fit:cover;border:2px solid ${statusBorder}" alt="${tierName}" onerror="this.src='./assets/bkc_logo_3d.png'">
@@ -2166,12 +2166,12 @@ function attachDashboardListeners() {
             if (modal) modal.classList.remove('visible');
         }
 
-        // NFT click
+        // NFT click — addNftToWallet(tokenId, tierName)
         const nftClick = target.closest('.nft-clickable-image');
         if (nftClick) {
-            const address = nftClick.dataset.address;
             const id = nftClick.dataset.tokenid;
-            if (address && id) addNftToWallet(address, id);
+            const tier = nftClick.dataset.tier || 'Booster';
+            if (id) addNftToWallet(id, tier);
         }
 
         // Claim rewards

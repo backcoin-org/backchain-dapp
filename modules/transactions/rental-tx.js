@@ -166,6 +166,10 @@ export async function rentNft({
             if (listing.owner === ethers.ZeroAddress) throw new Error('NFT is not listed for rent');
             if (listing.currentlyRented) throw new Error('NFT is currently rented');
 
+            // Check if user already has an active rental (contract enforces 1 per user)
+            const alreadyRenting = await contract.hasActiveRental(userAddress);
+            if (alreadyRenting) throw new Error('You already have an active rental. Wait for it to expire before renting another.');
+
             // V2: Fixed 1-day rental — get cost from contract + calculate fee client-side
             const cost = await contract.getRentalCost(tokenId);
             const rentalCost = cost.rentalCost || cost[0];
