@@ -1,0 +1,44 @@
+{
+  "name": "@backchain/api",
+  "version": "0.3.0",
+  "description": "Backchain API — Server-side helpers: Multicall, Express middleware, auto-generated REST routes",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@backchain/core": "^0.2.0",
+    "@backchain/events": "^0.3.0",
+    "@backchain/indexer": "^0.3.0",
+    "@backchain/staking": "^0.2.0",
+    "@backchain/nft": "^0.2.0",
+    "@backchain/fusion": "^0.2.0",
+    "@backchain/fortune": "^0.2.0",
+    "@backchain/notary": "^0.2.0",
+    "@backchain/agora": "^0.2.0",
+    "@backchain/charity": "^0.2.0",
+    "@backchain/rental": "^0.2.0",
+    "@backchain/swap": "^0.2.0",
+    "@backchain/faucet": "^0.2.0",
+    "@backchain/buyback": "^0.2.0"
+  },
+  "peerDependencies": {
+    "ethers": "^6.0.0"
+  },
+  "devDependencies": {
+    "ethers": "^6.13.0",
+    "@types/express": "^4.17.21",
+    "typescript": "^5.5.0"
+  },
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/backcoin-org/backchain-dapp.git", "directory": "sdk/packages/api" }
+}

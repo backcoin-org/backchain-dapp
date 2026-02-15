@@ -1,0 +1,27 @@
+{
+  "name": "@backchain/events",
+  "version": "0.3.0",
+  "description": "Backchain Events — Complete event ABIs, typed interfaces, and parsing utilities",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": {
+    "ethers": "^6.0.0"
+  },
+  "devDependencies": {
+    "ethers": "^6.13.0",
+    "typescript": "^5.5.0"
+  },
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/backcoin-org/backchain-dapp.git", "directory": "sdk/packages/events" }
+}

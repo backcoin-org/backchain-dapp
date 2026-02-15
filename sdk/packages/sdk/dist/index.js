@@ -41,4 +41,10 @@ export { RentalModule } from '@backchain/rental';
 export { SwapModule } from '@backchain/swap';
 export { FaucetModule } from '@backchain/faucet';
 export { BuybackModule } from '@backchain/buyback';
+// ── Events (re-exported) ────────────────────────────────────────────────────
+export { EventParser, FilterBuilder, eventFilter, ALL_EVENT_ABIS, ALL_EVENTS_FLAT, BKC_TOKEN_EVENTS, ECOSYSTEM_EVENTS, STAKING_EVENTS, LIQUIDITY_POOL_EVENTS, BUYBACK_EVENTS, REWARD_BOOSTER_EVENTS, NFT_POOL_EVENTS, NFT_FUSION_EVENTS, FORTUNE_EVENTS, NOTARY_EVENTS, CHARITY_EVENTS, AGORA_EVENTS, RENTAL_EVENTS, FAUCET_EVENTS, GOVERNANCE_EVENTS, AIRDROP_EVENTS, } from '@backchain/events';
+// ── Indexer (re-exported) ───────────────────────────────────────────────────
+export { EventIndexer, InMemoryCheckpoint, FileCheckpoint, EventPipeline } from '@backchain/indexer';
+// ── API (re-exported) ───────────────────────────────────────────────────────
+export { Multicall, backchainMiddleware, generateRoutes, setupBackchainRoutes } from '@backchain/api';
 //# sourceMappingURL=index.js.map
