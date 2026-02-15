@@ -402,6 +402,15 @@ async function loadBalances() {
 // SWAP EXECUTION
 // ════════════════════════════════════════════════════════════════════════════
 
+// Get gas overrides with 2x buffer to prevent "max fee < base fee" on Arbitrum
+async function getGasOverrides() {
+    const provider = State.publicProvider || State.provider;
+    const feeData = await provider.getFeeData();
+    const maxFee = (feeData.maxFeePerGas || feeData.gasPrice || 100000000n) * 2n;
+    const maxPriority = (feeData.maxPriorityFeePerGas || 0n) * 2n || 1n;
+    return { maxFeePerGas: maxFee, maxPriorityFeePerGas: maxPriority };
+}
+
 async function executeBuySwap(btn) {
     if (TS.isSwapping || !State.isConnected || !State.signer) return;
     TS.isSwapping = true;
@@ -421,14 +430,16 @@ async function executeBuySwap(btn) {
 
         // Step 1: Wrap ETH → WETH
         setSwapBtn(btn, 'Wrapping ETH...', true);
-        const wrapTx = await weth.deposit({ value: amountIn });
+        let gasOvr = await getGasOverrides();
+        const wrapTx = await weth.deposit({ value: amountIn, ...gasOvr });
         await wrapTx.wait();
 
         // Step 2: Approve WETH (skip if enough allowance)
         setSwapBtn(btn, 'Approving...', true);
         const allowance = await weth.allowance(State.userAddress, SWAP_ROUTER);
         if (allowance < amountIn) {
-            const appTx = await weth.approve(SWAP_ROUTER, ethers.MaxUint256);
+            gasOvr = await getGasOverrides();
+            const appTx = await weth.approve(SWAP_ROUTER, ethers.MaxUint256, gasOvr);
             await appTx.wait();
         }
 
@@ -450,10 +461,11 @@ async function executeBuySwap(btn) {
 
         // Step 4: Swap
         setSwapBtn(btn, 'Confirm in Wallet...', true);
+        gasOvr = await getGasOverrides();
         const swapTx = await router.exactInputSingle({
             ...swapParams,
             amountOutMinimum: amountOutMin,
-        });
+        }, gasOvr);
 
         setSwapBtn(btn, 'Processing...', true);
         const receipt = await swapTx.wait();
@@ -491,7 +503,8 @@ async function executeSellSwap(btn) {
         setSwapBtn(btn, 'Approving BKC...', true);
         const allowance = await bkc.allowance(State.userAddress, SWAP_ROUTER);
         if (allowance < amountIn) {
-            const appTx = await bkc.approve(SWAP_ROUTER, ethers.MaxUint256);
+            let gasOvr = await getGasOverrides();
+            const appTx = await bkc.approve(SWAP_ROUTER, ethers.MaxUint256, gasOvr);
             await appTx.wait();
         }
 
@@ -530,7 +543,8 @@ async function executeSellSwap(btn) {
         ]);
 
         const deadline = BigInt(Math.floor(Date.now() / 1000) + 600);
-        const mcTx = await router.multicall(deadline, [swapData, unwrapData]);
+        const gasOvr = await getGasOverrides();
+        const mcTx = await router.multicall(deadline, [swapData, unwrapData], gasOvr);
 
         setSwapBtn(btn, 'Processing...', true);
         const receipt = await mcTx.wait();
