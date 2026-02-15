@@ -209,6 +209,7 @@ function injectStyles() {
         @keyframes bc-spin { to { transform:rotate(360deg); } }
         @keyframes bc-like-pop { 0% { transform:scale(1); } 40% { transform:scale(1.35); } 100% { transform:scale(1); } }
         @keyframes bc-pulse-ring { 0% { box-shadow:0 0 0 0 rgba(245,158,11,0.4); } 70% { box-shadow:0 0 0 8px rgba(245,158,11,0); } 100% { box-shadow:0 0 0 0 rgba(245,158,11,0); } }
+        @keyframes bc-shimmer { 0% { background-position:-200px 0; } 100% { background-position:calc(200px + 100%) 0; } }
 
         .bc-shell { max-width:640px; margin:0 auto; min-height:100vh; background:var(--bc-bg); position:relative; }
 
@@ -264,8 +265,8 @@ function injectStyles() {
         .bc-post-btn:disabled { opacity:0.4; cursor:not-allowed; transform:none; box-shadow:none; }
 
         /* Post Card */
-        .bc-post { padding:18px 20px; border-bottom:1px solid var(--bc-border); transition:background var(--bc-transition); animation:bc-fadeIn 0.35s ease-out both; cursor:pointer; }
-        .bc-post:hover { background:rgba(255,255,255,0.015); }
+        .bc-post { padding:18px 20px; border-bottom:1px solid var(--bc-border); transition:all var(--bc-transition); animation:bc-fadeIn 0.35s ease-out both; cursor:pointer; border-left:2px solid transparent; }
+        .bc-post:hover { background:rgba(255,255,255,0.02); border-left-color:var(--bc-accent); }
         .bc-post-top { display:flex; gap:12px; }
         .bc-avatar { width:44px; height:44px; border-radius:50%; background:linear-gradient(135deg,var(--bc-accent),#fbbf24); display:flex; align-items:center; justify-content:center; font-weight:700; color:#000; font-size:15px; flex-shrink:0; cursor:pointer; transition:transform var(--bc-transition); }
         .bc-avatar:hover { transform:scale(1.06); }
@@ -466,6 +467,34 @@ function injectStyles() {
         .bc-go-live-btn:hover { filter:brightness(1.1); transform:scale(1.02); }
         .bc-go-live-btn:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
 
+        /* Skeleton Loader */
+        .bc-skeleton-post { padding:18px 20px; border-bottom:1px solid var(--bc-border); display:flex; gap:12px; }
+        .bc-skeleton-avatar { width:44px; height:44px; border-radius:50%; flex-shrink:0; }
+        .bc-skeleton-body { flex:1; display:flex; flex-direction:column; gap:10px; }
+        .bc-skeleton-line { height:12px; border-radius:6px; }
+        .bc-skeleton-line.short { width:40%; }
+        .bc-skeleton-line.medium { width:75%; }
+        .bc-skeleton-line.long { width:90%; }
+        .bc-skeleton-actions { display:flex; gap:24px; margin-top:4px; }
+        .bc-skeleton-dot { width:18px; height:12px; border-radius:6px; }
+        .bc-skeleton-avatar, .bc-skeleton-line, .bc-skeleton-dot {
+            background:linear-gradient(90deg, var(--bc-bg3) 25%, rgba(255,255,255,0.06) 50%, var(--bc-bg3) 75%);
+            background-size:200px 100%;
+            animation:bc-shimmer 1.5s infinite linear;
+        }
+
+        /* Trending Rank Badge */
+        .bc-rank-badge { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; font-size:11px; font-weight:800; flex-shrink:0; margin-right:4px; }
+        .bc-rank-1 { background:linear-gradient(135deg,#fbbf24,#f59e0b); color:#000; box-shadow:0 0 12px rgba(245,158,11,0.4); }
+        .bc-rank-2 { background:linear-gradient(135deg,#d1d5db,#9ca3af); color:#000; }
+        .bc-rank-3 { background:linear-gradient(135deg,#f59e0b,#92400e); color:#fff; }
+
+        /* SuperLike ETH in engagement */
+        .bc-action.act-super .bc-eth-val { font-size:11px; color:var(--bc-accent); font-weight:700; font-family:'SF Mono',monospace; }
+
+        /* Active tag glow */
+        .bc-tag-pill.active { box-shadow:0 0 10px rgba(245,158,11,0.25); }
+
         /* Responsive */
         @media (max-width: 640px) {
             .bc-shell { max-width:100%; }
@@ -473,6 +502,16 @@ function injectStyles() {
             .bc-post-body { margin-left:0; margin-top:12px; }
             .bc-post-media { margin-left:0; }
             .bc-compose-avatar { display:none; }
+        }
+        @media (max-width: 480px) {
+            .bc-tag-pill { font-size:11px; padding:4px 9px; }
+            .bc-tag-pill i { font-size:10px; }
+            .bc-action { padding:5px 6px; font-size:12px; gap:3px; }
+            .bc-action i { font-size:13px; }
+            .bc-stat-value { font-size:17px; }
+            .bc-stat-label { font-size:11px; }
+            .bc-compose-bottom { flex-wrap:wrap; gap:8px; }
+            .bc-profile-pic { width:64px; height:64px; font-size:22px; }
         }
     `;
     document.head.appendChild(style);
@@ -520,6 +559,24 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function linkifyContent(escapedHtml) {
+    if (!escapedHtml) return '';
+    // URLs → clickable links
+    let html = escapedHtml.replace(/(https?:\/\/[^\s<]+)/g,
+        '<a href="$1" target="_blank" rel="noopener" style="color:var(--bc-accent);text-decoration:none;" onclick="event.stopPropagation()">$1</a>');
+    // @mentions → clickable profile links (resolve username to address)
+    html = html.replace(/@([a-z0-9_]{1,15})/g, (match, username) => {
+        // Find address by username in profiles map
+        let addr = null;
+        for (const [a, p] of BC.profiles) {
+            if (p.username === username) { addr = a; break; }
+        }
+        if (addr) return `<span style="color:var(--bc-accent);cursor:pointer;" onclick="event.stopPropagation(); BackchatPage.viewProfile('${addr}')">@${username}</span>`;
+        return `<span style="color:var(--bc-accent);">@${username}</span>`;
+    });
+    return html;
 }
 
 function parseMetadata(metadataURI) {
@@ -1915,9 +1972,13 @@ function renderPost(post, index = 0, options = {}) {
     const animStyle = options.noAnimation ? '' : `style="animation-delay:${Math.min(index * 0.04, 0.4)}s"`;
     const tagInfo = getTagInfo(post.tag || 0);
 
+    const rank = options.trendingRank || 0;
+    const rankBadge = rank >= 1 && rank <= 3 ? `<span class="bc-rank-badge bc-rank-${rank}">${rank}</span>` : '';
+
     return `
         <div class="bc-post" data-post-id="${post.id}" ${animStyle} onclick="BackchatPage.viewPost('${post.id}')">
             <div class="bc-post-top">
+                ${rankBadge}
                 <div class="bc-avatar ${boosted ? 'boosted' : ''}" onclick="event.stopPropagation(); BackchatPage.viewProfile('${post.author}')">
                     ${renderAvatar(post.author)}
                 </div>
@@ -1929,14 +1990,13 @@ function renderPost(post, index = 0, options = {}) {
                         <span class="bc-post-time">&middot; ${formatTimeAgo(post.timestamp)}</span>
                         ${isEdited ? '<span class="bc-post-time" title="Edited">(edited)</span>' : ''}
                         ${post.tag > 0 ? `<span class="bc-tag-badge" style="color:${tagInfo.color};border-color:${tagInfo.color}30"><i class="fa-solid ${tagInfo.icon}"></i> ${tagInfo.name}</span>` : ''}
-                        ${(post.superLikeETH || 0n) > 0n ? `<span class="bc-trending-tag"><i class="fa-solid fa-bolt"></i> ${superLikesETH}</span>` : ''}
                         ${BC.activeRooms.has(String(post.id)) ? '<span class="bc-live-badge"><span class="bc-live-badge-dot"></span> LIVE</span>' : ''}
                     </div>
                     ${post.type === 'reply' ? `<div class="bc-post-context">Replying to ${getProfileName(BC.postsById.get(post.parentId)?.author)}</div>` : ''}
                 </div>
                 ${renderPostMenu(post)}
             </div>
-            ${post.content ? `<div class="bc-post-body">${escapeHtml(post.content)}</div>` : ''}
+            ${post.content ? `<div class="bc-post-body">${linkifyContent(escapeHtml(post.content))}</div>` : ''}
             ${post.mediaCID ? `<div class="bc-post-media"><img src="${resolveContentUrl(post.mediaCID) || ''}" alt="Media" loading="lazy" onerror="this.style.display='none'"></div>` : ''}
             <div class="bc-actions" onclick="event.stopPropagation()">
                 <button class="bc-action act-reply" onclick="BackchatPage.openReply('${post.id}')" title="Reply">
@@ -1952,7 +2012,7 @@ function renderPost(post, index = 0, options = {}) {
                     <i class="fa-solid fa-arrow-down"></i>${downCount > 0 ? `<span class="count">${downCount}</span>` : ''}
                 </button>
                 <button class="bc-action act-super" onclick="BackchatPage.openSuperLike('${post.id}')" title="Super Like">
-                    <i class="fa-solid fa-star"></i>
+                    <i class="fa-solid fa-star"></i>${(post.superLikeETH || 0n) > 0n ? `<span class="bc-eth-val">${superLikesETH}</span>` : ''}
                 </button>
             </div>
         </div>`;
@@ -2003,7 +2063,16 @@ function renderFeed() {
         </div>`;
     }
     if (BC.isLoading) {
-        return `<div class="bc-loading"><div class="bc-spinner"></div><span class="bc-loading-text">Loading feed...</span></div>`;
+        const sk = `<div class="bc-skeleton-post">
+            <div class="bc-skeleton-avatar"></div>
+            <div class="bc-skeleton-body">
+                <div class="bc-skeleton-line short"></div>
+                <div class="bc-skeleton-line long"></div>
+                <div class="bc-skeleton-line medium"></div>
+                <div class="bc-skeleton-actions"><div class="bc-skeleton-dot"></div><div class="bc-skeleton-dot"></div><div class="bc-skeleton-dot"></div><div class="bc-skeleton-dot"></div></div>
+            </div>
+        </div>`;
+        return sk + sk + sk;
     }
 
     let filteredPosts = BC.posts;
@@ -2030,10 +2099,38 @@ function renderFeed() {
 
     if (filteredPosts.length === 0) {
         const tagName = BC.selectedTag >= 0 ? TAGS[BC.selectedTag]?.name || '' : '';
+        if (BC.selectedTag >= 0) {
+            return `<div class="bc-empty">
+                <div class="bc-empty-glyph"><i class="fa-regular fa-comment-dots"></i></div>
+                <div class="bc-empty-title">No ${tagName} posts</div>
+                <div class="bc-empty-text">Try a different tag or be the first to post!</div>
+            </div>`;
+        }
+        if (State.isConnected && !BC.hasProfile) {
+            return `<div class="bc-empty">
+                <div class="bc-empty-glyph accent"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                <div class="bc-empty-title">Welcome to Agora</div>
+                <div style="display:flex;flex-direction:column;gap:12px;margin:16px 0;text-align:left;max-width:280px;">
+                    <div style="display:flex;align-items:center;gap:10px;font-size:14px;color:var(--bc-text-2);">
+                        <span style="width:24px;height:24px;border-radius:50%;background:var(--bc-accent);color:#000;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;flex-shrink:0;">1</span>
+                        Create your profile
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;font-size:14px;color:var(--bc-text-2);">
+                        <span style="width:24px;height:24px;border-radius:50%;background:var(--bc-bg3);color:var(--bc-text-3);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;flex-shrink:0;">2</span>
+                        Post your first thought
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;font-size:14px;color:var(--bc-text-2);">
+                        <span style="width:24px;height:24px;border-radius:50%;background:var(--bc-bg3);color:var(--bc-text-3);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;flex-shrink:0;">3</span>
+                        Earn Super Likes
+                    </div>
+                </div>
+                <button class="bc-btn bc-btn-primary" style="margin-top:8px;" onclick="BackchatPage.openProfileSetup()"><i class="fa-solid fa-user-plus"></i> Get Started</button>
+            </div>`;
+        }
         return `<div class="bc-empty">
             <div class="bc-empty-glyph"><i class="fa-regular fa-comment-dots"></i></div>
-            <div class="bc-empty-title">${BC.selectedTag >= 0 ? `No ${tagName} posts` : 'No posts yet'}</div>
-            <div class="bc-empty-text">${BC.selectedTag >= 0 ? 'Try a different tag or be the first to post!' : 'Be the first to post on the unstoppable social network!'}</div>
+            <div class="bc-empty-title">No posts yet</div>
+            <div class="bc-empty-text">Be the first to post on the unstoppable social network!</div>
         </div>`;
     }
     return filteredPosts.map((post, i) => renderPost(post, i)).join('');
@@ -2066,7 +2163,7 @@ function renderDiscover() {
             <p>Ranked by Super Like value — pure organic discovery</p>
             ${statsHtml}
         </div>
-        ${BC.trendingPosts.map((post, i) => renderPost(post, i)).join('')}`;
+        ${BC.trendingPosts.map((post, i) => renderPost(post, i, { trendingRank: i + 1 })).join('')}`;
 }
 
 function renderProfile() {
@@ -2086,6 +2183,7 @@ function renderProfile() {
     const followingCount = BC.followCounts.get(myAddr)?.following ?? BC.following.size;
     const displayName = BC.userProfile?.displayName || BC.userProfile?.username || shortenAddress(State.userAddress);
     const avatarUrl = BC.userProfile?.avatar ? getIPFSUrl(BC.userProfile.avatar) : '';
+    const totalSuperLikeETH = userPosts.reduce((sum, p) => sum + (p.superLikeETH || 0n), 0n);
 
     return `
         <div class="bc-profile-section">
@@ -2109,10 +2207,11 @@ function renderProfile() {
                 <div class="bc-profile-handle">
                     <a href="${EXPLORER_ADDRESS}${State.userAddress}" target="_blank" rel="noopener">View on Explorer <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
                 </div>
-                <div class="bc-profile-stats">
+                <div class="bc-profile-stats" style="grid-template-columns:repeat(4,1fr);">
                     <div class="bc-stat-cell"><div class="bc-stat-value">${userPosts.length}</div><div class="bc-stat-label">Posts</div></div>
                     <div class="bc-stat-cell"><div class="bc-stat-value">${followersCount}</div><div class="bc-stat-label">Followers</div></div>
                     <div class="bc-stat-cell"><div class="bc-stat-value">${followingCount}</div><div class="bc-stat-label">Following</div></div>
+                    <div class="bc-stat-cell"><div class="bc-stat-value" style="color:var(--bc-accent);">${formatETH(totalSuperLikeETH)}</div><div class="bc-stat-label"><i class="fa-solid fa-star" style="color:var(--bc-accent);font-size:10px;"></i> ETH</div></div>
                 </div>
                 ${renderExpiryWarnings()}
             </div>
@@ -2334,7 +2433,7 @@ function renderProfileSetup() {
 function renderModals() {
     return `
         <!-- Super Like Modal -->
-        <div class="bc-modal-overlay" id="modal-superlike">
+        <div class="bc-modal-overlay" id="modal-superlike" onclick="if(event.target===this) BackchatPage.closeModal('superlike')"
             <div class="bc-modal-box">
                 <div class="bc-modal-top">
                     <span class="bc-modal-title"><i class="fa-solid fa-star" style="color:var(--bc-accent)"></i> Super Like</span>
@@ -2350,7 +2449,7 @@ function renderModals() {
         </div>
 
         <!-- Downvote Modal (V3: 1 per user per post) -->
-        <div class="bc-modal-overlay" id="modal-downvote">
+        <div class="bc-modal-overlay" id="modal-downvote" onclick="if(event.target===this) BackchatPage.closeModal('downvote')"
             <div class="bc-modal-box">
                 <div class="bc-modal-top">
                     <span class="bc-modal-title"><i class="fa-solid fa-arrow-down" style="color:var(--bc-purple)"></i> Downvote</span>
@@ -2365,7 +2464,7 @@ function renderModals() {
         </div>
 
         <!-- Badge Modal (V2: Tiers) -->
-        <div class="bc-modal-overlay" id="modal-badge">
+        <div class="bc-modal-overlay" id="modal-badge" onclick="if(event.target===this) BackchatPage.closeModal('badge')"
             <div class="bc-modal-box">
                 <div class="bc-modal-top">
                     <span class="bc-modal-title"><i class="fa-solid fa-circle-check" style="color:var(--bc-accent)"></i> Trust Badge</span>
@@ -2389,7 +2488,7 @@ function renderModals() {
         </div>
 
         <!-- Boost Modal (V3: ecosystem pricing) -->
-        <div class="bc-modal-overlay" id="modal-boost">
+        <div class="bc-modal-overlay" id="modal-boost" onclick="if(event.target===this) BackchatPage.closeModal('boost')"
             <div class="bc-modal-box">
                 <div class="bc-modal-top">
                     <span class="bc-modal-title"><i class="fa-solid fa-rocket" style="color:var(--bc-accent)"></i> Profile Boost</span>
@@ -2404,7 +2503,7 @@ function renderModals() {
         </div>
 
         <!-- Repost Modal -->
-        <div class="bc-modal-overlay" id="modal-repost">
+        <div class="bc-modal-overlay" id="modal-repost" onclick="if(event.target===this) BackchatPage.closeModal('repost')"
             <div class="bc-modal-box">
                 <div class="bc-modal-top">
                     <span class="bc-modal-title"><i class="fa-solid fa-retweet" style="color:var(--bc-green)"></i> Repost</span>
@@ -2418,7 +2517,7 @@ function renderModals() {
         </div>
 
         <!-- Change Tag Modal -->
-        <div class="bc-modal-overlay" id="modal-change-tag">
+        <div class="bc-modal-overlay" id="modal-change-tag" onclick="if(event.target===this) BackchatPage.closeModal('change-tag')"
             <div class="bc-modal-box">
                 <div class="bc-modal-top">
                     <span class="bc-modal-title"><i class="fa-solid fa-tag" style="color:var(--bc-accent)"></i> Change Tag</span>
@@ -2435,7 +2534,7 @@ function renderModals() {
         </div>
 
         <!-- Edit Profile Modal -->
-        <div class="bc-modal-overlay" id="modal-edit-profile">
+        <div class="bc-modal-overlay" id="modal-edit-profile" onclick="if(event.target===this) BackchatPage.closeModal('edit-profile')"
             <div class="bc-modal-box">
                 <div class="bc-modal-top">
                     <span class="bc-modal-title"><i class="fa-solid fa-pen" style="color:var(--bc-accent)"></i> Edit Profile</span>
@@ -2469,7 +2568,7 @@ function renderModals() {
         </div>
 
         <!-- Report Modal (V2) -->
-        <div class="bc-modal-overlay" id="modal-report">
+        <div class="bc-modal-overlay" id="modal-report" onclick="if(event.target===this) BackchatPage.closeModal('report')"
             <div class="bc-modal-box">
                 <div class="bc-modal-top">
                     <span class="bc-modal-title"><i class="fa-solid fa-flag" style="color:#ef4444"></i> Report Post</span>
@@ -2489,7 +2588,7 @@ function renderModals() {
         </div>
 
         <!-- Boost Post Modal (V3: ecosystem pricing) -->
-        <div class="bc-modal-overlay" id="modal-boost-post">
+        <div class="bc-modal-overlay" id="modal-boost-post" onclick="if(event.target===this) BackchatPage.closeModal('boost-post')"
             <div class="bc-modal-box">
                 <div class="bc-modal-top">
                     <span class="bc-modal-title"><i class="fa-solid fa-rocket" style="color:var(--bc-accent)"></i> Boost Post</span>
@@ -2511,7 +2610,7 @@ function renderModals() {
         </div>
 
         <!-- Tip Modal (V2) -->
-        <div class="bc-modal-overlay" id="modal-tip">
+        <div class="bc-modal-overlay" id="modal-tip" onclick="if(event.target===this) BackchatPage.closeModal('tip')"
             <div class="bc-modal-box">
                 <div class="bc-modal-top">
                     <span class="bc-modal-title"><i class="fa-solid fa-hand-holding-dollar" style="color:var(--bc-green)"></i> Tip Author</span>
@@ -2526,7 +2625,7 @@ function renderModals() {
         </div>
 
         <!-- Edit Post Modal (V3: 15-min window) -->
-        <div class="bc-modal-overlay" id="modal-edit-post">
+        <div class="bc-modal-overlay" id="modal-edit-post" onclick="if(event.target===this) BackchatPage.closeModal('edit-post')"
             <div class="bc-modal-box">
                 <div class="bc-modal-top">
                     <span class="bc-modal-title"><i class="fa-solid fa-pen" style="color:var(--bc-accent)"></i> Edit Post</span>
@@ -2661,6 +2760,9 @@ function _updateCharCount(textarea) {
     counter.className = 'bc-char-count';
     if (len > MAX_CONTENT - 50) counter.classList.add('danger');
     else if (len > MAX_CONTENT - 150) counter.classList.add('warn');
+    // Auto-resize textarea
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(textarea.scrollHeight, 240) + 'px';
 }
 
 // Close post menus on click outside
