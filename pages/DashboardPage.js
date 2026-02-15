@@ -1306,6 +1306,17 @@ function renderDashboardLayout() {
                     </div>
                     <i class="fa-solid fa-chevron-right dash-action-arrow"></i>
                 </div>
+
+                <div class="dash-action-card trade go-to-trade">
+                    <div class="dash-action-icon" style="background:rgba(255,0,122,0.12); color:#ff007a;">
+                        <i class="fa-solid fa-arrow-right-arrow-left"></i>
+                    </div>
+                    <div class="dash-action-text">
+                        <h4>Trade BKC</h4>
+                        <p>Swap on Uniswap V3</p>
+                    </div>
+                    <i class="fa-solid fa-chevron-right dash-action-arrow"></i>
+                </div>
             </div>
 
             <!-- METRICS BAR -->
@@ -2089,6 +2100,7 @@ function attachDashboardListeners() {
         if (target.closest('.go-to-notary')) { e.preventDefault(); window.navigateTo('notary'); }
         if (target.closest('.go-to-charity')) { e.preventDefault(); window.navigateTo('charity'); }
         if (target.closest('.go-to-backchat')) { e.preventDefault(); window.navigateTo('agora'); }
+        if (target.closest('.go-to-trade')) { e.preventDefault(); window.navigateTo('trade'); }
 
         // Booster modal
         if (target.closest('#open-booster-info')) {

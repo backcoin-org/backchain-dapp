@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-02-15T11:39:46.884Z",
+  "network": "arbitrum-sepolia",
+  "pool": "0x4A434eCcA4c53e79834d74Be0DA6c224b92f0B35",
+  "positionNftId": "2819",
+  "token0": "0x8264fa8C238Ca723A5D55D77E7aeC1271bd7E737",
+  "token1": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+  "feeTier": "0.3%",
+  "tickRange": [
+    -887220,
+    887220
+  ],
+  "bkcAmount": "7000000.0",
+  "ethAmount": "3.0",
+  "sqrtPriceX96": "51867007413411304160968322",
+  "liquidity": "4582575694955840006588"
+}

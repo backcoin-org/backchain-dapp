@@ -1,0 +1,882 @@
+// pages/TradePage.js
+// ✅ PRODUCTION V1.0 — Trade BKC/ETH via Uniswap V3
+
+const ethers = window.ethers;
+
+import { State } from '../state.js';
+import { formatBigNumber } from '../utils.js';
+import { showToast } from '../ui-feedback.js';
+import { openConnectModal } from '../modules/wallet.js';
+
+// ════════════════════════════════════════════════════════════════════════════
+// CONSTANTS
+// ════════════════════════════════════════════════════════════════════════════
+
+const SWAP_ROUTER = "0x101F443B4d1b059569D643917553c771E1b9663E";
+const WETH9       = "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73";
+const BKC_TOKEN   = "0x8264fa8C238Ca723A5D55D77E7aeC1271bd7E737";
+const POOL        = "0x4A434eCcA4c53e79834d74Be0DA6c224b92f0B35";
+const FEE_TIER    = 3000;
+const EXPLORER    = "https://sepolia.arbiscan.io";
+const PRICE_REFRESH_MS = 15000;
+const DEFAULT_SLIPPAGE = 1;
+const GAS_RESERVE = ethers.parseEther("0.005");
+
+// ════════════════════════════════════════════════════════════════════════════
+// ABIs
+// ════════════════════════════════════════════════════════════════════════════
+
+const SWAP_ROUTER_ABI = [
+    'function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)',
+    'function multicall(uint256 deadline, bytes[] calldata data) external payable returns (bytes[] memory results)',
+    'function unwrapWETH9(uint256 amountMinimum, address recipient) external payable',
+];
+
+const WETH_ABI = [
+    'function deposit() payable',
+    'function approve(address, uint256) returns (bool)',
+    'function allowance(address, address) view returns (uint256)',
+    'function balanceOf(address) view returns (uint256)',
+];
+
+const ERC20_ABI = [
+    'function approve(address, uint256) returns (bool)',
+    'function allowance(address, address) view returns (uint256)',
+    'function balanceOf(address) view returns (uint256)',
+];
+
+const POOL_ABI = [
+    'function slot0() view returns (uint160 sqrtPriceX96, int24 tick, uint16, uint16, uint16, uint8, bool)',
+    'function liquidity() view returns (uint128)',
+    'function token0() view returns (address)',
+    'function token1() view returns (address)',
+];
+
+// ════════════════════════════════════════════════════════════════════════════
+// LOCAL STATE
+// ════════════════════════════════════════════════════════════════════════════
+
+const TS = {
+    direction: 'buy',          // 'buy' = ETH→BKC, 'sell' = BKC→ETH
+    inputAmount: '',
+    estimatedOutput: 0n,
+    estimatedOutputFormatted: '0',
+    priceImpact: 0,
+
+    sqrtPriceX96: 0n,
+    liquidity: 0n,
+    wethIsToken0: false,
+    priceBkcPerEth: 0,
+    priceEthPerBkc: 0,
+
+    slippage: DEFAULT_SLIPPAGE,
+    showSettings: false,
+
+    isSwapping: false,
+    swapPhase: '',
+
+    priceRefreshTimer: null,
+    debounceTimer: null,
+
+    ethBalance: 0n,
+    bkcBalance: 0n,
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// STYLES
+// ════════════════════════════════════════════════════════════════════════════
+
+function injectStyles() {
+    if (document.getElementById('trade-page-styles')) return;
+    const s = document.createElement('style');
+    s.id = 'trade-page-styles';
+    s.textContent = `
+        .trade-shell {
+            max-width: 480px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        .trade-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.25rem 1.5rem 0.75rem;
+        }
+        .trade-header h3 { font-size: 1.15rem; font-weight: 600; color: #fff; margin: 0; }
+        .trade-settings-btn {
+            background: none; border: none; color: #98a1c0; cursor: pointer;
+            font-size: 1.1rem; padding: 4px; transition: color 0.2s;
+        }
+        .trade-settings-btn:hover { color: #fff; }
+
+        /* Settings panel */
+        .trade-settings-panel {
+            max-height: 0; overflow: hidden; transition: max-height 0.3s ease;
+            padding: 0 1.5rem; background: #1a1b1f;
+        }
+        .trade-settings-panel.open { max-height: 120px; padding-bottom: 1rem; }
+        .trade-slippage-row {
+            display: flex; gap: 6px; align-items: center; margin-top: 8px;
+        }
+        .trade-slippage-row label { font-size: 0.8rem; color: #98a1c0; margin-right: auto; }
+        .trade-slip-btn {
+            padding: 5px 12px; border-radius: 12px; border: 1px solid #2c2f36;
+            background: #212429; color: #98a1c0; font-size: 0.8rem; cursor: pointer;
+            transition: all 0.15s;
+        }
+        .trade-slip-btn:hover { border-color: #4c82fb; color: #fff; }
+        .trade-slip-btn.active { background: #4c82fb; color: #fff; border-color: #4c82fb; }
+        .trade-slip-custom {
+            width: 60px; padding: 5px 8px; border-radius: 12px; border: 1px solid #2c2f36;
+            background: #212429; color: #fff; font-size: 0.8rem; text-align: center; outline: none;
+        }
+        .trade-slip-custom:focus { border-color: #4c82fb; }
+
+        /* Balance + MAX row */
+        .trade-bal-row {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-top: 6px; font-size: 0.8rem; color: #98a1c0;
+        }
+        .trade-max-btn {
+            background: none; border: none; color: #f59e0b; cursor: pointer;
+            font-size: 0.75rem; font-weight: 600; padding: 2px 6px;
+            border-radius: 4px; transition: background 0.15s;
+        }
+        .trade-max-btn:hover { background: rgba(245,158,11,0.15); }
+
+        /* Info section */
+        .trade-info {
+            padding: 0.75rem 1.5rem; display: flex; flex-direction: column; gap: 4px;
+            font-size: 0.8rem; color: #98a1c0;
+        }
+        .trade-info-row { display: flex; justify-content: space-between; }
+        .trade-impact-warn { color: #f59e0b; }
+        .trade-impact-danger { color: #ef4444; }
+
+        /* Pool info bar */
+        .trade-pool-info {
+            margin-top: 12px; padding: 12px 16px; border-radius: 16px;
+            background: #212429; border: 1px solid #2c2f36;
+            font-size: 0.75rem; color: #98a1c0;
+            display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center;
+        }
+        .trade-pool-info a { color: #4c82fb; text-decoration: none; }
+        .trade-pool-info a:hover { text-decoration: underline; }
+        .trade-uni-badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 2px 8px; border-radius: 8px; background: rgba(255,0,122,0.1);
+            color: #ff007a; font-size: 0.7rem; font-weight: 600;
+        }
+
+        /* Swap button states */
+        .execute-trade-btn.loading {
+            background: #2c2f36; color: #98a1c0; cursor: wait;
+        }
+        .execute-trade-btn.warning {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            box-shadow: 0 4px 12px rgba(245,158,11,0.3);
+        }
+
+        /* Price pulse */
+        @keyframes trade-pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+        .trade-price-pulse { animation: trade-pulse 0.6s ease; }
+
+        /* Output shimmer */
+        .trade-output-loading {
+            background: linear-gradient(90deg, #2c2f36 25%, #40444f 50%, #2c2f36 75%);
+            background-size: 200% 100%; animation: trade-shimmer 1.5s infinite;
+            border-radius: 8px; min-height: 2rem; min-width: 100px;
+        }
+        @keyframes trade-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    `;
+    document.head.appendChild(s);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PRICE & QUOTES
+// ════════════════════════════════════════════════════════════════════════════
+
+function getProvider() {
+    return State.publicProvider || (State.provider ? State.provider : null);
+}
+
+async function getPoolPrice() {
+    const provider = getProvider();
+    if (!provider) return;
+
+    try {
+        const pool = new ethers.Contract(POOL, POOL_ABI, provider);
+        const [slot0, liq, t0] = await Promise.all([
+            pool.slot0(),
+            pool.liquidity(),
+            pool.token0(),
+        ]);
+
+        TS.sqrtPriceX96 = slot0[0];
+        TS.liquidity = liq;
+        TS.wethIsToken0 = t0.toLowerCase() === WETH9.toLowerCase();
+
+        // price = (sqrtPriceX96 / 2^96)^2 = token1 per token0
+        const sqrtPrice = Number(TS.sqrtPriceX96) / (2 ** 96);
+        const price = sqrtPrice * sqrtPrice;
+
+        if (TS.wethIsToken0) {
+            // token0=WETH, token1=BKC → price = BKC per WETH
+            TS.priceBkcPerEth = price;
+            TS.priceEthPerBkc = price > 0 ? 1 / price : 0;
+        } else {
+            // token0=BKC, token1=WETH → price = WETH per BKC
+            TS.priceEthPerBkc = price;
+            TS.priceBkcPerEth = price > 0 ? 1 / price : 0;
+        }
+
+        updatePriceDisplay();
+        recalcOutput();
+    } catch (e) {
+        console.error('[Trade] getPoolPrice failed:', e);
+    }
+}
+
+function calculateEstimatedOutput() {
+    const val = parseFloat(TS.inputAmount);
+    if (!val || val <= 0 || TS.sqrtPriceX96 === 0n) {
+        TS.estimatedOutput = 0n;
+        TS.estimatedOutputFormatted = '0';
+        TS.priceImpact = 0;
+        return;
+    }
+
+    const fee = 0.003;
+    const sqrtPrice = Number(TS.sqrtPriceX96) / (2 ** 96);
+    const L = Number(TS.liquidity);
+    if (L === 0 || sqrtPrice === 0) return;
+
+    // Virtual reserves at current price
+    const reserve0 = L / sqrtPrice;  // token0
+    const reserve1 = L * sqrtPrice;  // token1
+
+    let reserveIn, reserveOut;
+    if (TS.direction === 'buy') {
+        // ETH→BKC: input is ETH (WETH)
+        reserveIn  = TS.wethIsToken0 ? reserve0 : reserve1;
+        reserveOut = TS.wethIsToken0 ? reserve1 : reserve0;
+    } else {
+        // BKC→ETH: input is BKC
+        reserveIn  = TS.wethIsToken0 ? reserve1 : reserve0;
+        reserveOut = TS.wethIsToken0 ? reserve0 : reserve1;
+    }
+
+    const effectiveInput = val * (1 - fee);
+    const outputNum = effectiveInput * reserveOut / (reserveIn + effectiveInput);
+
+    if (outputNum <= 0) {
+        TS.estimatedOutput = 0n;
+        TS.estimatedOutputFormatted = '0';
+        TS.priceImpact = 0;
+        return;
+    }
+
+    // Price impact
+    const midPrice = reserveOut / reserveIn;
+    const execPrice = outputNum / val;
+    TS.priceImpact = Math.abs((midPrice - execPrice) / midPrice) * 100;
+
+    TS.estimatedOutput = ethers.parseEther(outputNum.toFixed(18));
+    TS.estimatedOutputFormatted = formatOutput(outputNum);
+}
+
+function formatOutput(num) {
+    if (num < 0.0001) return num.toExponential(2);
+    if (num < 1) return num.toFixed(6);
+    if (num < 1000) return num.toFixed(4);
+    if (num < 1e6) return num.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    return (num / 1e6).toFixed(2) + 'M';
+}
+
+function formatPrice(num) {
+    if (num === 0) return '--';
+    if (num < 0.0001) return num.toExponential(4);
+    if (num < 1) return num.toFixed(6);
+    return num.toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// BALANCES
+// ════════════════════════════════════════════════════════════════════════════
+
+async function loadBalances() {
+    if (!State.isConnected || !State.userAddress) return;
+    const provider = getProvider();
+    if (!provider) return;
+
+    try {
+        const [ethBal, bkcBal] = await Promise.all([
+            provider.getBalance(State.userAddress),
+            new ethers.Contract(BKC_TOKEN, ERC20_ABI, provider).balanceOf(State.userAddress),
+        ]);
+        TS.ethBalance = ethBal;
+        TS.bkcBalance = bkcBal;
+        updateBalanceDisplays();
+    } catch (e) {
+        console.error('[Trade] loadBalances:', e);
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// SWAP EXECUTION
+// ════════════════════════════════════════════════════════════════════════════
+
+async function executeBuySwap(btn) {
+    if (TS.isSwapping || !State.isConnected || !State.signer) return;
+    TS.isSwapping = true;
+
+    try {
+        const amountIn = ethers.parseEther(TS.inputAmount);
+        if (amountIn === 0n) throw new Error('Enter an amount');
+
+        const slippageBps = BigInt(Math.floor(TS.slippage * 100));
+        const amountOutMin = TS.estimatedOutput * (10000n - slippageBps) / 10000n;
+
+        // Validate
+        if (TS.ethBalance < amountIn + GAS_RESERVE) {
+            throw new Error('Insufficient ETH (need amount + gas)');
+        }
+
+        const signer = State.signer;
+        const weth = new ethers.Contract(WETH9, WETH_ABI, signer);
+        const router = new ethers.Contract(SWAP_ROUTER, SWAP_ROUTER_ABI, signer);
+
+        // Step 1: Wrap ETH → WETH
+        setSwapBtn(btn, 'Wrapping ETH...', true);
+        const wrapTx = await weth.deposit({ value: amountIn });
+        await wrapTx.wait();
+
+        // Step 2: Approve WETH (skip if enough allowance)
+        setSwapBtn(btn, 'Approving...', true);
+        const allowance = await weth.allowance(State.userAddress, SWAP_ROUTER);
+        if (allowance < amountIn) {
+            const appTx = await weth.approve(SWAP_ROUTER, ethers.MaxUint256);
+            await appTx.wait();
+        }
+
+        // Step 3: Swap
+        setSwapBtn(btn, 'Confirm in Wallet...', true);
+        const swapTx = await router.exactInputSingle({
+            tokenIn: WETH9,
+            tokenOut: BKC_TOKEN,
+            fee: FEE_TIER,
+            recipient: State.userAddress,
+            amountIn,
+            amountOutMinimum: amountOutMin,
+            sqrtPriceLimitX96: 0n,
+        });
+
+        setSwapBtn(btn, 'Processing...', true);
+        const receipt = await swapTx.wait();
+
+        showToast('Swap successful! Bought BKC', 'success');
+        console.log(`[Trade] Buy TX: ${receipt.hash}`);
+        resetAfterSwap();
+
+    } catch (err) {
+        handleSwapError(err);
+    } finally {
+        TS.isSwapping = false;
+        resetSwapBtn(btn);
+    }
+}
+
+async function executeSellSwap(btn) {
+    if (TS.isSwapping || !State.isConnected || !State.signer) return;
+    TS.isSwapping = true;
+
+    try {
+        const amountIn = ethers.parseEther(TS.inputAmount);
+        if (amountIn === 0n) throw new Error('Enter an amount');
+
+        const slippageBps = BigInt(Math.floor(TS.slippage * 100));
+        const amountOutMin = TS.estimatedOutput * (10000n - slippageBps) / 10000n;
+
+        // Validate
+        if (TS.bkcBalance < amountIn) {
+            throw new Error(`Insufficient BKC`);
+        }
+
+        const signer = State.signer;
+        const bkc = new ethers.Contract(BKC_TOKEN, ERC20_ABI, signer);
+        const router = new ethers.Contract(SWAP_ROUTER, SWAP_ROUTER_ABI, signer);
+
+        // Step 1: Approve BKC (skip if enough)
+        setSwapBtn(btn, 'Approving BKC...', true);
+        const allowance = await bkc.allowance(State.userAddress, SWAP_ROUTER);
+        if (allowance < amountIn) {
+            const appTx = await bkc.approve(SWAP_ROUTER, ethers.MaxUint256);
+            await appTx.wait();
+        }
+
+        // Step 2: Multicall (exactInputSingle + unwrapWETH9)
+        setSwapBtn(btn, 'Confirm in Wallet...', true);
+        const iface = new ethers.Interface(SWAP_ROUTER_ABI);
+
+        const swapData = iface.encodeFunctionData('exactInputSingle', [{
+            tokenIn: BKC_TOKEN,
+            tokenOut: WETH9,
+            fee: FEE_TIER,
+            recipient: SWAP_ROUTER,   // router holds WETH temporarily
+            amountIn,
+            amountOutMinimum: amountOutMin,
+            sqrtPriceLimitX96: 0n,
+        }]);
+
+        const unwrapData = iface.encodeFunctionData('unwrapWETH9', [
+            amountOutMin,
+            State.userAddress,
+        ]);
+
+        const deadline = BigInt(Math.floor(Date.now() / 1000) + 600);
+        const mcTx = await router.multicall(deadline, [swapData, unwrapData]);
+
+        setSwapBtn(btn, 'Processing...', true);
+        const receipt = await mcTx.wait();
+
+        showToast('Swap successful! Sold BKC for ETH', 'success');
+        console.log(`[Trade] Sell TX: ${receipt.hash}`);
+        resetAfterSwap();
+
+    } catch (err) {
+        handleSwapError(err);
+    } finally {
+        TS.isSwapping = false;
+        resetSwapBtn(btn);
+    }
+}
+
+function handleSwapError(err) {
+    if (err.code === 'ACTION_REJECTED' || err.code === 4001) {
+        showToast('Transaction cancelled', 'info');
+    } else {
+        console.error('[Trade] Swap failed:', err);
+        showToast(`Swap failed: ${err.reason || err.shortMessage || err.message}`, 'error');
+    }
+}
+
+function resetAfterSwap() {
+    TS.inputAmount = '';
+    TS.estimatedOutput = 0n;
+    TS.estimatedOutputFormatted = '0';
+    TS.priceImpact = 0;
+    const inp = document.getElementById('trade-input');
+    if (inp) inp.value = '';
+    updateOutputDisplay();
+    updateInfoSection();
+    loadBalances();
+    getPoolPrice();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// UI HELPERS
+// ════════════════════════════════════════════════════════════════════════════
+
+function setSwapBtn(btn, text, loading) {
+    if (!btn) return;
+    btn.textContent = text;
+    btn.disabled = true;
+    if (loading) btn.classList.add('loading');
+}
+
+function resetSwapBtn(btn) {
+    if (!btn) return;
+    btn.classList.remove('loading');
+    updateSwapButton();
+}
+
+function updateSwapButton() {
+    const btn = document.getElementById('trade-swap-btn');
+    if (!btn) return;
+
+    if (!State.isConnected) {
+        btn.textContent = 'Connect Wallet';
+        btn.disabled = false;
+        btn.className = 'execute-trade-btn';
+        return;
+    }
+
+    const val = parseFloat(TS.inputAmount);
+    if (!val || val <= 0) {
+        btn.textContent = 'Enter amount';
+        btn.disabled = true;
+        btn.className = 'execute-trade-btn';
+        return;
+    }
+
+    // Check balance
+    const amountIn = ethers.parseEther(TS.inputAmount);
+    if (TS.direction === 'buy' && TS.ethBalance < amountIn + GAS_RESERVE) {
+        btn.textContent = 'Insufficient ETH';
+        btn.disabled = true;
+        btn.className = 'execute-trade-btn';
+        return;
+    }
+    if (TS.direction === 'sell' && TS.bkcBalance < amountIn) {
+        btn.textContent = 'Insufficient BKC';
+        btn.disabled = true;
+        btn.className = 'execute-trade-btn';
+        return;
+    }
+
+    if (TS.priceImpact > 5) {
+        btn.textContent = `Swap (${TS.priceImpact.toFixed(1)}% impact)`;
+        btn.disabled = false;
+        btn.className = 'execute-trade-btn warning';
+        return;
+    }
+
+    btn.textContent = 'Swap';
+    btn.disabled = false;
+    btn.className = 'execute-trade-btn';
+}
+
+function updatePriceDisplay() {
+    const el = document.getElementById('trade-price');
+    if (!el) return;
+    const txt = `1 ETH = ${formatPrice(TS.priceBkcPerEth)} BKC`;
+    el.textContent = txt;
+    el.classList.remove('trade-price-pulse');
+    void el.offsetWidth;
+    el.classList.add('trade-price-pulse');
+}
+
+function updateOutputDisplay() {
+    const el = document.getElementById('trade-output');
+    if (el) el.textContent = TS.estimatedOutputFormatted;
+}
+
+function updateInfoSection() {
+    const impact = document.getElementById('trade-impact');
+    const slip = document.getElementById('trade-slip-display');
+    if (impact) {
+        const pct = TS.priceImpact.toFixed(2);
+        impact.textContent = `~${pct}%`;
+        impact.className = TS.priceImpact > 15 ? 'trade-impact-danger' :
+                           TS.priceImpact > 5  ? 'trade-impact-warn' : '';
+    }
+    if (slip) slip.textContent = `${TS.slippage}%`;
+}
+
+function updateBalanceDisplays() {
+    const fromBal = document.getElementById('trade-from-bal');
+    const toBal = document.getElementById('trade-to-bal');
+    if (fromBal) {
+        const bal = TS.direction === 'buy' ? TS.ethBalance : TS.bkcBalance;
+        const sym = TS.direction === 'buy' ? 'ETH' : 'BKC';
+        fromBal.textContent = `Balance: ${formatBal(bal)} ${sym}`;
+    }
+    if (toBal) {
+        const bal = TS.direction === 'buy' ? TS.bkcBalance : TS.ethBalance;
+        const sym = TS.direction === 'buy' ? 'BKC' : 'ETH';
+        toBal.textContent = `Balance: ${formatBal(bal)} ${sym}`;
+    }
+    updateSwapButton();
+}
+
+function formatBal(wei) {
+    if (!wei || wei === 0n) return '0';
+    const num = Number(ethers.formatEther(wei));
+    if (num < 0.0001) return '<0.0001';
+    if (num < 1) return num.toFixed(4);
+    if (num < 1e6) return num.toLocaleString('en-US', { maximumFractionDigits: 4 });
+    return (num / 1e6).toFixed(2) + 'M';
+}
+
+function recalcOutput() {
+    calculateEstimatedOutput();
+    updateOutputDisplay();
+    updateInfoSection();
+    updateSwapButton();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// RENDER
+// ════════════════════════════════════════════════════════════════════════════
+
+function renderSwapCard() {
+    const container = document.getElementById('trade');
+    if (!container) return;
+
+    const fromSym = TS.direction === 'buy' ? 'ETH' : 'BKC';
+    const toSym = TS.direction === 'buy' ? 'BKC' : 'ETH';
+    const fromIcon = TS.direction === 'buy'
+        ? '<i class="fa-brands fa-ethereum" style="font-size:20px;color:#627eea"></i>'
+        : '<img src="./assets/bkc_logo_3d.png" style="width:28px;height:28px;border-radius:50%">';
+    const toIcon = TS.direction === 'buy'
+        ? '<img src="./assets/bkc_logo_3d.png" style="width:28px;height:28px;border-radius:50%">'
+        : '<i class="fa-brands fa-ethereum" style="font-size:20px;color:#627eea"></i>';
+
+    container.innerHTML = `
+    <div class="trade-shell">
+        <div class="swap-box-container">
+            <!-- Header -->
+            <div class="trade-header">
+                <h3>Trade</h3>
+                <button class="trade-settings-btn" id="trade-settings-toggle" title="Slippage settings">
+                    <i class="fa-solid fa-gear"></i>
+                </button>
+            </div>
+
+            <!-- Settings panel -->
+            <div class="trade-settings-panel ${TS.showSettings ? 'open' : ''}" id="trade-settings-panel">
+                <div class="trade-slippage-row">
+                    <label>Slippage</label>
+                    <button class="trade-slip-btn ${TS.slippage === 0.5 ? 'active' : ''}" data-slip="0.5">0.5%</button>
+                    <button class="trade-slip-btn ${TS.slippage === 1 ? 'active' : ''}" data-slip="1">1%</button>
+                    <button class="trade-slip-btn ${TS.slippage === 3 ? 'active' : ''}" data-slip="3">3%</button>
+                    <input type="text" class="trade-slip-custom" id="trade-slip-custom"
+                           placeholder="Custom" value="${![0.5,1,3].includes(TS.slippage) ? TS.slippage : ''}" />
+                </div>
+            </div>
+
+            <!-- Swap content -->
+            <div id="swap-box-content">
+                <!-- FROM -->
+                <div class="swap-panel">
+                    <div class="swap-panel-header">
+                        <span>From</span>
+                    </div>
+                    <div class="swap-panel-main">
+                        <input type="text" class="swap-amount" id="trade-input"
+                               placeholder="0" inputmode="decimal" autocomplete="off"
+                               value="${TS.inputAmount}" />
+                        <div class="token-selector-btn">
+                            ${fromIcon}
+                            <span>${fromSym}</span>
+                        </div>
+                    </div>
+                    <div class="trade-bal-row">
+                        <span id="trade-from-bal">Balance: --</span>
+                        <button class="trade-max-btn" id="trade-max-btn">MAX</button>
+                    </div>
+                </div>
+
+                <!-- Flip arrow -->
+                <div class="swap-arrow-button-wrapper">
+                    <button class="swap-arrow-btn" id="trade-flip-btn">
+                        <i class="fa-solid fa-arrow-down"></i>
+                    </button>
+                </div>
+
+                <!-- TO -->
+                <div class="swap-panel">
+                    <div class="swap-panel-header">
+                        <span>To (estimated)</span>
+                    </div>
+                    <div class="swap-panel-main">
+                        <span class="swap-amount" id="trade-output" style="color:#98a1c0">${TS.estimatedOutputFormatted}</span>
+                        <div class="token-selector-btn">
+                            ${toIcon}
+                            <span>${toSym}</span>
+                        </div>
+                    </div>
+                    <div class="trade-bal-row">
+                        <span id="trade-to-bal">Balance: --</span>
+                        <span></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Info section -->
+            <div class="trade-info" id="trade-info">
+                <div class="trade-info-row">
+                    <span>Price</span>
+                    <span id="trade-price">${TS.priceBkcPerEth ? '1 ETH = ' + formatPrice(TS.priceBkcPerEth) + ' BKC' : 'Loading...'}</span>
+                </div>
+                <div class="trade-info-row">
+                    <span>Price Impact</span>
+                    <span id="trade-impact">~0%</span>
+                </div>
+                <div class="trade-info-row">
+                    <span>Max Slippage</span>
+                    <span id="trade-slip-display">${TS.slippage}%</span>
+                </div>
+            </div>
+
+            <!-- Swap button -->
+            <div id="swap-box-button-container">
+                <button class="execute-trade-btn" id="trade-swap-btn" disabled>
+                    ${State.isConnected ? 'Enter amount' : 'Connect Wallet'}
+                </button>
+            </div>
+        </div>
+
+        <!-- Pool info -->
+        <div class="trade-pool-info">
+            <span>Pool: <a href="${EXPLORER}/address/${POOL}" target="_blank" rel="noopener noreferrer">${POOL.slice(0,6)}...${POOL.slice(-4)}</a></span>
+            <span>Fee: 0.3%</span>
+            <span class="trade-uni-badge"><i class="fa-solid fa-droplet"></i> Uniswap V3</span>
+        </div>
+    </div>`;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// EVENTS
+// ════════════════════════════════════════════════════════════════════════════
+
+function setupEvents() {
+    const container = document.getElementById('trade');
+    if (!container) return;
+
+    container.addEventListener('click', handleClick);
+    container.addEventListener('input', handleInput);
+}
+
+function handleClick(e) {
+    const target = e.target;
+
+    // Settings toggle
+    if (target.closest('#trade-settings-toggle')) {
+        TS.showSettings = !TS.showSettings;
+        const panel = document.getElementById('trade-settings-panel');
+        if (panel) panel.classList.toggle('open', TS.showSettings);
+        return;
+    }
+
+    // Slippage presets
+    const slipBtn = target.closest('[data-slip]');
+    if (slipBtn) {
+        TS.slippage = parseFloat(slipBtn.dataset.slip);
+        const custom = document.getElementById('trade-slip-custom');
+        if (custom) custom.value = '';
+        document.querySelectorAll('.trade-slip-btn').forEach(b => b.classList.remove('active'));
+        slipBtn.classList.add('active');
+        updateInfoSection();
+        updateSwapButton();
+        return;
+    }
+
+    // Flip
+    if (target.closest('#trade-flip-btn')) {
+        TS.direction = TS.direction === 'buy' ? 'sell' : 'buy';
+        TS.inputAmount = '';
+        TS.estimatedOutput = 0n;
+        TS.estimatedOutputFormatted = '0';
+        TS.priceImpact = 0;
+        renderSwapCard();
+        setupEvents();
+        loadBalances();
+        return;
+    }
+
+    // MAX
+    if (target.closest('#trade-max-btn')) {
+        let max;
+        if (TS.direction === 'buy') {
+            max = TS.ethBalance > GAS_RESERVE ? TS.ethBalance - GAS_RESERVE : 0n;
+        } else {
+            max = TS.bkcBalance;
+        }
+        if (max > 0n) {
+            TS.inputAmount = ethers.formatEther(max);
+            const inp = document.getElementById('trade-input');
+            if (inp) inp.value = TS.inputAmount;
+            recalcOutput();
+        }
+        return;
+    }
+
+    // Swap button
+    if (target.closest('#trade-swap-btn')) {
+        if (!State.isConnected) {
+            openConnectModal();
+            return;
+        }
+        const btn = document.getElementById('trade-swap-btn');
+        if (TS.direction === 'buy') {
+            executeBuySwap(btn);
+        } else {
+            executeSellSwap(btn);
+        }
+        return;
+    }
+}
+
+function handleInput(e) {
+    const target = e.target;
+
+    // Amount input
+    if (target.id === 'trade-input') {
+        // Allow only valid decimal input
+        let val = target.value.replace(/[^0-9.]/g, '');
+        const dots = val.split('.').length - 1;
+        if (dots > 1) val = val.slice(0, val.lastIndexOf('.'));
+        target.value = val;
+        TS.inputAmount = val;
+
+        clearTimeout(TS.debounceTimer);
+        TS.debounceTimer = setTimeout(() => recalcOutput(), 200);
+        return;
+    }
+
+    // Custom slippage
+    if (target.id === 'trade-slip-custom') {
+        const val = parseFloat(target.value);
+        if (val >= 0.1 && val <= 50) {
+            TS.slippage = val;
+            document.querySelectorAll('.trade-slip-btn').forEach(b => b.classList.remove('active'));
+            updateInfoSection();
+            updateSwapButton();
+        }
+        return;
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// REFRESH
+// ════════════════════════════════════════════════════════════════════════════
+
+function startPriceRefresh() {
+    stopPriceRefresh();
+    TS.priceRefreshTimer = setInterval(() => {
+        if (!TS.isSwapping) getPoolPrice();
+    }, PRICE_REFRESH_MS);
+}
+
+function stopPriceRefresh() {
+    if (TS.priceRefreshTimer) {
+        clearInterval(TS.priceRefreshTimer);
+        TS.priceRefreshTimer = null;
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// LIFECYCLE
+// ════════════════════════════════════════════════════════════════════════════
+
+function render(isNewPage) {
+    injectStyles();
+    const container = document.getElementById('trade');
+    if (!container) return;
+
+    if (isNewPage) {
+        renderSwapCard();
+        setupEvents();
+        getPoolPrice();
+        loadBalances();
+        startPriceRefresh();
+    }
+
+    updateSwapButton();
+    updateBalanceDisplays();
+}
+
+function update(isConnected) {
+    loadBalances();
+    updateSwapButton();
+    updateBalanceDisplays();
+}
+
+function cleanup() {
+    stopPriceRefresh();
+    clearTimeout(TS.debounceTimer);
+    TS.isSwapping = false;
+}
+
+export const TradePage = { render, update, cleanup };

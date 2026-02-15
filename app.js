@@ -37,6 +37,7 @@ import { CharityPage } from './pages/CharityPage.js';
 import { BackchatPage } from './pages/BackchatPage.js';
 import { ReferralPage } from './pages/ReferralPage.js';
 import { OperatorPage } from './pages/OperatorPage.js';
+import { TradePage } from './pages/TradePage.js';
 
 // ============================================================================
 // 2. CONFIGURATION & STATE
@@ -72,6 +73,7 @@ const routes = {
     'tutorials': TutorialsPage,
     'referral': ReferralPage,
     'operator': OperatorPage,
+    'trade': TradePage,
     // Legacy aliases — redirect old URLs
     'mine': StakingPage,
     'rewards': StakingPage,
