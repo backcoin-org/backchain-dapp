@@ -148,8 +148,11 @@ function injectStyles() {
             transition: all 0.3s ease;
         }
         .cp-campaign-card:hover { transform: translateY(-4px); border-color: rgba(245,158,11,0.4); box-shadow: 0 20px 40px rgba(0,0,0,0.3); }
+        .cp-campaign-card:hover .cp-card-img-wrap img { transform: scale(1.05); }
         .cp-campaign-card.boosted { border-color: rgba(245,158,11,0.4); animation: glow-pulse 3s ease-in-out infinite; }
-        .cp-campaign-card img { width: 100%; height: 200px; object-fit: cover; background: rgba(63,63,70,0.5); }
+        .cp-card-img-wrap { position: relative; overflow: hidden; }
+        .cp-card-img-wrap::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 60%; background: linear-gradient(to top, rgba(0,0,0,0.5), transparent); pointer-events: none; }
+        .cp-campaign-card img { width: 100%; height: 200px; object-fit: cover; background: rgba(63,63,70,0.5); transition: transform 0.4s ease; }
 
         .cp-progress { height: 8px; background: rgba(63,63,70,0.5); border-radius: 4px; overflow: hidden; }
         .cp-progress-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; background: linear-gradient(90deg, #f59e0b, #d97706); }
@@ -192,6 +195,7 @@ function injectStyles() {
         .cp-donate-presets { display: flex; gap: 8px; margin: 10px 0; }
         .cp-preset { flex: 1; padding: 8px; background: rgba(63,63,70,0.5); border: 1px solid rgba(63,63,70,0.8); border-radius: 8px; color: #fafafa; font-weight: 600; cursor: pointer; transition: all 0.2s; }
         .cp-preset:hover { background: rgba(63,63,70,0.8); }
+        .cp-preset.active { background: rgba(245,158,11,0.2); border-color: rgba(245,158,11,0.5); color: #f59e0b; }
 
         .cp-media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; margin-top: 10px; }
         .cp-media-thumb { position: relative; width: 100%; aspect-ratio: 1; border-radius: 8px; overflow: hidden; border: 2px solid rgba(63,63,70,0.5); }
@@ -262,12 +266,36 @@ function injectStyles() {
         .cp-ref-box { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); border-radius: 10px; padding: 12px; }
         .cp-ref-link { display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 8px 12px; word-break: break-all; font-size: 11px; color: #fbbf24; font-family: monospace; }
 
+        .cp-skeleton-card { border-radius: 16px; overflow: hidden; background: linear-gradient(145deg, rgba(39,39,42,0.9), rgba(24,24,27,0.95)); border: 1px solid rgba(63,63,70,0.3); }
+        .cp-skeleton-img { width: 100%; height: 200px; background: linear-gradient(90deg, rgba(63,63,70,0.3) 25%, rgba(63,63,70,0.5) 50%, rgba(63,63,70,0.3) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+        .cp-skeleton-line { height: 12px; border-radius: 6px; background: linear-gradient(90deg, rgba(63,63,70,0.3) 25%, rgba(63,63,70,0.5) 50%, rgba(63,63,70,0.3) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; margin-bottom: 8px; }
+        .cp-skeleton-line.short { width: 40%; }
+        .cp-skeleton-line.medium { width: 70%; }
+        .cp-skeleton-line.long { width: 100%; }
+        .cp-skeleton-bar { height: 8px; border-radius: 4px; background: linear-gradient(90deg, rgba(63,63,70,0.3) 25%, rgba(63,63,70,0.5) 50%, rgba(63,63,70,0.3) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; margin: 12px 0; }
+
+        .cp-cat-scroll { display: flex; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: 4px; }
+        .cp-cat-scroll::-webkit-scrollbar { display: none; }
+
+        .cp-fee-preview { font-size: 12px; color: #a1a1aa; padding: 8px 12px; background: rgba(0,0,0,0.2); border-radius: 8px; text-align: center; margin-top: 8px; transition: all 0.3s; }
+        .cp-fee-preview .fee-val { color: #f59e0b; font-weight: 600; }
+        .cp-fee-preview .net-val { color: #10b981; font-weight: 600; }
+
+        .cp-balance-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 11px; }
+        .cp-balance-row .bal { color: #a1a1aa; }
+        .cp-balance-row .max-btn { color: #f59e0b; cursor: pointer; font-weight: 600; background: none; border: none; font-size: 11px; padding: 2px 6px; border-radius: 4px; }
+        .cp-balance-row .max-btn:hover { background: rgba(245,158,11,0.1); }
+
         @media(max-width:768px) {
             .cp-detail-content { grid-template-columns: 1fr; }
             .cp-detail-sidebar { order: -1; }
             .cp-form-row { grid-template-columns: 1fr; }
             .cp-cat-grid { grid-template-columns: repeat(2, 1fr); }
             .cp-carousel img, .cp-carousel video { height: 220px; }
+        }
+        @media(max-width:640px) {
+            .cp-cat-scroll { flex-wrap: nowrap; }
+            .cp-cat-scroll .cp-btn { white-space: nowrap; flex-shrink: 0; }
         }
     `;
     document.head.appendChild(s);
@@ -334,6 +362,19 @@ const canWithdrawCheck = (c) => {
            (ended || status === CampaignStatus.CLOSED) &&
            BigInt(c.raisedAmount || c.raised || 0) > 0n;
 };
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function linkifyText(text) {
+    if (!text) return '';
+    let html = escapeHtml(text);
+    html = html.replace(/(https?:\/\/[^\s<]+)/g,
+        '<a href="$1" target="_blank" rel="noopener" class="text-amber-500 hover:text-amber-400" onclick="event.stopPropagation()">$1</a>');
+    return html;
+}
 
 // Capture referral from URL
 function captureReferral() {
@@ -536,8 +577,23 @@ const renderBoostedBadge = (expiry) => {
     const remaining = fmtBoostTime(expiry);
     return `<span class="cp-badge cp-boosted-badge"><i class="fa-solid fa-rocket"></i> Boosted${remaining ? ` ${remaining}` : ''}</span>`;
 };
-const renderLoading = () => `<div class="cp-loading"><div class="cp-spinner"></div><span class="text-zinc-500">Loading campaigns...</span></div>`;
-const renderEmpty = (msg) => `<div class="cp-empty"><i class="fa-solid fa-inbox"></i><h3>${msg}</h3><p class="text-zinc-600 text-sm">Be the first to create a campaign!</p></div>`;
+const renderLoading = () => {
+    const sk = `<div class="cp-skeleton-card"><div class="cp-skeleton-img"></div><div style="padding:1rem"><div class="cp-skeleton-line short"></div><div class="cp-skeleton-line long"></div><div class="cp-skeleton-bar"></div><div class="cp-skeleton-line medium"></div></div></div>`;
+    return `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">${sk}${sk}${sk}</div>`;
+};
+const renderEmpty = (msg) => `<div class="cp-empty">
+    <div style="font-size:4rem;margin-bottom:1rem;opacity:0.5"><i class="fa-solid fa-hand-holding-heart"></i></div>
+    <h3 style="font-size:1.25rem;margin-bottom:0.5rem">${msg}</h3>
+    <p class="text-zinc-500 text-sm" style="max-width:360px;margin:0 auto 1.5rem">Create a campaign to raise ETH for a cause you care about. Share it and earn referral rewards!</p>
+    <button class="cp-btn cp-btn-primary" onclick="CharityPage.openCreate()" style="margin:0 auto">
+        <i class="fa-solid fa-plus"></i> Create Campaign
+    </button>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:1.5rem">
+        ${Object.entries(CATEGORIES).map(([key, cat]) =>
+            `<button class="cp-btn cp-btn-secondary text-xs py-1.5 px-3" onclick="CharityPage.openCreate('${key}')" style="border-color:${cat.color}30">${cat.emoji} ${cat.name}</button>`
+        ).join('')}
+    </div>
+</div>`;
 
 const renderCard = (c) => {
     const prog = calcProg(c.raisedAmount, c.goalAmount);
@@ -546,9 +602,9 @@ const renderCard = (c) => {
 
     return `
         <div class="cp-campaign-card ${c.isBoosted ? 'boosted' : ''}" onclick="CharityPage.viewCampaign('${c.id}')">
-            <div style="position:relative">
-                <img src="${getCampImg(c)}" alt="${c.title || ''}" onerror="this.src='${PLACEHOLDER_IMAGES.default}'">
-                <button class="cp-share-btn copy" style="position:absolute;top:10px;right:10px;width:32px;height:32px;font-size:12px"
+            <div class="cp-card-img-wrap">
+                <img src="${getCampImg(c)}" alt="${escapeHtml(c.title || '')}" onerror="this.src='${PLACEHOLDER_IMAGES.default}'">
+                <button class="cp-share-btn copy" style="position:absolute;top:10px;right:10px;width:32px;height:32px;font-size:12px;z-index:2"
                         onclick="event.stopPropagation();CharityPage.quickShare('${c.id}')">
                     <i class="fa-solid fa-share-nodes"></i>
                 </button>
@@ -644,7 +700,7 @@ const renderMain = () => {
             </div>
 
             <!-- Categories -->
-            <div class="flex flex-wrap gap-2 mb-6">
+            <div class="cp-cat-scroll mb-6">
                 <button class="cp-btn ${!CS.selectedCategory ? 'cp-btn-primary' : 'cp-btn-secondary'} text-xs py-2 px-3" onclick="CharityPage.clearCat()">
                     All
                 </button>
@@ -742,7 +798,7 @@ const renderDetail = (c) => {
                         <p class="text-sm text-zinc-500 mb-4">
                             Created by <a href="${EXPLORER_ADDRESS}${c.creator}" target="_blank" class="text-amber-500 hover:text-amber-400">${fmtAddr(c.creator)}</a>
                         </p>
-                        <p class="text-zinc-400 leading-relaxed whitespace-pre-wrap">${c.description || c.metadataUri || 'No description provided.'}</p>
+                        <p class="text-zinc-400 leading-relaxed whitespace-pre-wrap">${linkifyText(c.description || c.metadataUri || 'No description provided.')}</p>
                     </div>
 
                     <!-- Sidebar -->
@@ -772,20 +828,25 @@ const renderDetail = (c) => {
                             <h4 class="text-sm font-bold text-white mb-3 flex items-center gap-2">
                                 <i class="fa-solid fa-heart text-emerald-500"></i> Make a Donation
                             </h4>
+                            <div class="cp-balance-row">
+                                <span class="bal">Balance: <span id="detail-bal">${State?.ethBalance ? Number(ethers.formatEther(State.ethBalance)).toFixed(4) : '--'}</span> ETH</span>
+                                <button class="max-btn" onclick="CharityPage.setMax('detail-amount')">MAX</button>
+                            </div>
                             <input type="number" id="detail-amount" placeholder="Amount in ETH" min="0.001" step="0.001"
-                                   class="cp-form-input text-center text-lg font-bold mb-2">
-                            <div class="cp-donate-presets mb-3">
-                                <button class="cp-preset" onclick="CharityPage.setAmt(0.01)">0.01</button>
-                                <button class="cp-preset" onclick="CharityPage.setAmt(0.05)">0.05</button>
-                                <button class="cp-preset" onclick="CharityPage.setAmt(0.1)">0.1</button>
-                                <button class="cp-preset" onclick="CharityPage.setAmt(0.5)">0.5</button>
+                                   class="cp-form-input text-center text-lg font-bold mb-2"
+                                   oninput="CharityPage.updateDonatePreview('detail-amount','detail-fee-preview')">
+                            <div class="cp-donate-presets mb-3" id="detail-presets">
+                                <button class="cp-preset" onclick="CharityPage.setAmt(0.01,'detail-amount')">0.01</button>
+                                <button class="cp-preset" onclick="CharityPage.setAmt(0.05,'detail-amount')">0.05</button>
+                                <button class="cp-preset" onclick="CharityPage.setAmt(0.1,'detail-amount')">0.1</button>
+                                <button class="cp-preset" onclick="CharityPage.setAmt(0.5,'detail-amount')">0.5</button>
                             </div>
                             <button id="btn-donate-detail" class="cp-btn cp-btn-success w-full" onclick="CharityPage.donateDetail('${c.id}')">
                                 <i class="fa-solid fa-heart"></i> Donate Now
                             </button>
-                            <p class="text-center text-[10px] text-zinc-500 mt-2">
+                            <div class="cp-fee-preview mt-2" id="detail-fee-preview">
                                 ~<strong>5%</strong> platform fee &bull; ~<strong>95%</strong> to campaign
-                            </p>
+                            </div>
                         </div>
                         ` : ''}
 
@@ -835,7 +896,7 @@ const renderDetail = (c) => {
 // ============================================================================
 
 const renderDonateModal = () => `
-    <div class="cp-modal" id="modal-donate">
+    <div class="cp-modal" id="modal-donate" onclick="if(event.target===this) CharityPage.closeModal('donate')">
         <div class="cp-modal-content">
             <div class="cp-modal-header">
                 <h3 class="cp-modal-title"><i class="fa-solid fa-heart text-emerald-500"></i> Donate</h3>
@@ -845,18 +906,23 @@ const renderDonateModal = () => `
                 <div id="donate-campaign-info"></div>
                 <div class="cp-form-group">
                     <label class="cp-form-label">Amount (ETH)</label>
+                    <div class="cp-balance-row">
+                        <span class="bal">Balance: <span id="donate-bal">${State?.ethBalance ? Number(ethers.formatEther(State.ethBalance)).toFixed(4) : '--'}</span> ETH</span>
+                        <button class="max-btn" onclick="CharityPage.setMax('donate-amount')">MAX</button>
+                    </div>
                     <div class="cp-donate-input-wrap">
-                        <input type="number" id="donate-amount" class="cp-donate-input" placeholder="0.1" min="0.001" step="0.001">
+                        <input type="number" id="donate-amount" class="cp-donate-input" placeholder="0.1" min="0.001" step="0.001"
+                               oninput="CharityPage.updateDonatePreview('donate-amount','donate-fee-preview')">
                         <span class="cp-donate-currency">ETH</span>
                     </div>
-                    <div class="cp-donate-presets">
-                        <button class="cp-preset" onclick="CharityPage.setAmt(0.01)">0.01</button>
-                        <button class="cp-preset" onclick="CharityPage.setAmt(0.05)">0.05</button>
-                        <button class="cp-preset" onclick="CharityPage.setAmt(0.1)">0.1</button>
-                        <button class="cp-preset" onclick="CharityPage.setAmt(0.5)">0.5</button>
+                    <div class="cp-donate-presets" id="donate-presets">
+                        <button class="cp-preset" onclick="CharityPage.setAmt(0.01,'donate-amount')">0.01</button>
+                        <button class="cp-preset" onclick="CharityPage.setAmt(0.05,'donate-amount')">0.05</button>
+                        <button class="cp-preset" onclick="CharityPage.setAmt(0.1,'donate-amount')">0.1</button>
+                        <button class="cp-preset" onclick="CharityPage.setAmt(0.5,'donate-amount')">0.5</button>
                     </div>
                 </div>
-                <div class="text-center text-xs text-zinc-500 p-3 bg-zinc-800/50 rounded-xl">
+                <div class="cp-fee-preview" id="donate-fee-preview">
                     ~<strong>5%</strong> platform fee &bull; ~<strong>95%</strong> goes to campaign
                 </div>
             </div>
@@ -868,7 +934,7 @@ const renderDonateModal = () => `
     </div>`;
 
 const renderBoostModal = () => `
-    <div class="cp-modal" id="modal-boost">
+    <div class="cp-modal" id="modal-boost" onclick="if(event.target===this) CharityPage.closeModal('boost')">
         <div class="cp-modal-content">
             <div class="cp-modal-header">
                 <h3 class="cp-modal-title"><i class="fa-solid fa-rocket text-amber-500"></i> Boost Campaign</h3>
@@ -900,7 +966,7 @@ const renderBoostModal = () => `
     </div>`;
 
 const renderMyCampaignsModal = () => `
-    <div class="cp-modal" id="modal-my">
+    <div class="cp-modal" id="modal-my" onclick="if(event.target===this) CharityPage.closeModal('my')">
         <div class="cp-modal-content" style="max-width:600px">
             <div class="cp-modal-header">
                 <h3 class="cp-modal-title"><i class="fa-solid fa-folder-open text-amber-500"></i> My Campaigns</h3>
@@ -1240,15 +1306,24 @@ function openMyCampaigns() {
         listEl.innerHTML = myCampaigns.map(c => {
             const prog = calcProg(c.raisedAmount, c.goalAmount);
             const canWd = canWithdrawCheck(c);
+            const time = fmtTime(c.deadline);
+            const isActive = isCampaignActive(c);
             return `
                 <div class="flex items-center gap-3 p-3 bg-zinc-800/30 rounded-xl mb-2 hover:bg-zinc-800/50 transition-colors">
                     <img src="${getCampImg(c)}" class="w-14 h-14 rounded-lg object-cover cursor-pointer" onclick="CharityPage.viewCampaign('${c.id}')">
                     <div class="flex-1 min-w-0">
-                        <p class="text-white font-semibold text-sm truncate cursor-pointer hover:text-amber-400" onclick="CharityPage.viewCampaign('${c.id}')">${c.title}</p>
-                        <p class="text-zinc-500 text-xs"><i class="fa-brands fa-ethereum"></i> ${fmt(c.raisedAmount)} / ${fmt(c.goalAmount)} ETH (${prog}%)</p>
+                        <div class="flex items-center gap-2 mb-1">
+                            <p class="text-white font-semibold text-sm truncate cursor-pointer hover:text-amber-400" onclick="CharityPage.viewCampaign('${c.id}')" style="margin:0">${c.title}</p>
+                            ${renderBadge(c.status)}
+                        </div>
+                        <p class="text-zinc-500 text-xs" style="margin:0">
+                            <i class="fa-brands fa-ethereum"></i> <strong class="text-white">${fmt(c.raisedAmount)}</strong> / ${fmt(c.goalAmount)} ETH (${prog}%)
+                            &bull; <span style="color:${time.color}">${time.text}</span>
+                        </p>
                     </div>
                     <div class="flex gap-2">
-                        ${canWd ? `<button id="btn-withdraw-${c.id}" class="cp-btn cp-btn-primary text-xs py-1.5 px-3" onclick="CharityPage.withdraw('${c.id}')"><i class="fa-solid fa-wallet"></i></button>` : ''}
+                        ${isActive ? `<button class="cp-btn cp-btn-danger text-xs py-1.5 px-3" onclick="event.stopPropagation();CharityPage.closeCampaign('${c.id}')" title="Close"><i class="fa-solid fa-xmark"></i></button>` : ''}
+                        ${canWd ? `<button id="btn-withdraw-${c.id}" class="cp-btn cp-btn-primary text-xs py-1.5 px-3" onclick="event.stopPropagation();CharityPage.withdraw('${c.id}')" title="Withdraw"><i class="fa-solid fa-wallet"></i></button>` : ''}
                     </div>
                 </div>`;
         }).join('');
@@ -1286,9 +1361,58 @@ async function updateBoostCost() {
     }
 }
 
-function setAmt(val) {
-    const el = document.getElementById('donate-amount') || document.getElementById('detail-amount');
-    if (el) el.value = val;
+function setAmt(val, inputId) {
+    const el = document.getElementById(inputId || 'donate-amount') || document.getElementById('detail-amount');
+    if (el) {
+        el.value = val;
+        // Highlight active preset
+        const presetsId = inputId === 'detail-amount' ? 'detail-presets' : 'donate-presets';
+        const presets = document.getElementById(presetsId);
+        if (presets) {
+            presets.querySelectorAll('.cp-preset').forEach(btn => {
+                btn.classList.toggle('active', btn.textContent.trim() === String(val));
+            });
+        }
+        // Trigger fee preview
+        const previewId = inputId === 'detail-amount' ? 'detail-fee-preview' : 'donate-fee-preview';
+        updateDonatePreview(inputId || 'donate-amount', previewId);
+    }
+}
+
+function setMax(inputId) {
+    if (!State?.ethBalance) return;
+    // Leave some for gas (~0.001 ETH)
+    const maxVal = Number(ethers.formatEther(State.ethBalance)) - 0.001;
+    if (maxVal <= 0) { showToast('Insufficient ETH balance', 'error'); return; }
+    const el = document.getElementById(inputId);
+    if (el) {
+        el.value = Math.floor(maxVal * 10000) / 10000; // 4 decimals
+        const previewId = inputId === 'detail-amount' ? 'detail-fee-preview' : 'donate-fee-preview';
+        updateDonatePreview(inputId, previewId);
+    }
+}
+
+let _feePreviewTimer = null;
+function updateDonatePreview(inputId, previewId) {
+    clearTimeout(_feePreviewTimer);
+    _feePreviewTimer = setTimeout(async () => {
+        const el = document.getElementById(inputId);
+        const preview = document.getElementById(previewId);
+        if (!el || !preview) return;
+        const val = parseFloat(el.value);
+        if (!val || val < 0.001) {
+            preview.innerHTML = '~<strong>5%</strong> platform fee &bull; ~<strong>95%</strong> goes to campaign';
+            return;
+        }
+        try {
+            const result = await CharityTx.previewDonation(ethers.parseEther(String(val)));
+            preview.innerHTML = `Fee: <span class="fee-val">${result.feeFormatted} ETH</span> &bull; Campaign receives: <span class="net-val">${result.netFormatted} ETH</span>`;
+        } catch {
+            const fee = (val * 0.05).toFixed(4);
+            const net = (val * 0.95).toFixed(4);
+            preview.innerHTML = `Fee: <span class="fee-val">~${fee} ETH</span> &bull; Campaign receives: <span class="net-val">~${net} ETH</span>`;
+        }
+    }, 300);
 }
 
 // ============================================================================
@@ -1592,7 +1716,8 @@ export const CharityPage = {
     boostCampaign: confirmBoost,
     confirmBoost,
     updateBoostDays,
-    setAmt, goBack, viewCampaign, selectCat, clearCat,
+    setAmt, setMax, updateDonatePreview,
+    goBack, viewCampaign, selectCat, clearCat,
     share, copyLink, quickShare,
     // Carousel
     carouselPrev, carouselNext, carouselGo,
