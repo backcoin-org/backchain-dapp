@@ -110,8 +110,9 @@ export async function getUploader() {
 // ============================================================================
 
 /**
- * Upload a File object to Arweave via Irys.
- * Auto-funds if balance is insufficient — triggers MetaMask popup.
+ * Upload a File via server-side API (Lighthouse IPFS+Filecoin).
+ * No MetaMask popup, no ETH cost to user — uses server API key.
+ * Falls back to client-side Irys if API is unavailable.
  *
  * @param {File} file - Browser File object
  * @param {object} [options] - Upload options
@@ -126,18 +127,28 @@ export async function uploadFile(file, options = {}) {
     }
 
     const onProgress = options.onProgress || (() => {});
-    onProgress('preparing', 'Connecting to Irys...');
 
+    // Primary: server-side API upload (Lighthouse IPFS+Filecoin)
+    try {
+        onProgress('uploading', `Uploading ${(file.size / 1024).toFixed(0)} KB...`);
+        const result = await _uploadViaAPI(file);
+        console.log(`[Upload] API success: ${result.url} (${(file.size / 1024).toFixed(0)} KB)`);
+        onProgress('done', result.url);
+        return result;
+    } catch (apiErr) {
+        console.warn('[Upload] API upload failed, trying Irys fallback:', apiErr.message);
+    }
+
+    // Fallback: client-side Irys (Arweave) — requires MetaMask
+    onProgress('preparing', 'Connecting to Irys...');
     const irys = await getUploader();
 
-    // Build tags
     const tags = [
         { name: 'App-Name', value: 'Backchain' },
         { name: 'Content-Type', value: file.type || 'application/octet-stream' },
         ...(options.tags || [])
     ];
 
-    // Check price & auto-fund
     onProgress('pricing', 'Calculating upload cost...');
     const price = await irys.getPrice(file.size);
     const balance = await irys.getLoadedBalance();
@@ -147,13 +158,12 @@ export async function uploadFile(file, options = {}) {
 
     if (balanceBn < priceBn) {
         const deficit = priceBn - balanceBn;
-        const fundAmount = (deficit * 120n) / 100n; // 20% buffer
+        const fundAmount = (deficit * 120n) / 100n;
         onProgress('funding', `Funding Irys node (${_formatEth(fundAmount)})...`);
         console.log(`[Irys] Funding ${_formatEth(fundAmount)} (balance: ${_formatEth(balanceBn)}, price: ${_formatEth(priceBn)})`);
         await _manualFund(irys, fundAmount);
     }
 
-    // Upload
     onProgress('uploading', `Uploading ${(file.size / 1024).toFixed(0)} KB...`);
     const receipt = await irys.uploadFile(file, { tags });
 
@@ -167,6 +177,37 @@ export async function uploadFile(file, options = {}) {
     console.log(`[Irys] Uploaded: ${result.url} (${(file.size / 1024).toFixed(0)} KB)`);
     onProgress('done', result.url);
     return result;
+}
+
+/**
+ * Upload file to server-side API (Pinata IPFS).
+ * Uses /api/upload-media which accepts images, videos, and audio.
+ */
+async function _uploadViaAPI(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch('/api/upload-media', {
+        method: 'POST',
+        body: formData
+    });
+
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (!data.success || !data.ipfsHash) {
+        throw new Error('Upload returned no hash');
+    }
+
+    return {
+        id: data.ipfsHash,
+        url: `https://gateway.pinata.cloud/ipfs/${data.ipfsHash}`,
+        size: file.size,
+        type: file.type
+    };
 }
 
 /**
@@ -253,8 +294,8 @@ export async function getBalance() {
 // ============================================================================
 
 const IPFS_GATEWAYS = [
+    'https://gateway.pinata.cloud/ipfs/',
     'https://dweb.link/ipfs/',
-    'https://w3s.link/ipfs/',
     'https://cloudflare-ipfs.com/ipfs/',
     'https://ipfs.io/ipfs/'
 ];

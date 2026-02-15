@@ -1,8 +1,8 @@
 // api/upload-image.js
-// ✅ V2.0: Image upload via Lighthouse (decentralized, permanent IPFS+Filecoin)
-// Migrated from Pinata to Lighthouse for cheaper permanent storage
+// V3.0: Image upload via Pinata (IPFS permanent storage)
+// Used by: Agora avatars, profile images
 
-import lighthouse from '@lighthouse-web3/sdk';
+import PinataSDK from '@pinata/sdk';
 import { Formidable } from 'formidable';
 import fs from 'fs';
 
@@ -13,8 +13,8 @@ export const config = {
     },
 };
 
-const IPFS_GATEWAY = 'https://gateway.lighthouse.storage/ipfs/';
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB (Lighthouse allows larger)
+const IPFS_GATEWAY = 'https://gateway.pinata.cloud/ipfs/';
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
 const setCorsHeaders = (res) => {
@@ -33,9 +33,9 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
-    const API_KEY = process.env.LIGHTHOUSE_API_KEY;
-    if (!API_KEY) {
-        console.error('LIGHTHOUSE_API_KEY not configured');
+    const JWT = process.env.PINATA_JWT;
+    if (!JWT) {
+        console.error('PINATA_JWT not configured');
         return res.status(500).json({ error: 'Server configuration error.' });
     }
 
@@ -81,17 +81,21 @@ export default async function handler(req, res) {
         const fileSize = file.size;
         console.log(`Image: ${fileName} | Size: ${(fileSize / 1024).toFixed(1)} KB | Type: ${fileMime}`);
 
-        // Upload to IPFS+Filecoin via Lighthouse (permanent storage)
-        const result = await lighthouse.upload(file.filepath, API_KEY);
+        // Upload to IPFS via Pinata
+        const pinata = new PinataSDK({ pinataJWTKey: JWT });
+        const readStream = fs.createReadStream(file.filepath);
+        const result = await pinata.pinFileToIPFS(readStream, {
+            pinataMetadata: { name: `backchain-${fileName}` }
+        });
 
-        if (!result?.data?.Hash) {
-            throw new Error('Lighthouse upload returned no hash');
+        if (!result?.IpfsHash) {
+            throw new Error('Pinata upload returned no hash');
         }
 
-        const ipfsHash = result.data.Hash;
+        const ipfsHash = result.IpfsHash;
         const imageUrl = `${IPFS_GATEWAY}${ipfsHash}`;
 
-        console.log('Image uploaded (Lighthouse):', imageUrl);
+        console.log('Image uploaded (Pinata):', imageUrl);
 
         return res.status(200).json({
             success: true,
