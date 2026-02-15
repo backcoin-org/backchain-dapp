@@ -806,25 +806,45 @@ function renderTierCards() {
         const style = getTierStyle(tier.name);
         const data = poolDataMap.get(tier.boostBips) || {};
         const isUserTier = userBestBoost === tier.boostBips && userBestBoost > 0;
-        const isUnavailable = data.unavailable;
+        const isBronze = tier.name === 'Bronze';
 
-        if (isUnavailable) {
+        // Non-Bronze tiers: fusion-only cards (no pool)
+        if (!isBronze) {
+            const tierIndex = boosterTiers.indexOf(tier);
+            const lowerTier = tierIndex < boosterTiers.length - 1 ? boosterTiers[tierIndex + 1] : null;
+            const lowerStyle = lowerTier ? getTierStyle(lowerTier.name) : null;
+            const userOwned = (State.myBoosters || []).filter(nft => Number(nft.boostBips) === tier.boostBips).length;
+
             return `
-                <div class="nft-tier-card" style="border-color:${style.border}">
+                <div class="nft-tier-card ${isUserTier ? 'nft-user-tier' : ''}" style="border-color:${isUserTier ? style.color : 'var(--nft-border)'}">
+                    ${isUserTier ? '<div class="nft-user-badge">YOUR TIER</div>' : ''}
                     <div class="nft-tier-top">
                         <div class="nft-tier-img" style="background:${style.bg};border:1px solid ${style.border}">
                             <img src="${style.image}" alt="${tier.name}" onerror="this.outerHTML='<span style=\\'font-size:28px\\'>${style.icon}</span>'">
                         </div>
                         <div>
                             <div class="nft-tier-name" style="color:${style.color}">${style.icon} ${tier.name}</div>
-                            <div class="nft-keep-badge" style="background:${style.bg};color:${style.color}">Keep ${style.keepRate}%</div>
+                            <div class="nft-keep-badge" style="background:${style.bg};color:${style.keepRate === 100 ? 'var(--nft-green)' : style.color}">Keep ${style.keepRate}%</div>
                         </div>
                     </div>
-                    <div class="nft-empty"><i class="fa-solid fa-store-slash"></i><p>Pool coming soon</p></div>
+                    <div class="nft-tier-stats">
+                        <div class="nft-tier-stat">
+                            <div class="nft-tier-stat-label">You Own</div>
+                            <div class="nft-tier-stat-val" style="color:${userOwned > 0 ? style.color : 'var(--nft-text-3)'}">${userOwned}</div>
+                        </div>
+                    </div>
+                    <div style="text-align:center;padding:6px 8px;font-size:10px;color:var(--nft-text-3)">
+                        <i class="fa-solid fa-fire" style="color:#f59e0b;font-size:9px"></i>
+                        ${lowerStyle ? `Fuse 2x ${lowerStyle.icon} ${lowerTier.name} to get ${style.icon} ${tier.name}` : 'Highest tier'}
+                    </div>
+                    <div style="text-align:center;padding:2px 8px 6px;font-size:9px;color:var(--nft-text-3)">
+                        <i class="fa-solid fa-scissors" style="font-size:8px"></i> Split to sell as Bronze in pool
+                    </div>
                 </div>
             `;
         }
 
+        // Bronze tier: the only tradeable pool
         const buyPrice = data.buyPrice || 0n;
         const netSell = data.netSellPrice || 0n;
         const poolCount = data.poolNFTCount || 0;
@@ -840,7 +860,6 @@ function renderTierCards() {
         // Buy button state
         let buyDisabled = !State.isConnected || soldOut || insufficientBuy || buyPrice === 0n;
         let buyLabel = soldOut ? 'Sold Out' : (insufficientBuy ? 'Low BKC' : 'Buy');
-        let buyIcon = 'fa-cart-plus';
         if (!State.isConnected) buyLabel = 'Connect';
 
         // Sell button state
@@ -849,20 +868,6 @@ function renderTierCards() {
         if (!State.isConnected) { sellLabel = '--'; }
         else if (userOwned === 0) { sellLabel = 'No NFT'; }
         else if (noSellable) { sellLabel = 'Rented'; }
-
-        // Fusion hint for non-buyable tiers (boosterTiers order: Diamond, Gold, Silver, Bronze — index+1 is lower tier)
-        const tierIndex = boosterTiers.indexOf(tier);
-        let fusionHint = '';
-        if (soldOut && tierIndex < boosterTiers.length - 1) {
-            const lowerTier = boosterTiers[tierIndex + 1];
-            if (lowerTier) {
-                const lowerStyle = getTierStyle(lowerTier.name);
-                fusionHint = `<div style="text-align:center;padding:4px 0 2px;font-size:9px;color:var(--nft-text-3)">
-                    <i class="fa-solid fa-fire" style="color:#f59e0b;font-size:8px"></i>
-                    Fuse 2x ${lowerStyle.icon} ${lowerTier.name} to get ${style.icon} ${tier.name}
-                </div>`;
-            }
-        }
 
         return `
             <div class="nft-tier-card ${isUserTier ? 'nft-user-tier' : ''}" style="border-color:${isUserTier ? style.color : 'var(--nft-border)'}" data-boost="${tier.boostBips}">
@@ -873,7 +878,7 @@ function renderTierCards() {
                     </div>
                     <div>
                         <div class="nft-tier-name" style="color:${style.color}">${style.icon} ${tier.name}</div>
-                        <div class="nft-keep-badge" style="background:${style.bg};color:${style.keepRate === 100 ? 'var(--nft-green)' : style.color}">Keep ${style.keepRate}%</div>
+                        <div class="nft-keep-badge" style="background:${style.bg};color:${style.color}">Keep ${style.keepRate}%</div>
                     </div>
                 </div>
 
@@ -884,7 +889,7 @@ function renderTierCards() {
                     </div>
                     <div class="nft-price-row">
                         <span class="nft-price-label"><i class="fa-solid fa-money-bill-transfer" style="color:var(--nft-accent)"></i> Sell</span>
-                        <span class="nft-price-val" style="color:${userOwned > 0 ? 'var(--nft-text)' : 'var(--nft-text-3)'}">${userOwned > 0 ? `${sellPriceStr} BKC` : (soldOut ? '--' : 'Buy first')}</span>
+                        <span class="nft-price-val" style="color:${userOwned > 0 ? 'var(--nft-text)' : 'var(--nft-text-3)'}">${userOwned > 0 ? `${sellPriceStr} BKC` : 'Buy first'}</span>
                     </div>
                 </div>
 
@@ -915,7 +920,10 @@ function renderTierCards() {
                         </button>
                     ` : ''}
                 </div>
-                ${fusionHint}
+                <div style="text-align:center;padding:4px 0 2px;font-size:9px;color:var(--nft-text-3)">
+                    <i class="fa-solid fa-fire" style="color:#f59e0b;font-size:8px"></i>
+                    Fuse 2x Bronze to get Silver
+                </div>
             </div>
         `;
     }).join('');
