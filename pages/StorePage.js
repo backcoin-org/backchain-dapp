@@ -338,169 +338,229 @@ function injectStyles() {
         }
         .nft-inv-rent:hover { text-decoration: underline; }
 
-        /* Fusion Section — Premium Interactive UI */
+        /* ═══ Fusion/Split Section — Forge UI ═══ */
         .nft-fusion-card {
             background: var(--nft-surface); border: 1px solid var(--nft-border);
             border-radius: var(--nft-radius); margin-bottom: 12px; overflow: hidden;
             animation: nft-scaleIn 0.3s ease-out;
-            box-shadow: 0 0 20px rgba(245,158,11,0.04);
         }
-        .nft-fusion-tabs { display: flex; border-bottom: 1px solid var(--nft-border); position: relative; }
+
+        /* Toggle Tabs — Pill style */
+        .nft-fusion-tabs {
+            display: flex; gap: 4px; padding: 10px 14px 0;
+        }
         .nft-fusion-tab {
-            flex: 1; padding: 11px 16px; font-size: 11px; font-weight: 700;
+            flex: 1; padding: 9px 14px; font-size: 11px; font-weight: 700;
             color: var(--nft-text-3); text-align: center; cursor: pointer;
-            border-bottom: 2px solid transparent; transition: all var(--nft-tr);
-            background: none; border-top: none; border-left: none; border-right: none;
+            border-radius: 10px; transition: all 0.25s ease;
+            background: transparent; border: 1px solid transparent;
+            display: flex; align-items: center; justify-content: center; gap: 6px;
         }
-        .nft-fusion-tab:hover { color: var(--nft-text-2); background: rgba(255,255,255,0.02); }
-        .nft-fusion-tab.active { color: var(--nft-accent); border-bottom-color: var(--nft-accent); }
+        .nft-fusion-tab:hover { color: var(--nft-text-2); background: var(--nft-surface-2); }
+        .nft-fusion-tab.active[data-fusion-tab="fuse"] {
+            color: #000; background: linear-gradient(135deg, #f59e0b, #f97316);
+            border-color: rgba(245,158,11,0.4); box-shadow: 0 2px 12px rgba(245,158,11,0.2);
+        }
+        .nft-fusion-tab.active[data-fusion-tab="split"] {
+            color: #fff; background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+            border-color: rgba(139,92,246,0.4); box-shadow: 0 2px 12px rgba(139,92,246,0.2);
+        }
+        .nft-fusion-tab i { font-size: 10px; }
+
         .nft-fusion-body { padding: 14px; }
-        .nft-fusion-hint { font-size: 10px; color: var(--nft-text-3); margin-bottom: 10px; }
+        .nft-fusion-hint { font-size: 10px; color: var(--nft-text-3); margin-bottom: 10px; display: flex; align-items: center; gap: 5px; }
+        .nft-fusion-hint i { font-size: 8px; opacity: 0.5; }
 
-        /* Tier Filter Buttons */
-        .nft-fusion-filters { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+        /* Tier Filter Pills */
+        .nft-fusion-filters { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
         .nft-fusion-filter {
-            padding: 5px 12px; border-radius: 20px; font-size: 10px; font-weight: 700;
+            padding: 6px 14px; border-radius: 20px; font-size: 10px; font-weight: 700;
             border: 1px solid var(--nft-border); background: var(--nft-surface-2);
-            color: var(--nft-text-3); cursor: pointer; transition: all var(--nft-tr);
+            color: var(--nft-text-3); cursor: pointer; transition: all 0.2s ease;
+            display: flex; align-items: center; gap: 4px;
         }
-        .nft-fusion-filter:hover:not(:disabled) { border-color: var(--nft-border-h); color: var(--nft-text-2); }
-        .nft-fusion-filter.active { border-color: var(--nft-accent); color: var(--nft-accent); background: rgba(245,158,11,0.08); }
-        .nft-fusion-filter:disabled { opacity: 0.3; cursor: not-allowed; }
-        .nft-fusion-filter .ff-count { font-size: 8px; opacity: 0.6; margin-left: 3px; }
+        .nft-fusion-filter:hover:not(:disabled) { border-color: var(--nft-border-h); color: var(--nft-text-2); background: var(--nft-surface-3); }
+        .nft-fusion-filter.active { font-weight: 800; }
+        .nft-fusion-filter:disabled { opacity: 0.25; cursor: not-allowed; }
+        .nft-fusion-filter .ff-count { font-size: 8px; opacity: 0.6; }
 
-        /* Selectable NFT Grid */
-        .nft-fusion-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+        /* NFT Selection Grid */
+        .nft-fusion-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 8px; margin-bottom: 12px; }
         .nft-fusion-nft {
-            position: relative; padding: 10px 6px 8px; border-radius: 10px; text-align: center;
+            position: relative; padding: 12px 6px 10px; border-radius: 12px; text-align: center;
             background: var(--nft-surface-2); border: 2px solid var(--nft-border);
             cursor: pointer; transition: all 0.2s ease; user-select: none;
         }
-        .nft-fusion-nft:hover { border-color: var(--nft-border-h); transform: translateY(-1px); }
+        .nft-fusion-nft:hover { border-color: var(--nft-border-h); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
         .nft-fusion-nft.selected {
-            border-color: var(--nft-accent); background: rgba(245,158,11,0.08);
-            box-shadow: 0 0 12px rgba(245,158,11,0.2);
+            background: rgba(245,158,11,0.06);
+            box-shadow: 0 0 16px rgba(245,158,11,0.15), inset 0 0 20px rgba(245,158,11,0.04);
         }
         .nft-fusion-nft.selected::after {
-            content: ''; position: absolute; inset: -4px; border-radius: 12px;
-            border: 2px solid var(--nft-accent); opacity: 0.4;
-            animation: nft-pulse-ring 1.5s ease-in-out infinite;
+            content: ''; position: absolute; inset: -3px; border-radius: 14px;
+            border: 2px solid; opacity: 0.5;
+            animation: nft-pulse-ring 2s ease-in-out infinite;
         }
-        .nft-fusion-nft-icon { font-size: 22px; margin-bottom: 3px; display: block; }
-        .nft-fusion-nft-id { font-size: 9px; font-weight: 800; color: var(--nft-text); }
-        .nft-fusion-nft-tier { font-size: 8px; color: var(--nft-text-3); margin-top: 1px; }
+        .nft-fusion-nft-icon { font-size: 24px; margin-bottom: 4px; display: block; transition: transform 0.2s ease; }
+        .nft-fusion-nft.selected .nft-fusion-nft-icon { transform: scale(1.15); }
+        .nft-fusion-nft-id { font-size: 9px; font-weight: 800; color: var(--nft-text); font-family: 'SF Mono', 'Fira Code', monospace; }
+        .nft-fusion-nft-tier { font-size: 8px; color: var(--nft-text-3); margin-top: 2px; font-weight: 600; }
         .nft-fusion-nft-check {
-            position: absolute; top: 3px; right: 3px; width: 16px; height: 16px;
-            border-radius: 50%; background: var(--nft-accent); color: #000;
-            display: none; align-items: center; justify-content: center; font-size: 8px; font-weight: 900;
+            position: absolute; top: 4px; right: 4px; width: 18px; height: 18px;
+            border-radius: 50%; color: #000;
+            display: none; align-items: center; justify-content: center; font-size: 9px; font-weight: 900;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
         }
         .nft-fusion-nft.selected .nft-fusion-nft-check { display: flex; }
 
-        /* Transformation Preview */
-        .nft-fusion-preview {
-            display: flex; align-items: center; justify-content: center; gap: 10px;
-            padding: 12px 14px; background: var(--nft-surface-2);
-            border: 1px solid rgba(245,158,11,0.25); border-radius: 10px;
-            margin-bottom: 10px; animation: nft-fadeIn 0.3s ease-out;
+        /* ═══ Forge Preview (Fuse) ═══ */
+        .nft-forge-preview {
+            position: relative; display: flex; align-items: center; justify-content: center; gap: 8px;
+            padding: 16px; margin-bottom: 12px;
+            background: radial-gradient(ellipse at center, rgba(245,158,11,0.06) 0%, transparent 70%);
+            border: 1px solid rgba(245,158,11,0.15); border-radius: 14px;
+            animation: nft-fadeIn 0.3s ease-out;
+            overflow: hidden;
         }
-        .nft-fusion-preview-item { text-align: center; }
-        .nft-fusion-preview-icon { font-size: 20px; display: block; }
-        .nft-fusion-preview-label { font-size: 9px; font-weight: 700; margin-top: 2px; }
-        .nft-fusion-preview-plus { font-size: 14px; font-weight: 900; color: var(--nft-text-3); }
-        .nft-fusion-preview-arrow {
-            font-size: 16px; color: var(--nft-accent); animation: nft-bounce-arrow 1s ease-in-out infinite;
+        .nft-forge-preview::before {
+            content: ''; position: absolute; inset: 0;
+            background: linear-gradient(90deg, transparent, rgba(245,158,11,0.03), transparent);
+            animation: nft-forge-shimmer 3s ease-in-out infinite;
         }
-        .nft-fusion-preview-result { text-align: center; }
-        .nft-fusion-preview-result-icon { font-size: 26px; display: block; filter: drop-shadow(0 0 6px rgba(245,158,11,0.3)); }
-        .nft-fusion-preview-result-label { font-size: 10px; font-weight: 800; margin-top: 2px; }
-        .nft-fusion-preview-fee { font-size: 9px; color: var(--nft-text-3); margin-top: 6px; text-align: center; }
+        .nft-forge-source {
+            display: flex; flex-direction: column; align-items: center; gap: 2px;
+            padding: 8px 12px; border-radius: 10px; background: var(--nft-surface-2);
+            border: 1px solid var(--nft-border); z-index: 1;
+        }
+        .nft-forge-source-icon { font-size: 22px; }
+        .nft-forge-source-id { font-size: 9px; font-weight: 800; font-family: 'SF Mono', monospace; }
+        .nft-forge-op {
+            font-size: 16px; font-weight: 900; color: var(--nft-text-3); z-index: 1;
+            width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
+        }
+        .nft-forge-arrow {
+            z-index: 1; color: var(--nft-accent); font-size: 14px;
+            animation: nft-forge-pulse 1.5s ease-in-out infinite;
+        }
+        .nft-forge-result {
+            display: flex; flex-direction: column; align-items: center; gap: 2px;
+            padding: 10px 16px; border-radius: 12px; z-index: 1;
+            border: 1px solid rgba(245,158,11,0.3);
+            background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(217,119,6,0.04));
+            box-shadow: 0 0 20px rgba(245,158,11,0.08);
+        }
+        .nft-forge-result-icon { font-size: 28px; filter: drop-shadow(0 0 8px rgba(245,158,11,0.3)); }
+        .nft-forge-result-name { font-size: 10px; font-weight: 800; }
+        .nft-forge-fee {
+            font-size: 9px; color: var(--nft-text-3); text-align: center; margin-bottom: 8px;
+            display: flex; align-items: center; justify-content: center; gap: 4px;
+        }
+        .nft-forge-fee i { font-size: 7px; opacity: 0.5; }
 
-        /* CTA Button */
+        /* ═══ CTA Buttons ═══ */
         .nft-fusion-cta {
-            width: 100%; padding: 10px; border: none; border-radius: 10px;
+            width: 100%; padding: 11px; border: none; border-radius: 12px;
             font-size: 12px; font-weight: 800; cursor: pointer;
             transition: all 0.2s ease; text-transform: uppercase; letter-spacing: 0.5px;
+            display: flex; align-items: center; justify-content: center; gap: 6px;
         }
         .nft-fusion-cta.fuse-cta {
-            background: linear-gradient(135deg, #f59e0b, #d97706); color: #000;
-            box-shadow: 0 2px 10px rgba(245,158,11,0.25);
+            background: linear-gradient(135deg, #f59e0b, #ea580c); color: #000;
+            box-shadow: 0 2px 12px rgba(245,158,11,0.25);
         }
-        .nft-fusion-cta.fuse-cta:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(245,158,11,0.35); }
+        .nft-fusion-cta.fuse-cta:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(245,158,11,0.35); }
         .nft-fusion-cta.split-cta {
             background: linear-gradient(135deg, #a78bfa, #7c3aed); color: #fff;
-            box-shadow: 0 2px 10px rgba(124,58,237,0.25);
+            box-shadow: 0 2px 12px rgba(124,58,237,0.25);
         }
-        .nft-fusion-cta.split-cta:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(124,58,237,0.35); }
+        .nft-fusion-cta.split-cta:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(124,58,237,0.35); }
         .nft-fusion-cta:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
 
-        /* Split Options Panel */
+        /* ═══ Split Options Panel ═══ */
         .nft-split-options {
-            padding: 10px; margin-top: 8px; background: var(--nft-surface-3);
-            border: 1px solid var(--nft-border); border-radius: 8px;
+            padding: 12px; margin-top: 10px;
+            background: linear-gradient(135deg, var(--nft-surface-2), var(--nft-surface-3));
+            border: 1px solid rgba(139,92,246,0.15); border-radius: 12px;
             animation: nft-fadeIn 0.2s ease-out;
         }
+        .nft-split-header {
+            display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+            padding-bottom: 8px; border-bottom: 1px solid var(--nft-border);
+        }
+        .nft-split-header-icon { font-size: 20px; }
+        .nft-split-header-info { flex: 1; }
+        .nft-split-header-name { font-size: 11px; font-weight: 800; }
+        .nft-split-header-sub { font-size: 9px; color: var(--nft-text-3); }
         .nft-split-option {
             display: flex; align-items: center; justify-content: space-between;
-            padding: 7px 10px; border-radius: 6px; cursor: pointer;
-            transition: all var(--nft-tr); margin-bottom: 4px;
-            border: 1px solid transparent;
+            padding: 8px 12px; border-radius: 10px; cursor: pointer;
+            transition: all 0.2s ease; margin-bottom: 4px;
+            border: 1px solid transparent; background: transparent;
         }
-        .nft-split-option:hover { background: rgba(255,255,255,0.03); }
+        .nft-split-option:hover { background: rgba(139,92,246,0.04); border-color: rgba(139,92,246,0.1); }
         .nft-split-option.active {
-            background: rgba(124,58,237,0.08); border-color: rgba(124,58,237,0.3);
+            background: rgba(139,92,246,0.08); border-color: rgba(139,92,246,0.25);
+            box-shadow: 0 0 10px rgba(139,92,246,0.06);
         }
-        .nft-split-option-left { display: flex; align-items: center; gap: 6px; }
+        .nft-split-option-left { display: flex; align-items: center; gap: 8px; }
         .nft-split-option-radio {
-            width: 14px; height: 14px; border-radius: 50%;
-            border: 2px solid var(--nft-border); transition: all var(--nft-tr);
+            width: 16px; height: 16px; border-radius: 50%;
+            border: 2px solid var(--nft-border); transition: all 0.2s ease;
+            flex-shrink: 0;
         }
         .nft-split-option.active .nft-split-option-radio {
             border-color: #a78bfa; background: #a78bfa;
-            box-shadow: inset 0 0 0 2px var(--nft-surface-3);
+            box-shadow: inset 0 0 0 2.5px var(--nft-surface-2), 0 0 6px rgba(167,139,250,0.3);
         }
-        .nft-split-option-label { font-size: 10px; font-weight: 700; color: var(--nft-text); }
-        .nft-split-option-fee { font-size: 9px; color: var(--nft-text-3); }
+        .nft-split-option-label { font-size: 11px; font-weight: 700; color: var(--nft-text); }
+        .nft-split-option-fee { font-size: 9px; color: var(--nft-text-3); font-family: 'SF Mono', monospace; }
 
-        /* Split Confirmation Inline */
+        /* Split Confirmation */
         .nft-split-confirm {
-            margin-top: 8px; padding: 10px 12px; background: rgba(239,68,68,0.06);
-            border: 1px solid rgba(239,68,68,0.2); border-radius: 8px;
+            margin-top: 10px; padding: 12px 14px; background: rgba(239,68,68,0.05);
+            border: 1px solid rgba(239,68,68,0.15); border-radius: 10px;
             animation: nft-fadeIn 0.2s ease-out;
         }
-        .nft-split-confirm-text { font-size: 10px; color: #fca5a5; margin-bottom: 8px; line-height: 1.4; }
+        .nft-split-confirm-text { font-size: 10px; color: #fca5a5; margin-bottom: 10px; line-height: 1.5; }
+        .nft-split-confirm-text i { color: #f87171; }
         .nft-split-confirm-btns { display: flex; gap: 8px; }
         .nft-split-confirm-cancel {
-            flex: 1; padding: 7px; border-radius: 6px; font-size: 10px; font-weight: 700;
+            flex: 1; padding: 8px; border-radius: 8px; font-size: 10px; font-weight: 700;
             background: var(--nft-surface-2); color: var(--nft-text-3); border: 1px solid var(--nft-border);
-            cursor: pointer; transition: all var(--nft-tr);
+            cursor: pointer; transition: all 0.2s ease;
         }
         .nft-split-confirm-cancel:hover { color: var(--nft-text); border-color: var(--nft-border-h); }
         .nft-split-confirm-go {
-            flex: 1; padding: 7px; border-radius: 6px; font-size: 10px; font-weight: 800;
+            flex: 1; padding: 8px; border-radius: 8px; font-size: 10px; font-weight: 800;
             background: linear-gradient(135deg, #ef4444, #b91c1c); color: #fff; border: none;
-            cursor: pointer; transition: all var(--nft-tr);
+            cursor: pointer; transition: all 0.2s ease;
         }
-        .nft-split-confirm-go:hover { transform: scale(1.02); }
+        .nft-split-confirm-go:hover { transform: scale(1.02); box-shadow: 0 2px 10px rgba(239,68,68,0.3); }
         .nft-split-confirm-go:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
 
         /* Empty & Stats */
-        .nft-fusion-empty { text-align: center; padding: 20px; color: var(--nft-text-3); font-size: 11px; }
-        .nft-fusion-empty i { font-size: 20px; margin-bottom: 6px; display: block; opacity: 0.3; }
+        .nft-fusion-empty {
+            text-align: center; padding: 24px 16px; color: var(--nft-text-3); font-size: 11px; line-height: 1.5;
+        }
+        .nft-fusion-empty i { font-size: 22px; margin-bottom: 8px; display: block; opacity: 0.25; }
         .nft-fusion-stats {
             display: flex; align-items: center; justify-content: center; gap: 6px;
             padding: 8px 12px; border-top: 1px solid var(--nft-border);
             font-size: 9px; color: var(--nft-text-3);
         }
-        .nft-fusion-stats-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--nft-text-3); opacity: 0.4; }
 
-        /* Animations */
+        /* ═══ Fusion Animations ═══ */
         @keyframes nft-pulse-ring {
-            0%, 100% { opacity: 0.4; transform: scale(1); }
-            50% { opacity: 0.15; transform: scale(1.03); }
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 0.15; }
         }
-        @keyframes nft-bounce-arrow {
-            0%, 100% { transform: translateX(0); }
-            50% { transform: translateX(4px); }
+        @keyframes nft-forge-shimmer {
+            0%, 100% { opacity: 0; transform: translateX(-100%); }
+            50% { opacity: 1; transform: translateX(100%); }
+        }
+        @keyframes nft-forge-pulse {
+            0%, 100% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.2); opacity: 1; }
         }
 
         /* History */
@@ -1033,10 +1093,10 @@ function renderFusionSection() {
         <div class="nft-fusion-card">
             <div class="nft-fusion-tabs">
                 <button class="nft-fusion-tab ${fusionActiveTab === 'fuse' ? 'active' : ''}" data-fusion-tab="fuse">
-                    <i class="fa-solid fa-fire"></i> Fuse (Upgrade)
+                    <i class="fa-solid fa-fire"></i> Forge
                 </button>
                 <button class="nft-fusion-tab ${fusionActiveTab === 'split' ? 'active' : ''}" data-fusion-tab="split">
-                    <i class="fa-solid fa-scissors"></i> Split (Downgrade)
+                    <i class="fa-solid fa-scissors"></i> Split
                 </button>
             </div>
             <div class="nft-fusion-body">
@@ -1062,44 +1122,39 @@ function renderFusionSection() {
 }
 
 function renderFusionExplainer() {
+    const tiers = ['Bronze', 'Silver', 'Gold', 'Diamond'];
+    const steps = tiers.map((name, i) => {
+        const s = TIER_CONFIG[name];
+        const isLast = i === tiers.length - 1;
+        return `
+            <div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;min-width:50px">
+                <div style="font-size:${isLast ? '28' : '20'}px;${isLast ? 'filter:drop-shadow(0 0 8px rgba(34,211,238,0.3))' : ''}">${s.icon}</div>
+                <div style="font-size:9px;font-weight:800;color:${s.color}">${name}</div>
+                <div style="font-size:8px;color:var(--nft-text-3)">${s.keepRate}% keep</div>
+            </div>
+            ${!isLast ? '<div style="display:flex;align-items:center;color:var(--nft-text-3);font-size:10px;opacity:0.4;padding-top:0"><i class="fa-solid fa-chevron-right"></i></div>' : ''}
+        `;
+    });
+
     return `
-        <div style="text-align:center;padding:16px 10px">
-            <div style="font-size:13px;font-weight:800;color:var(--nft-text);margin-bottom:10px">
-                <i class="fa-solid fa-fire" style="color:#f59e0b"></i> NFT Fusion System
+        <div style="padding:8px 4px;text-align:center">
+            <div style="display:flex;align-items:center;justify-content:center;gap:4px;margin-bottom:16px">
+                ${steps.join('')}
             </div>
-            <div style="font-size:10px;color:var(--nft-text-3);margin-bottom:14px;line-height:1.5">
-                Combine 2 NFTs of the same tier into 1 higher-tier NFT.<br>
-                Even when pools are sold out, you can reach Diamond through fusion!
-            </div>
-            <div style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;margin-bottom:14px">
-                <span style="display:inline-flex;align-items:center;gap:3px;padding:4px 10px;border-radius:8px;background:${TIER_CONFIG.Bronze.bg};border:1px solid ${TIER_CONFIG.Bronze.border};font-size:10px;font-weight:700;color:${TIER_CONFIG.Bronze.color}">
-                    2x ${TIER_CONFIG.Bronze.icon} Bronze
-                </span>
-                <i class="fa-solid fa-arrow-right" style="font-size:9px;color:var(--nft-accent)"></i>
-                <span style="display:inline-flex;align-items:center;gap:3px;padding:4px 10px;border-radius:8px;background:${TIER_CONFIG.Silver.bg};border:1px solid ${TIER_CONFIG.Silver.border};font-size:10px;font-weight:700;color:${TIER_CONFIG.Silver.color}">
-                    1x ${TIER_CONFIG.Silver.icon} Silver
-                </span>
-                <i class="fa-solid fa-arrow-right" style="font-size:9px;color:var(--nft-accent)"></i>
-                <span style="display:inline-flex;align-items:center;gap:3px;padding:4px 10px;border-radius:8px;background:${TIER_CONFIG.Gold.bg};border:1px solid ${TIER_CONFIG.Gold.border};font-size:10px;font-weight:700;color:${TIER_CONFIG.Gold.color}">
-                    ${TIER_CONFIG.Gold.icon} Gold
-                </span>
-                <i class="fa-solid fa-arrow-right" style="font-size:9px;color:var(--nft-accent)"></i>
-                <span style="display:inline-flex;align-items:center;gap:3px;padding:4px 10px;border-radius:8px;background:${TIER_CONFIG.Diamond.bg};border:1px solid ${TIER_CONFIG.Diamond.border};font-size:10px;font-weight:700;color:${TIER_CONFIG.Diamond.color}">
-                    ${TIER_CONFIG.Diamond.icon} Diamond
-                </span>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:320px;margin:0 auto 12px">
-                <div style="padding:8px;border-radius:8px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15)">
-                    <div style="font-size:10px;font-weight:800;color:#f59e0b;margin-bottom:2px"><i class="fa-solid fa-fire"></i> Fuse</div>
-                    <div style="font-size:9px;color:var(--nft-text-3)">2 same-tier NFTs &rarr; 1 higher tier</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:300px;margin:0 auto 14px">
+                <div style="padding:10px 8px;border-radius:10px;background:rgba(245,158,11,0.05);border:1px solid rgba(245,158,11,0.12)">
+                    <i class="fa-solid fa-fire" style="font-size:14px;color:#f59e0b;margin-bottom:4px;display:block"></i>
+                    <div style="font-size:9px;font-weight:800;color:var(--nft-text);margin-bottom:2px">Forge</div>
+                    <div style="font-size:8px;color:var(--nft-text-3);line-height:1.4">2 same-tier &rarr; 1 higher</div>
                 </div>
-                <div style="padding:8px;border-radius:8px;background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.15)">
-                    <div style="font-size:10px;font-weight:800;color:#a78bfa;margin-bottom:2px"><i class="fa-solid fa-scissors"></i> Split</div>
-                    <div style="font-size:9px;color:var(--nft-text-3)">1 NFT &rarr; 2 lower-tier NFTs</div>
+                <div style="padding:10px 8px;border-radius:10px;background:rgba(139,92,246,0.05);border:1px solid rgba(139,92,246,0.12)">
+                    <i class="fa-solid fa-scissors" style="font-size:14px;color:#a78bfa;margin-bottom:4px;display:block"></i>
+                    <div style="font-size:9px;font-weight:800;color:var(--nft-text);margin-bottom:2px">Split</div>
+                    <div style="font-size:8px;color:var(--nft-text-3);line-height:1.4">1 NFT &rarr; 2 lower-tier</div>
                 </div>
             </div>
             <div style="font-size:10px;color:var(--nft-accent);font-weight:700">
-                <i class="fa-solid fa-arrow-up"></i> Buy Bronze NFTs above to start fusing!
+                <i class="fa-solid fa-arrow-up" style="font-size:8px"></i> Buy Bronze above to start forging
             </div>
         </div>
     `;
@@ -1115,11 +1170,18 @@ function renderFuseTab(nftsByTier) {
     if (eligibleTiers.length === 0) {
         fuseSelected = [];
         fuseTierFilter = null;
+        // Show counts of owned NFTs per tier
+        const counts = [0, 1, 2].map(t => {
+            const name = TIER_NAMES_MAP[t];
+            const s = getTierStyle(name);
+            const c = nftsByTier[t].length;
+            return `<span style="color:${s.color}">${s.icon} ${c}</span>`;
+        }).join(' <span style="opacity:0.3">/</span> ');
         return `
             <div class="nft-fusion-empty">
                 <i class="fa-solid fa-fire"></i>
-                Need 2+ NFTs of the same tier to fuse.<br>
-                Buy Bronze NFTs above, then fuse: 2 Bronze &rarr; 1 Silver &rarr; 1 Gold &rarr; 1 Diamond
+                Need 2+ NFTs of the same tier to forge.<br>
+                <span style="display:inline-block;margin-top:6px;font-size:10px">${counts}</span>
             </div>
         `;
     }
@@ -1130,9 +1192,12 @@ function renderFuseTab(nftsByTier) {
         fuseSelected = [];
     }
 
-    // Clean up stale selections (NFTs that no longer exist in current tier)
+    // Clean up stale selections
     const currentTierIds = new Set(nftsByTier[fuseTierFilter].map(n => n.tokenId));
     fuseSelected = fuseSelected.filter(id => currentTierIds.has(id));
+
+    const tierName = TIER_NAMES_MAP[fuseTierFilter];
+    const tierStyle = getTierStyle(tierName);
 
     // Tier filter buttons
     const filterBtns = [0, 1, 2].map(t => {
@@ -1142,26 +1207,22 @@ function renderFuseTab(nftsByTier) {
         const isActive = t === fuseTierFilter;
         const isDisabled = count < 2;
         return `<button class="nft-fusion-filter ${isActive ? 'active' : ''}" data-fuse-filter="${t}" ${isDisabled ? 'disabled' : ''} style="${isActive ? `border-color:${style.color};color:${style.color};background:${style.bg}` : ''}">
-            ${style.icon} ${name}<span class="ff-count">(${count})</span>
+            ${style.icon} ${name} <span class="ff-count">${count}</span>
         </button>`;
     }).join('');
 
-    // NFT grid for selected tier
+    // NFT grid
     const nfts = nftsByTier[fuseTierFilter];
-    const tierName = TIER_NAMES_MAP[fuseTierFilter];
-    const tierStyle = getTierStyle(tierName);
-
     const nftCards = nfts.map(nft => {
         const isSelected = fuseSelected.includes(nft.tokenId);
         return `<div class="nft-fusion-nft ${isSelected ? 'selected' : ''}" data-fuse-nft="${nft.tokenId}" style="${isSelected ? `border-color:${tierStyle.color}` : ''}">
-            <div class="nft-fusion-nft-check">&check;</div>
+            <div class="nft-fusion-nft-check" style="background:${tierStyle.color}">&check;</div>
             <span class="nft-fusion-nft-icon">${tierStyle.icon}</span>
             <div class="nft-fusion-nft-id" style="color:${tierStyle.color}">#${nft.tokenId}</div>
-            <div class="nft-fusion-nft-tier">${tierName}</div>
         </div>`;
     }).join('');
 
-    // Preview (only when 2 selected)
+    // Forge Preview (when 2 selected)
     let previewHtml = '';
     if (fuseSelected.length === 2) {
         const resultTier = fuseTierFilter + 1;
@@ -1169,25 +1230,25 @@ function renderFuseTab(nftsByTier) {
         const resultStyle = getTierStyle(resultName);
 
         previewHtml = `
-            <div class="nft-fusion-preview">
-                <div class="nft-fusion-preview-item">
-                    <span class="nft-fusion-preview-icon">${tierStyle.icon}</span>
-                    <div class="nft-fusion-preview-label" style="color:${tierStyle.color}">#${fuseSelected[0]}</div>
+            <div class="nft-forge-preview">
+                <div class="nft-forge-source">
+                    <span class="nft-forge-source-icon">${tierStyle.icon}</span>
+                    <span class="nft-forge-source-id" style="color:${tierStyle.color}">#${fuseSelected[0]}</span>
                 </div>
-                <span class="nft-fusion-preview-plus">+</span>
-                <div class="nft-fusion-preview-item">
-                    <span class="nft-fusion-preview-icon">${tierStyle.icon}</span>
-                    <div class="nft-fusion-preview-label" style="color:${tierStyle.color}">#${fuseSelected[1]}</div>
+                <div class="nft-forge-op">+</div>
+                <div class="nft-forge-source">
+                    <span class="nft-forge-source-icon">${tierStyle.icon}</span>
+                    <span class="nft-forge-source-id" style="color:${tierStyle.color}">#${fuseSelected[1]}</span>
                 </div>
-                <span class="nft-fusion-preview-arrow"><i class="fa-solid fa-arrow-right"></i></span>
-                <div class="nft-fusion-preview-result">
-                    <span class="nft-fusion-preview-result-icon">${resultStyle.icon}</span>
-                    <div class="nft-fusion-preview-result-label" style="color:${resultStyle.color}">${resultName}</div>
+                <div class="nft-forge-arrow"><i class="fa-solid fa-angles-right"></i></div>
+                <div class="nft-forge-result">
+                    <span class="nft-forge-result-icon">${resultStyle.icon}</span>
+                    <span class="nft-forge-result-name" style="color:${resultStyle.color}">${resultName}</span>
                 </div>
             </div>
-            <div class="nft-fusion-preview-fee" id="fuse-fee-display">Fee: loading...</div>
+            <div class="nft-forge-fee"><i class="fa-solid fa-gas-pump"></i> <span id="fuse-fee-display">estimating...</span></div>
             <button class="nft-fusion-cta fuse-cta" id="fuse-execute-btn">
-                <i class="fa-solid fa-fire"></i> Fuse Now
+                <i class="fa-solid fa-fire"></i> Forge Now
             </button>
         `;
 
@@ -1195,18 +1256,18 @@ function renderFuseTab(nftsByTier) {
         setTimeout(() => {
             FusionTx.getEstimatedFusionFee(fuseTierFilter).then(fee => {
                 const el = document.getElementById('fuse-fee-display');
-                if (el) el.textContent = `Fee: ${Number(ethers.formatEther(fee)).toFixed(6)} ETH`;
+                if (el) el.textContent = `${Number(ethers.formatEther(fee)).toFixed(6)} ETH`;
             }).catch(() => {
                 const el = document.getElementById('fuse-fee-display');
-                if (el) el.textContent = 'Fee: N/A';
+                if (el) el.textContent = 'N/A';
             });
         }, 50);
     }
 
     const hint = fuseSelected.length === 0
-        ? 'Select 2 NFTs to fuse into a higher tier:'
+        ? `<i class="fa-solid fa-hand-pointer"></i> Select 2 ${tierName} NFTs to forge:`
         : fuseSelected.length === 1
-            ? 'Select 1 more NFT:'
+            ? `<i class="fa-solid fa-hand-pointer"></i> Select 1 more ${tierName}:`
             : '';
 
     return `
@@ -1234,7 +1295,7 @@ function renderSplitTab(nftsByTier) {
             <div class="nft-fusion-empty">
                 <i class="fa-solid fa-scissors"></i>
                 No splittable NFTs (need Silver or higher).<br>
-                Fuse 2 Bronze into Silver first, then you can split it back.
+                <span style="font-size:10px;opacity:0.7;display:inline-block;margin-top:4px">Forge 2 Bronze &rarr; Silver first</span>
             </div>
         `;
     }
@@ -1253,16 +1314,15 @@ function renderSplitTab(nftsByTier) {
     }
 
     return `
-        <div class="nft-fusion-hint">Select an NFT to split into lower-tier NFTs:</div>
+        <div class="nft-fusion-hint"><i class="fa-solid fa-hand-pointer"></i> Select an NFT to split:</div>
         <div class="nft-fusion-grid" style="${splitSelectedTokenId !== null ? 'margin-bottom:0' : ''}">${splittableNfts.map(nft => {
             const name = TIER_NAMES_MAP[nft.tier];
             const style = getTierStyle(name);
             const isSelected = nft.tokenId === splitSelectedTokenId;
             return `<div class="nft-fusion-nft ${isSelected ? 'selected' : ''}" data-split-nft="${nft.tokenId}" data-split-nft-tier="${nft.tier}" style="${isSelected ? `border-color:${style.color}` : ''}">
-                <div class="nft-fusion-nft-check">&check;</div>
+                <div class="nft-fusion-nft-check" style="background:${style.color}">&check;</div>
                 <span class="nft-fusion-nft-icon">${style.icon}</span>
                 <div class="nft-fusion-nft-id" style="color:${style.color}">#${nft.tokenId}</div>
-                <div class="nft-fusion-nft-tier">${name}</div>
             </div>`;
         }).join('')}</div>
         ${splitSelectedTokenId !== null ? (() => {
@@ -1284,7 +1344,7 @@ function renderSplitTab(nftsByTier) {
                             <div class="nft-split-option-radio"></div>
                             <span class="nft-split-option-label">${count}x ${targetStyle.icon} ${targetName}</span>
                         </div>
-                        <span class="nft-split-option-fee" id="split-fee-${nft.tokenId}-${target}">Fee: ...</span>
+                        <span class="nft-split-option-fee" id="split-fee-${nft.tokenId}-${target}"><i class="fa-solid fa-spinner fa-spin" style="font-size:8px;opacity:0.3"></i></span>
                     </div>
                 `);
             }
@@ -1293,12 +1353,13 @@ function renderSplitTab(nftsByTier) {
             if (splitConfirmPending) {
                 const count = 1 << (nft.tier - splitTargetTier);
                 const targetName = TIER_NAMES_MAP[splitTargetTier];
+                const targetStyle = getTierStyle(targetName);
                 confirmHtml = `
                     <div class="nft-split-confirm">
                         <div class="nft-split-confirm-text">
                             <i class="fa-solid fa-triangle-exclamation"></i>
-                            Burn ${name} #${nft.tokenId} &rarr; create ${count}x ${targetName}?<br>
-                            This action is <strong>irreversible</strong>.
+                            Burn <strong style="color:${style.color}">${name} #${nft.tokenId}</strong> &rarr; ${count}x <strong style="color:${targetStyle.color}">${targetName}</strong>?<br>
+                            This is <strong>irreversible</strong>.
                         </div>
                         <div class="nft-split-confirm-btns">
                             <button class="nft-split-confirm-cancel" id="split-cancel-btn">Cancel</button>
@@ -1315,14 +1376,18 @@ function renderSplitTab(nftsByTier) {
 
             return `
                 <div class="nft-split-options">
-                    <div style="font-size:9px;color:var(--nft-text-3);margin-bottom:6px">
-                        <span style="color:${style.color}">${style.icon} ${name} #${nft.tokenId}</span> &mdash; Split into:
+                    <div class="nft-split-header">
+                        <span class="nft-split-header-icon">${style.icon}</span>
+                        <div class="nft-split-header-info">
+                            <div class="nft-split-header-name" style="color:${style.color}">${name} #${nft.tokenId}</div>
+                            <div class="nft-split-header-sub">Choose target tier:</div>
+                        </div>
                     </div>
                     ${options.join('')}
                     ${!splitConfirmPending ? `
-                        <button class="nft-fusion-cta split-cta" id="split-execute-btn" style="margin-top:8px"
+                        <button class="nft-fusion-cta split-cta" id="split-execute-btn" style="margin-top:10px"
                             data-split-tokenid="${nft.tokenId}" data-split-source="${nft.tier}">
-                            <i class="fa-solid fa-scissors"></i> Split ${name} #${nft.tokenId}
+                            <i class="fa-solid fa-scissors"></i> Split
                         </button>
                     ` : ''}
                     ${confirmHtml}
@@ -1338,8 +1403,8 @@ async function loadSplitFeesForNft(tokenId, sourceTier) {
         if (!el) continue;
         try {
             const fee = await FusionTx.getEstimatedMultiSplitFee(sourceTier, target);
-            el.textContent = `Fee: ${Number(ethers.formatEther(fee)).toFixed(6)} ETH`;
-        } catch { el.textContent = 'Fee: N/A'; }
+            el.innerHTML = `<span style="opacity:0.5"><i class="fa-solid fa-gas-pump" style="font-size:7px"></i></span> ${Number(ethers.formatEther(fee)).toFixed(6)} ETH`;
+        } catch { el.textContent = 'N/A'; }
     }
 }
 
