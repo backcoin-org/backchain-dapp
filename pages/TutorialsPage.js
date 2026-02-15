@@ -1,131 +1,559 @@
-// pages/TutorialsPage.js
-// Video Tutorials Page with PT/EN language support
+// pages/TutorialsPage.js — V2.0
+// Complete Video Tutorials covering ALL ecosystem features
+// PT/EN language support
 
 const YOUTUBE_CHANNEL = 'https://www.youtube.com/@Backcoin';
 
 // ============================================================================
-// VIDEO DATA - Update YouTube URLs here when videos are ready
+// VIDEO DATA - Update YouTube URLs when videos are ready
+// Replace VIDEO_ID_HERE with actual YouTube IDs
 // ============================================================================
 const videos = {
+
+    // ── CATEGORY 1: What is Backcoin ─────────────────────────────────────
+    overview: [
+        {
+            id: 'ov-1',
+            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
+            duration: '3:00',
+            tag: 'beginner',
+            icon: 'fa-play-circle',
+            en: {
+                title: 'What is Backcoin?',
+                description: 'A complete overview of the Backcoin ecosystem. Unstoppable DeFi on Arbitrum: staking, NFTs, games, social network, and more — all without admin keys.'
+            },
+            pt: {
+                title: 'O Que é o Backcoin?',
+                description: 'Uma visão completa do ecossistema Backcoin. DeFi imparável na Arbitrum: staking, NFTs, jogos, rede social e mais — tudo sem chaves de admin.'
+            }
+        },
+        {
+            id: 'ov-2',
+            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
+            duration: '4:00',
+            tag: 'beginner',
+            icon: 'fa-money-bill-trend-up',
+            en: {
+                title: 'How to Earn Money with Backcoin',
+                description: 'Three income streams: be an Operator (commissions), Delegator (staking rewards), or Referrer (5% forever). Learn how to combine all three.'
+            },
+            pt: {
+                title: 'Como Ganhar Dinheiro com Backcoin',
+                description: 'Três fontes de renda: seja Operador (comissões), Delegador (recompensas de staking) ou Referenciador (5% pra sempre). Aprenda a combinar as três.'
+            }
+        },
+        {
+            id: 'ov-3',
+            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
+            duration: '5:00',
+            tag: 'intermediate',
+            icon: 'fa-laptop-code',
+            en: {
+                title: 'Be an Operator — Build & Earn Commissions',
+                description: 'Build your own Backcoin frontend (site, app, bot) and earn automatic commissions on every user transaction. No approval needed. Full guide.'
+            },
+            pt: {
+                title: 'Seja um Operador — Construa e Ganhe Comissões',
+                description: 'Construa seu próprio frontend Backcoin (site, app, bot) e ganhe comissões automáticas em cada transação. Sem aprovação. Guia completo.'
+            }
+        },
+        {
+            id: 'ov-4',
+            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
+            duration: '2:30',
+            tag: 'beginner',
+            icon: 'fa-link',
+            en: {
+                title: 'Referral System — Passive Income Forever',
+                description: 'Share your link and earn 5% of your referrals\' staking rewards — automatically, forever. How to set up and maximize referrals.'
+            },
+            pt: {
+                title: 'Sistema de Referral — Renda Passiva Pra Sempre',
+                description: 'Compartilhe seu link e ganhe 5% das recompensas de staking dos seus indicados — automaticamente, pra sempre. Como configurar e maximizar.'
+            }
+        }
+    ],
+
+    // ── CATEGORY 2: Getting Started ──────────────────────────────────────
     gettingStarted: [
         {
-            id: 'v1',
+            id: 'gs-1',
             thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
-            duration: '3:42',
+            duration: '3:30',
             tag: 'beginner',
-            en: { title: 'MetaMask Setup (PC & Mobile)', description: 'Your passport to the Backcoin universe. Learn how to install and configure MetaMask for Web3.', url: YOUTUBE_CHANNEL },
-            pt: { title: 'Configurando MetaMask (PC & Mobile)', description: 'Seu passaporte para o universo Backcoin. Aprenda a instalar e configurar a MetaMask para Web3.', url: YOUTUBE_CHANNEL }
+            icon: 'fa-wallet',
+            en: {
+                title: 'MetaMask Setup (PC & Mobile)',
+                description: 'Install MetaMask, create your wallet, and add the Arbitrum Sepolia network. Your gateway to the Backcoin universe.'
+            },
+            pt: {
+                title: 'Configurando MetaMask (PC & Mobile)',
+                description: 'Instale a MetaMask, crie sua carteira e adicione a rede Arbitrum Sepolia. Sua entrada para o universo Backcoin.'
+            }
         },
         {
-            id: 'v2',
+            id: 'gs-2',
             thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
-            duration: '0:53',
+            duration: '2:00',
             tag: 'beginner',
-            en: { title: 'Connect & Claim Starter Pack', description: 'Fill your tank! Connect your wallet and claim free BKC tokens plus ETH for gas fees.', url: YOUTUBE_CHANNEL },
-            pt: { title: 'Conectar e Receber Starter Pack', description: 'Encha o tanque! Conecte sua carteira e receba BKC grátis mais ETH para taxas de gás.', url: YOUTUBE_CHANNEL }
+            icon: 'fa-plug',
+            en: {
+                title: 'Connect Wallet & Claim Free Tokens',
+                description: 'Connect to backcoin.org, use the Faucet to claim free BKC + ETH for gas, and add BKC to MetaMask. Ready in 2 minutes.'
+            },
+            pt: {
+                title: 'Conectar Carteira e Receber Tokens Grátis',
+                description: 'Conecte no backcoin.org, use o Faucet para receber BKC + ETH grátis pra gas, e adicione o BKC na MetaMask. Pronto em 2 minutos.'
+            }
         },
         {
-            id: 'v10',
+            id: 'gs-3',
             thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
-            duration: '1:40',
+            duration: '2:30',
             tag: 'beginner',
-            en: { title: 'Airdrop Ambassador Campaign', description: '35% of TGE for the community! Learn how to earn points by promoting Backcoin.', url: YOUTUBE_CHANNEL },
-            pt: { title: 'Campanha de Airdrop - Embaixador', description: '35% do TGE para a comunidade! Aprenda a ganhar pontos promovendo o Backcoin.', url: YOUTUBE_CHANNEL }
+            icon: 'fa-compass',
+            en: {
+                title: 'Navigating the Dashboard',
+                description: 'Tour of the main dashboard: your balance, rewards, NFT booster status, activity feed, and quick actions. Everything at a glance.'
+            },
+            pt: {
+                title: 'Navegando pelo Dashboard',
+                description: 'Tour pelo dashboard principal: seu saldo, recompensas, status do NFT booster, feed de atividades e ações rápidas. Tudo num relance.'
+            }
         }
     ],
-    ecosystem: [
+
+    // ── CATEGORY 3: Staking & Mining ─────────────────────────────────────
+    stakingMining: [
         {
-            id: 'v4',
+            id: 'sm-1',
             thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
-            duration: '0:48',
+            duration: '4:00',
             tag: 'intermediate',
-            en: { title: 'Staking Pool - Passive Income', description: 'Lock your tokens and earn a share of all protocol fees. Up to 10x multiplier for loyalty!', url: YOUTUBE_CHANNEL },
-            pt: { title: 'Staking Pool - Renda Passiva', description: 'Trave seus tokens e ganhe parte das taxas do protocolo. Até 10x multiplicador por lealdade!', url: YOUTUBE_CHANNEL }
+            icon: 'fa-lock',
+            en: {
+                title: 'Staking — Delegate BKC and Earn Rewards',
+                description: 'How to delegate BKC tokens, choose lock period for maximum power (pStake), and understand the reward multiplier. Step-by-step guide.'
+            },
+            pt: {
+                title: 'Staking — Delegue BKC e Ganhe Recompensas',
+                description: 'Como delegar tokens BKC, escolher período de lock para máximo poder (pStake) e entender o multiplicador de recompensas. Passo a passo.'
+            }
         },
         {
-            id: 'v5',
+            id: 'sm-2',
             thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
-            duration: '0:50',
+            duration: '3:00',
             tag: 'intermediate',
-            en: { title: 'NFT Market - Boost Your Account', description: 'Buy NFT Boosters to reduce fees and increase mining efficiency. Prices set by math, not sellers.', url: YOUTUBE_CHANNEL },
-            pt: { title: 'NFT Market - Turbine sua Conta', description: 'Compre NFT Boosters para reduzir taxas e aumentar eficiência. Preços definidos por matemática.', url: YOUTUBE_CHANNEL }
+            icon: 'fa-hand-holding-dollar',
+            en: {
+                title: 'Claiming Rewards & Understanding Burn Rate',
+                description: 'How to claim your staking rewards. Why 50% is burned without NFT Booster, and how to keep up to 100% with a Diamond NFT.'
+            },
+            pt: {
+                title: 'Clamando Recompensas e Entendendo o Burn',
+                description: 'Como clamar suas recompensas de staking. Por que 50% é queimado sem NFT Booster, e como manter até 100% com um Diamond NFT.'
+            }
         },
         {
-            id: 'v6',
+            id: 'sm-3',
             thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
-            duration: '0:53',
+            duration: '2:00',
             tag: 'intermediate',
-            en: { title: 'AirBNFT - Rent NFT Power', description: 'Need a boost but don\'t want to buy? Rent NFT power from other players for a fraction of the cost.', url: YOUTUBE_CHANNEL },
-            pt: { title: 'AirBNFT - Aluguel de Poder', description: 'Precisa de boost mas não quer comprar? Alugue poder de NFT de outros jogadores.', url: YOUTUBE_CHANNEL }
+            icon: 'fa-unlock',
+            en: {
+                title: 'Force Unstake — Emergency Exit',
+                description: 'Need your tokens before lock expires? Force unstake with 10% penalty. When to use it and when to wait.'
+            },
+            pt: {
+                title: 'Force Unstake — Saída de Emergência',
+                description: 'Precisa dos tokens antes do lock expirar? Force unstake com 10% de penalidade. Quando usar e quando esperar.'
+            }
         },
         {
-            id: 'v7a',
+            id: 'sm-4',
             thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
-            duration: '1:05',
-            tag: 'intermediate',
-            en: { title: 'List Your NFT for Rent', description: 'Turn your idle NFTs into passive income. List on AirBNFT and earn while you sleep.', url: YOUTUBE_CHANNEL },
-            pt: { title: 'Liste seu NFT para Aluguel', description: 'Transforme NFTs parados em renda passiva. Liste no AirBNFT e ganhe dormindo.', url: YOUTUBE_CHANNEL }
-        },
-        {
-            id: 'v7b',
-            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
-            duration: '1:31',
-            tag: 'intermediate',
-            en: { title: 'Decentralized Notary', description: 'Register documents on the blockchain forever. Immutable proof of ownership for just 1 BKC.', url: YOUTUBE_CHANNEL },
-            pt: { title: 'Cartório Descentralizado', description: 'Registre documentos na blockchain para sempre. Prova imutável de autoria por apenas 1 BKC.', url: YOUTUBE_CHANNEL }
-        },
-        {
-            id: 'v8',
-            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
-            duration: '1:34',
-            tag: 'intermediate',
-            en: { title: 'Fortune Pool - The Big Jackpot', description: 'Test your luck with decentralized oracle results. Up to 100x multipliers!', url: YOUTUBE_CHANNEL },
-            pt: { title: 'Fortune Pool - O Grande Jackpot', description: 'Teste sua sorte com resultados de oráculo descentralizado. Multiplicadores até 100x!', url: YOUTUBE_CHANNEL }
-        },
-        {
-            id: 'v9',
-            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
-            duration: '1:20',
-            tag: 'beginner',
-            en: { title: 'The Backcoin Manifesto (Promo)', description: 'Economy, Games, Passive Income, Utility. This is not just a token - it\'s a new digital economy.', url: YOUTUBE_CHANNEL },
-            pt: { title: 'O Manifesto Backcoin (Promo)', description: 'Economia, Jogos, Renda Passiva, Utilidade. Não é apenas um token - é uma nova economia digital.', url: YOUTUBE_CHANNEL }
+            duration: '3:30',
+            tag: 'advanced',
+            icon: 'fa-hammer',
+            en: {
+                title: 'Buyback Mining — How Protocol Fees Become Rewards',
+                description: 'The Buyback Miner converts ETH fees into BKC rewards. Learn the scarcity curve, the 5% caller incentive, and how to run a mining bot.'
+            },
+            pt: {
+                title: 'Mineração Buyback — Como Taxas Viram Recompensas',
+                description: 'O Buyback Miner converte taxas ETH em recompensas BKC. Aprenda a curva de escassez, o incentivo de 5% e como rodar um bot de mineração.'
+            }
         }
     ],
+
+    // ── CATEGORY 4: NFTs ─────────────────────────────────────────────────
+    nfts: [
+        {
+            id: 'nft-1',
+            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
+            duration: '3:00',
+            tag: 'beginner',
+            icon: 'fa-gem',
+            en: {
+                title: 'NFT Boosters Explained — Why You Need One',
+                description: 'The 4 tiers (Bronze to Diamond), how they reduce burn rate, and why a Diamond holder earns 2x more than someone without NFT.'
+            },
+            pt: {
+                title: 'NFT Boosters — Por Que Você Precisa de Um',
+                description: 'Os 4 tiers (Bronze a Diamond), como reduzem o burn, e por que um Diamond holder ganha 2x mais do que quem não tem NFT.'
+            }
+        },
+        {
+            id: 'nft-2',
+            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
+            duration: '3:30',
+            tag: 'intermediate',
+            icon: 'fa-cart-shopping',
+            en: {
+                title: 'Buying & Selling NFTs — Bonding Curve Trading',
+                description: 'How to buy and sell Booster NFTs instantly via bonding curve pools. Understand price movements, slippage protection, and trading strategies.'
+            },
+            pt: {
+                title: 'Comprando e Vendendo NFTs — Trading por Bonding Curve',
+                description: 'Como comprar e vender NFTs Booster instantaneamente via pools de bonding curve. Entenda preços, proteção contra slippage e estratégias.'
+            }
+        },
+        {
+            id: 'nft-3',
+            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
+            duration: '3:00',
+            tag: 'intermediate',
+            icon: 'fa-clock',
+            en: {
+                title: 'Renting an NFT — Affordable Boost',
+                description: 'Rent a Diamond NFT for a fraction of the purchase price. How to browse, rent, and maximize ROI by timing your claims.'
+            },
+            pt: {
+                title: 'Alugando um NFT — Boost Acessível',
+                description: 'Alugue um Diamond NFT por uma fração do preço de compra. Como navegar, alugar e maximizar ROI cronometrando seus claims.'
+            }
+        },
+        {
+            id: 'nft-4',
+            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
+            duration: '2:30',
+            tag: 'intermediate',
+            icon: 'fa-tag',
+            en: {
+                title: 'Listing Your NFT for Rent — Earn Passive ETH',
+                description: 'Turn idle NFTs into passive income. How to list on the rental market, set daily price, and collect ETH from tenants.'
+            },
+            pt: {
+                title: 'Listando seu NFT pra Aluguel — Ganhe ETH Passivo',
+                description: 'Transforme NFTs parados em renda passiva. Como listar no mercado de aluguel, definir preço diário e coletar ETH.'
+            }
+        },
+        {
+            id: 'nft-5',
+            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
+            duration: '3:00',
+            tag: 'intermediate',
+            icon: 'fa-fire',
+            en: {
+                title: 'NFT Fusion — Combine, Split & Upgrade',
+                description: 'Fuse 2 same-tier NFTs into 1 higher tier. Split a high tier into 2 lower tiers. Advanced strategies for NFT management.'
+            },
+            pt: {
+                title: 'NFT Fusion — Fundir, Dividir e Fazer Upgrade',
+                description: 'Funda 2 NFTs do mesmo tier em 1 de tier superior. Divida um tier alto em 2 inferiores. Estratégias avançadas de gestão de NFTs.'
+            }
+        }
+    ],
+
+    // ── CATEGORY 5: Fortune Pool ─────────────────────────────────────────
+    fortune: [
+        {
+            id: 'fp-1',
+            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
+            duration: '3:30',
+            tag: 'intermediate',
+            icon: 'fa-dice',
+            en: {
+                title: 'Fortune Pool — How to Play',
+                description: 'Choose Easy (3x), Medium (15x) or Hard (75x). Understand commit-reveal mechanics, combos, and why no one can cheat.'
+            },
+            pt: {
+                title: 'Fortune Pool — Como Jogar',
+                description: 'Escolha Easy (3x), Medium (15x) ou Hard (75x). Entenda o commit-reveal, combos e por que ninguém pode trapacear.'
+            }
+        },
+        {
+            id: 'fp-2',
+            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
+            duration: '2:30',
+            tag: 'intermediate',
+            icon: 'fa-layer-group',
+            en: {
+                title: 'Fortune Pool — Combo Mode & Strategies',
+                description: 'Play multiple tiers in one game for up to 93x multiplier. Combo bitmasks, prize pool mechanics, and bankroll management tips.'
+            },
+            pt: {
+                title: 'Fortune Pool — Modo Combo e Estratégias',
+                description: 'Jogue múltiplos tiers em um jogo só para até 93x. Bitmasks de combo, mecânica do prize pool e dicas de gestão de banca.'
+            }
+        }
+    ],
+
+    // ── CATEGORY 6: Social & Content ─────────────────────────────────────
+    social: [
+        {
+            id: 'ag-1',
+            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
+            duration: '3:00',
+            tag: 'beginner',
+            icon: 'fa-comments',
+            en: {
+                title: 'Agora — The Unstoppable Social Network',
+                description: 'Post, reply, follow, and earn. Create content that can never be censored or deleted. Your posts live on the blockchain forever.'
+            },
+            pt: {
+                title: 'Agora — A Rede Social Imparável',
+                description: 'Poste, responda, siga e ganhe. Crie conteúdo que nunca pode ser censurado ou deletado. Seus posts vivem na blockchain pra sempre.'
+            }
+        },
+        {
+            id: 'ag-2',
+            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
+            duration: '2:00',
+            tag: 'beginner',
+            icon: 'fa-heart',
+            en: {
+                title: 'SuperLikes — Earn ETH from Your Content',
+                description: 'How SuperLikes send ETH directly to content creators. Build an audience and monetize without algorithms or middlemen.'
+            },
+            pt: {
+                title: 'SuperLikes — Ganhe ETH com seu Conteúdo',
+                description: 'Como SuperLikes enviam ETH direto para criadores de conteúdo. Construa audiência e monetize sem algoritmos ou intermediários.'
+            }
+        },
+        {
+            id: 'ag-3',
+            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
+            duration: '2:30',
+            tag: 'intermediate',
+            icon: 'fa-user-tag',
+            en: {
+                title: 'Register Username & Build Your Profile',
+                description: 'Claim your unique handle, set up avatar and bio via IPFS, get a trust badge, and boost your profile visibility.'
+            },
+            pt: {
+                title: 'Registre Username e Monte seu Perfil',
+                description: 'Registre seu handle único, configure avatar e bio via IPFS, obtenha badge de confiança e aumente sua visibilidade.'
+            }
+        }
+    ],
+
+    // ── CATEGORY 7: Utilities ────────────────────────────────────────────
+    utilities: [
+        {
+            id: 'ut-1',
+            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
+            duration: '3:00',
+            tag: 'beginner',
+            icon: 'fa-stamp',
+            en: {
+                title: 'Digital Notary — Certify Documents Forever',
+                description: 'Certify any document on-chain without revealing its content. Hash-based proof of existence, batch certification, and free verification.'
+            },
+            pt: {
+                title: 'Cartório Digital — Certifique Documentos pra Sempre',
+                description: 'Certifique qualquer documento on-chain sem revelar o conteúdo. Prova por hash, certificação em lote e verificação grátis.'
+            }
+        },
+        {
+            id: 'ut-2',
+            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
+            duration: '2:30',
+            tag: 'beginner',
+            icon: 'fa-hand-holding-heart',
+            en: {
+                title: 'Fundraising — Create Campaigns Without Middlemen',
+                description: 'Launch a fundraising campaign in 30 seconds. Receive 100% of donations, withdraw anytime. No platform fees, no approval process.'
+            },
+            pt: {
+                title: 'Arrecadação — Crie Campanhas sem Intermediários',
+                description: 'Lance uma campanha em 30 segundos. Receba 100% das doações, saque quando quiser. Sem taxa de plataforma, sem aprovação.'
+            }
+        },
+        {
+            id: 'ut-3',
+            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
+            duration: '2:00',
+            tag: 'beginner',
+            icon: 'fa-circle-dollar-to-slot',
+            en: {
+                title: 'How to Donate to a Campaign',
+                description: 'Find campaigns, donate ETH directly to creators, and track donations on-chain. Full transparency, zero hidden fees.'
+            },
+            pt: {
+                title: 'Como Doar para uma Campanha',
+                description: 'Encontre campanhas, doe ETH direto para criadores e acompanhe doações on-chain. Transparência total, zero taxas ocultas.'
+            }
+        },
+        {
+            id: 'ut-4',
+            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
+            duration: '2:30',
+            tag: 'intermediate',
+            icon: 'fa-arrow-right-arrow-left',
+            en: {
+                title: 'Swap ETH/BKC — Trade on the Liquidity Pool',
+                description: 'Swap ETH for BKC and vice-versa on the built-in AMM. Understand the 0.3% fee, price impact, and how the constant product formula works.'
+            },
+            pt: {
+                title: 'Swap ETH/BKC — Troque no Pool de Liquidez',
+                description: 'Troque ETH por BKC e vice-versa no AMM integrado. Entenda a taxa de 0.3%, impacto no preço e a fórmula de produto constante.'
+            }
+        },
+        {
+            id: 'ut-5',
+            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
+            duration: '3:00',
+            tag: 'intermediate',
+            icon: 'fa-droplet',
+            en: {
+                title: 'Provide Liquidity — Earn 0.3% per Swap',
+                description: 'Add ETH and BKC to the liquidity pool and earn fees on every swap. How to add, remove, and calculate your share.'
+            },
+            pt: {
+                title: 'Prover Liquidez — Ganhe 0.3% por Swap',
+                description: 'Adicione ETH e BKC ao pool de liquidez e ganhe taxas em cada swap. Como adicionar, remover e calcular sua fatia.'
+            }
+        }
+    ],
+
+    // ── CATEGORY 8: Advanced & Vision ────────────────────────────────────
     advanced: [
         {
-            id: 'v11',
+            id: 'ad-1',
             thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
-            duration: '1:25',
+            duration: '3:00',
             tag: 'advanced',
-            en: { title: 'Hub & Spoke Architecture', description: 'Deep dive into Backcoin\'s technical architecture. How the ecosystem manager connects all services.', url: YOUTUBE_CHANNEL },
-            pt: { title: 'Arquitetura Hub & Spoke', description: 'Mergulho técnico na arquitetura do Backcoin. Como o gerenciador conecta todos os serviços.', url: YOUTUBE_CHANNEL }
+            icon: 'fa-coins',
+            en: {
+                title: 'BKC Tokenomics — Supply, Burns & Scarcity',
+                description: 'Deep dive into BKC economics: 200M cap, 0% team allocation, scarcity curve, 5 burn mechanisms, and why supply shrinks over time.'
+            },
+            pt: {
+                title: 'Tokenomics do BKC — Supply, Burns e Escassez',
+                description: 'Mergulho profundo: teto de 200M, 0% pro time, curva de escassez, 5 mecanismos de burn e por que o supply encolhe com o tempo.'
+            }
         },
         {
-            id: 'v12',
+            id: 'ad-2',
             thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
-            duration: '1:25',
+            duration: '2:30',
             tag: 'advanced',
-            en: { title: 'Mining Evolution: PoW vs PoS vs Backcoin', description: 'From Proof of Work to Proof of Stake to Proof of Purchase. The third generation of crypto mining.', url: YOUTUBE_CHANNEL },
-            pt: { title: 'Evolução da Mineração: PoW vs PoS vs Backcoin', description: 'Do Proof of Work ao Proof of Stake ao Proof of Purchase. A terceira geração de mineração.', url: YOUTUBE_CHANNEL }
+            icon: 'fa-sitemap',
+            en: {
+                title: 'Fees Explained — Where Every Cent Goes',
+                description: 'Complete breakdown of ETH and BKC fees. How fees flow to operators, referrers, stakers, burn, and treasury. Full transparency.'
+            },
+            pt: {
+                title: 'Taxas Explicadas — Pra Onde Vai Cada Centavo',
+                description: 'Detalhamento completo das taxas ETH e BKC. Como fluem para operadores, referenciadores, delegadores, burn e tesouro.'
+            }
         },
         {
-            id: 'v13',
+            id: 'ad-3',
             thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
-            duration: '1:25',
+            duration: '3:00',
             tag: 'advanced',
-            en: { title: 'The Infinite Future (Roadmap)', description: 'Credit cards, insurance, DEX, lending... What\'s coming next in the Backcoin Super App.', url: YOUTUBE_CHANNEL },
-            pt: { title: 'O Futuro Infinito (Roadmap)', description: 'Cartões de crédito, seguros, DEX, empréstimos... O que vem no Super App Backcoin.', url: YOUTUBE_CHANNEL }
+            icon: 'fa-landmark',
+            en: {
+                title: 'Governance — From Admin to DAO',
+                description: 'The 4 phases of progressive decentralization: Admin → Multisig → Timelock → DAO. What can change and what\'s immutable forever.'
+            },
+            pt: {
+                title: 'Governança — Do Admin ao DAO',
+                description: 'As 4 fases da descentralização progressiva: Admin → Multisig → Timelock → DAO. O que pode mudar e o que é imutável pra sempre.'
+            }
         },
         {
-            id: 'v14',
+            id: 'ad-4',
             thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
-            duration: '1:35',
+            duration: '3:00',
             tag: 'advanced',
-            en: { title: 'The New Wave of Millionaires', description: 'Mathematical scarcity, revenue sharing, early adopter advantage. The wealth transfer is happening.', url: YOUTUBE_CHANNEL },
-            pt: { title: 'A Nova Leva de Milionários', description: 'Escassez matemática, dividendos, vantagem do early adopter. A transferência de riqueza está acontecendo.', url: YOUTUBE_CHANNEL }
+            icon: 'fa-code',
+            en: {
+                title: 'For Developers — SDK & Smart Contracts',
+                description: 'The @backchain/sdk monorepo: 17 packages, event indexing, API helpers, and how to build on top of Backcoin. Developer quickstart.'
+            },
+            pt: {
+                title: 'Para Desenvolvedores — SDK e Smart Contracts',
+                description: 'O monorepo @backchain/sdk: 17 pacotes, indexação de eventos, API helpers e como construir no Backcoin. Quickstart para devs.'
+            }
         }
     ]
 };
+
+// ============================================================================
+// CATEGORY METADATA
+// ============================================================================
+const categories = [
+    {
+        key: 'overview',
+        icon: 'star',
+        color: 'amber',
+        en: { title: 'What is Backcoin', desc: '4 videos — Overview, Earning & Operator Guide' },
+        pt: { title: 'O Que é o Backcoin', desc: '4 vídeos — Visão Geral, Ganhos e Guia do Operador' }
+    },
+    {
+        key: 'gettingStarted',
+        icon: 'rocket',
+        color: 'emerald',
+        en: { title: 'Getting Started', desc: '3 videos — Setup & First Steps' },
+        pt: { title: 'Primeiros Passos', desc: '3 vídeos — Configuração Inicial' }
+    },
+    {
+        key: 'stakingMining',
+        icon: 'coins',
+        color: 'yellow',
+        en: { title: 'Staking & Mining', desc: '4 videos — Delegate, Claim, Unstake & Buyback' },
+        pt: { title: 'Staking e Mineração', desc: '4 vídeos — Delegar, Clamar, Unstake e Buyback' }
+    },
+    {
+        key: 'nfts',
+        icon: 'gem',
+        color: 'purple',
+        en: { title: 'NFTs — Boosters, Trading & Rental', desc: '5 videos — Buy, Sell, Rent, List & Fuse' },
+        pt: { title: 'NFTs — Boosters, Trading e Aluguel', desc: '5 vídeos — Comprar, Vender, Alugar, Listar e Fundir' }
+    },
+    {
+        key: 'fortune',
+        icon: 'dice',
+        color: 'red',
+        en: { title: 'Fortune Pool', desc: '2 videos — Play & Strategies' },
+        pt: { title: 'Fortune Pool', desc: '2 vídeos — Jogar e Estratégias' }
+    },
+    {
+        key: 'social',
+        icon: 'comments',
+        color: 'cyan',
+        en: { title: 'Agora — Social Network', desc: '3 videos — Post, Earn & Build Profile' },
+        pt: { title: 'Agora — Rede Social', desc: '3 vídeos — Postar, Ganhar e Montar Perfil' }
+    },
+    {
+        key: 'utilities',
+        icon: 'toolbox',
+        color: 'blue',
+        en: { title: 'Utilities', desc: '5 videos — Notary, Fundraising, Swap & Liquidity' },
+        pt: { title: 'Utilidades', desc: '5 vídeos — Cartório, Arrecadação, Swap e Liquidez' }
+    },
+    {
+        key: 'advanced',
+        icon: 'graduation-cap',
+        color: 'rose',
+        en: { title: 'Advanced & Vision', desc: '4 videos — Tokenomics, Fees, Governance & Dev Guide' },
+        pt: { title: 'Avançado e Visão', desc: '4 vídeos — Tokenomics, Taxas, Governança e Dev Guide' }
+    }
+];
 
 // ============================================================================
 // TRANSLATIONS
@@ -133,159 +561,258 @@ const videos = {
 const translations = {
     en: {
         heroTitle: 'Master the Backcoin Ecosystem',
-        heroSubtitle: 'Complete video tutorials to help you navigate staking, NFTs, Fortune Pool and more',
-        videos: 'Videos',
+        heroSubtitle: 'Complete video tutorials covering every feature — from your first BKC to building your own operator business',
+        videoCount: 'Videos',
         languages: '2 Languages',
-        catGettingStarted: 'Getting Started',
-        catGettingStartedDesc: '3 videos • Setup & First Steps',
-        catEcosystem: 'Ecosystem Features',
-        catEcosystemDesc: '7 videos • Core Features & Tools',
-        catAdvanced: 'Advanced & Vision',
-        catAdvancedDesc: '4 videos • Deep Dives & Future',
+        allCategories: 'All Categories',
         tagBeginner: 'Beginner',
         tagIntermediate: 'Intermediate',
-        tagAdvanced: 'Advanced'
+        tagAdvanced: 'Advanced',
+        comingSoon: 'Video coming soon',
+        watchNow: 'Watch',
+        subscribe: 'Subscribe on YouTube',
+        filterAll: 'All',
+        filterBeginner: 'Beginner',
+        filterIntermediate: 'Intermediate',
+        filterAdvanced: 'Advanced'
     },
     pt: {
         heroTitle: 'Domine o Ecossistema Backcoin',
-        heroSubtitle: 'Tutoriais completos em vídeo para ajudá-lo a navegar staking, NFTs, Fortune Pool e mais',
-        videos: 'Vídeos',
+        heroSubtitle: 'Tutoriais completos em vídeo cobrindo cada recurso — do seu primeiro BKC a construir seu próprio negócio de operador',
+        videoCount: 'Vídeos',
         languages: '2 Idiomas',
-        catGettingStarted: 'Primeiros Passos',
-        catGettingStartedDesc: '3 vídeos • Configuração Inicial',
-        catEcosystem: 'Recursos do Ecossistema',
-        catEcosystemDesc: '7 vídeos • Ferramentas Principais',
-        catAdvanced: 'Avançado & Visão',
-        catAdvancedDesc: '4 vídeos • Aprofundamento & Futuro',
+        allCategories: 'Todas as Categorias',
         tagBeginner: 'Iniciante',
         tagIntermediate: 'Intermediário',
-        tagAdvanced: 'Avançado'
+        tagAdvanced: 'Avançado',
+        comingSoon: 'Vídeo em breve',
+        watchNow: 'Assistir',
+        subscribe: 'Inscreva-se no YouTube',
+        filterAll: 'Todos',
+        filterBeginner: 'Iniciante',
+        filterIntermediate: 'Intermediário',
+        filterAdvanced: 'Avançado'
     }
 };
 
 // ============================================================================
 // STATE
 // ============================================================================
-let currentLang = localStorage.getItem('backcoin-tutorials-lang') || 'en';
+let currentLang = localStorage.getItem('backcoin-tutorials-lang') || 'pt';
+let currentFilter = 'all'; // all, beginner, intermediate, advanced
 
 // ============================================================================
 // HELPERS
 // ============================================================================
-function createVideoCard(video, index) {
+function getTotalVideoCount() {
+    return Object.values(videos).reduce((sum, arr) => sum + arr.length, 0);
+}
+
+function getColorClasses(color) {
+    const map = {
+        amber:   { bg: 'rgba(245,158,11,0.15)', text: '#f59e0b', border: 'rgba(245,158,11,0.3)' },
+        emerald: { bg: 'rgba(52,211,153,0.15)', text: '#34d399', border: 'rgba(52,211,153,0.3)' },
+        yellow:  { bg: 'rgba(250,204,21,0.15)', text: '#facc15', border: 'rgba(250,204,21,0.3)' },
+        purple:  { bg: 'rgba(168,85,247,0.15)', text: '#a855f7', border: 'rgba(168,85,247,0.3)' },
+        red:     { bg: 'rgba(239,68,68,0.15)',  text: '#ef4444', border: 'rgba(239,68,68,0.3)' },
+        cyan:    { bg: 'rgba(34,211,238,0.15)', text: '#22d3ee', border: 'rgba(34,211,238,0.3)' },
+        blue:    { bg: 'rgba(59,130,246,0.15)', text: '#3b82f6', border: 'rgba(59,130,246,0.3)' },
+        rose:    { bg: 'rgba(251,113,133,0.15)', text: '#fb7185', border: 'rgba(251,113,133,0.3)' }
+    };
+    return map[color] || map.amber;
+}
+
+function getTagStyle(tag) {
+    if (tag === 'beginner') return { bg: 'rgba(52,211,153,0.15)', text: '#34d399' };
+    if (tag === 'intermediate') return { bg: 'rgba(245,158,11,0.15)', text: '#f59e0b' };
+    return { bg: 'rgba(239,68,68,0.15)', text: '#ef4444' };
+}
+
+function createVideoCard(video, globalIndex) {
     const data = video[currentLang];
-    const tagClass = video.tag === 'beginner' ? 'bg-emerald-500/20 text-emerald-400' : 
-                     video.tag === 'intermediate' ? 'bg-amber-500/20 text-amber-400' : 'bg-red-500/20 text-red-400';
+    const tagStyle = getTagStyle(video.tag);
     const tagText = translations[currentLang][`tag${video.tag.charAt(0).toUpperCase() + video.tag.slice(1)}`];
-    
+    const isPlaceholder = !data.url || data.url === YOUTUBE_CHANNEL;
+    const url = isPlaceholder ? YOUTUBE_CHANNEL : data.url;
+
     return `
-        <a href="${data.url}" target="_blank" rel="noopener noreferrer" 
-           class="group block bg-zinc-800/50 border border-zinc-700 rounded-xl overflow-hidden transition-all duration-300 hover:border-amber-500/50 hover:shadow-lg hover:shadow-amber-500/10 hover:-translate-y-1">
-            <div class="relative aspect-video overflow-hidden bg-zinc-900">
-                <img src="${video.thumbnail}" alt="${data.title}" 
-                     class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                     onerror="this.src='./assets/bkc_logo_3d.png'; this.style.objectFit='contain'; this.style.padding='40px';">
-                <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div class="w-14 h-14 bg-amber-500 rounded-full flex items-center justify-center shadow-lg">
-                        <i class="fa-solid fa-play text-zinc-900 text-xl ml-1"></i>
+        <a href="${url}" target="_blank" rel="noopener noreferrer"
+           class="group block rounded-xl overflow-hidden transition-all duration-300 hover:-translate-y-1"
+           style="background:var(--dash-surface-2, #1c1c21);border:1px solid var(--dash-border, rgba(255,255,255,0.06))">
+            <div class="relative overflow-hidden" style="aspect-ratio:16/9;background:#0a0a0f">
+                <img src="${video.thumbnail}" alt="${data.title}"
+                     style="width:100%;height:100%;object-fit:cover;transition:transform 0.3s"
+                     class="group-hover:scale-105"
+                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                <div style="display:none;width:100%;height:100%;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a1a2e,#16213e)">
+                    <i class="fa-solid ${video.icon || 'fa-play'}" style="font-size:32px;color:rgba(245,158,11,0.3)"></i>
+                </div>
+                <!-- Play overlay -->
+                <div style="position:absolute;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.3s" class="group-hover:opacity-100">
+                    <div style="width:50px;height:50px;border-radius:50%;background:#f59e0b;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(245,158,11,0.4)">
+                        <i class="fa-solid fa-play" style="color:#000;font-size:18px;margin-left:3px"></i>
                     </div>
                 </div>
-                <span class="absolute top-2 left-2 bg-black/70 backdrop-blur px-2 py-1 rounded text-xs font-bold text-amber-400">#${index + 1}</span>
-                <span class="absolute bottom-2 right-2 bg-black/80 px-2 py-1 rounded text-xs font-semibold text-white">${video.duration}</span>
+                <!-- Number badge -->
+                <span style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);padding:3px 8px;border-radius:6px;font-size:11px;font-weight:800;color:#f59e0b">#${globalIndex + 1}</span>
+                <!-- Duration -->
+                <span style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,0.8);padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;color:#fff">${video.duration}</span>
             </div>
-            <div class="p-4">
-                <h3 class="font-bold text-white text-sm mb-1 line-clamp-2">${data.title}</h3>
-                <p class="text-zinc-400 text-xs line-clamp-2 mb-3">${data.description}</p>
-                <span class="inline-block text-[10px] font-bold uppercase px-2 py-1 rounded ${tagClass}">${tagText}</span>
+            <div style="padding:14px">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+                    <i class="fa-solid ${video.icon || 'fa-play'}" style="font-size:12px;color:rgba(255,255,255,0.3)"></i>
+                    <h3 style="font-weight:700;color:#fff;font-size:13px;margin:0;line-height:1.3;flex:1">${data.title}</h3>
+                </div>
+                <p style="color:rgba(255,255,255,0.45);font-size:11px;line-height:1.5;margin:0 0 10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${data.description}</p>
+                <span style="display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:4px;letter-spacing:0.05em;background:${tagStyle.bg};color:${tagStyle.text}">${tagText}</span>
             </div>
         </a>
     `;
 }
 
-function createCategorySection(id, icon, iconColor, videos, titleKey, descKey, startIndex) {
-    const t = translations[currentLang];
-    let html = `
-        <div class="mb-10">
-            <div class="flex items-center gap-3 mb-6 pb-3 border-b border-zinc-700">
-                <div class="w-10 h-10 rounded-lg bg-${iconColor}-500/20 flex items-center justify-center">
-                    <i class="fa-solid fa-${icon} text-${iconColor}-400"></i>
+function createCategorySection(cat, videoList, startIndex) {
+    const t = cat[currentLang];
+    const c = getColorClasses(cat.color);
+
+    // Filter videos if filter is active
+    const filteredVideos = currentFilter === 'all' ? videoList : videoList.filter(v => v.tag === currentFilter);
+    if (filteredVideos.length === 0) return { html: '', nextIndex: startIndex };
+
+    let cardsHtml = '';
+    let idx = startIndex;
+    filteredVideos.forEach(video => {
+        // Find original index for numbering
+        const origIdx = Object.values(videos).flat().indexOf(video);
+        cardsHtml += createVideoCard(video, origIdx >= 0 ? origIdx : idx);
+        idx++;
+    });
+
+    const html = `
+        <div style="margin-bottom:40px">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.06)">
+                <div style="width:40px;height:40px;border-radius:10px;background:${c.bg};display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                    <i class="fa-solid fa-${cat.icon}" style="color:${c.text};font-size:16px"></i>
                 </div>
                 <div>
-                    <h2 class="text-lg font-bold text-white">${t[titleKey]}</h2>
-                    <p class="text-xs text-zinc-500">${t[descKey]}</p>
+                    <h2 style="font-size:17px;font-weight:700;color:#fff;margin:0">${t.title}</h2>
+                    <p style="font-size:11px;color:rgba(255,255,255,0.35);margin:2px 0 0">${t.desc}</p>
                 </div>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px">
+                ${cardsHtml}
+            </div>
+        </div>
     `;
-    
-    let idx = startIndex;
-    videos.forEach(video => {
-        html += createVideoCard(video, idx++);
-    });
-    
-    html += `</div></div>`;
+
     return { html, nextIndex: idx };
 }
 
 function setLanguage(lang) {
     currentLang = lang;
     localStorage.setItem('backcoin-tutorials-lang', lang);
-    
-    // Update buttons
-    document.getElementById('tutorials-btn-en')?.classList.toggle('bg-amber-500', lang === 'en');
-    document.getElementById('tutorials-btn-en')?.classList.toggle('text-zinc-900', lang === 'en');
-    document.getElementById('tutorials-btn-en')?.classList.toggle('bg-zinc-700', lang !== 'en');
-    document.getElementById('tutorials-btn-en')?.classList.toggle('text-zinc-300', lang !== 'en');
-    
-    document.getElementById('tutorials-btn-pt')?.classList.toggle('bg-amber-500', lang === 'pt');
-    document.getElementById('tutorials-btn-pt')?.classList.toggle('text-zinc-900', lang === 'pt');
-    document.getElementById('tutorials-btn-pt')?.classList.toggle('bg-zinc-700', lang !== 'pt');
-    document.getElementById('tutorials-btn-pt')?.classList.toggle('text-zinc-300', lang !== 'pt');
-    
-    // Re-render content
+
+    document.querySelectorAll('.tutorials-lang-btn').forEach(btn => {
+        const isActive = btn.dataset.lang === lang;
+        btn.style.background = isActive ? '#f59e0b' : 'rgba(255,255,255,0.06)';
+        btn.style.color = isActive ? '#000' : 'rgba(255,255,255,0.6)';
+    });
+
+    renderContent();
+}
+
+function setFilter(filter) {
+    currentFilter = filter;
+
+    document.querySelectorAll('.tutorials-filter-btn').forEach(btn => {
+        const isActive = btn.dataset.filter === filter;
+        btn.style.background = isActive ? 'rgba(245,158,11,0.15)' : 'transparent';
+        btn.style.color = isActive ? '#f59e0b' : 'rgba(255,255,255,0.4)';
+        btn.style.borderColor = isActive ? 'rgba(245,158,11,0.3)' : 'rgba(255,255,255,0.08)';
+    });
+
     renderContent();
 }
 
 function renderContent() {
     const container = document.getElementById('tutorials-content');
     if (!container) return;
-    
+
     const t = translations[currentLang];
-    
+    const totalVideos = getTotalVideoCount();
+
     let html = `
         <!-- Hero -->
-        <div class="text-center mb-10">
-            <h1 class="text-3xl sm:text-4xl font-bold mb-3">
-                <span class="bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-400 bg-clip-text text-transparent">
+        <div style="text-align:center;margin-bottom:32px">
+            <h1 style="font-size:28px;font-weight:800;margin:0 0 8px">
+                <span style="background:linear-gradient(135deg,#f59e0b,#fbbf24,#f59e0b);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">
                     ${t.heroTitle}
                 </span>
             </h1>
-            <p class="text-zinc-400 max-w-2xl mx-auto">${t.heroSubtitle}</p>
-            <div class="flex items-center justify-center gap-4 mt-4">
-                <div class="flex items-center gap-2 text-sm text-zinc-500">
-                    <i class="fa-solid fa-video text-amber-400"></i>
-                    <span>14 ${t.videos}</span>
+            <p style="color:rgba(255,255,255,0.45);max-width:600px;margin:0 auto 16px;font-size:13px;line-height:1.5">${t.heroSubtitle}</p>
+            <div style="display:flex;align-items:center;justify-content:center;gap:16px">
+                <div style="display:flex;align-items:center;gap:6px;font-size:13px;color:rgba(255,255,255,0.4)">
+                    <i class="fa-solid fa-video" style="color:#f59e0b"></i>
+                    <span>${totalVideos} ${t.videoCount}</span>
                 </div>
-                <div class="w-1 h-1 bg-zinc-600 rounded-full"></div>
-                <div class="flex items-center gap-2 text-sm text-zinc-500">
-                    <i class="fa-solid fa-language text-emerald-400"></i>
+                <div style="width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,0.15)"></div>
+                <div style="display:flex;align-items:center;gap:6px;font-size:13px;color:rgba(255,255,255,0.4)">
+                    <i class="fa-solid fa-language" style="color:#34d399"></i>
                     <span>${t.languages}</span>
+                </div>
+                <div style="width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,0.15)"></div>
+                <div style="display:flex;align-items:center;gap:6px;font-size:13px;color:rgba(255,255,255,0.4)">
+                    <i class="fa-solid fa-layer-group" style="color:#a855f7"></i>
+                    <span>8 ${currentLang === 'pt' ? 'Categorias' : 'Categories'}</span>
                 </div>
             </div>
         </div>
+
+        <!-- Filter Bar -->
+        <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:28px;flex-wrap:wrap">
+            <button class="tutorials-filter-btn" data-filter="all" onclick="TutorialsPage.setFilter('all')"
+                    style="padding:6px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ${currentFilter === 'all' ? 'rgba(245,158,11,0.3)' : 'rgba(255,255,255,0.08)'};background:${currentFilter === 'all' ? 'rgba(245,158,11,0.15)' : 'transparent'};color:${currentFilter === 'all' ? '#f59e0b' : 'rgba(255,255,255,0.4)'};transition:all 0.2s">
+                ${t.filterAll} (${totalVideos})
+            </button>
+            <button class="tutorials-filter-btn" data-filter="beginner" onclick="TutorialsPage.setFilter('beginner')"
+                    style="padding:6px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ${currentFilter === 'beginner' ? 'rgba(52,211,153,0.3)' : 'rgba(255,255,255,0.08)'};background:${currentFilter === 'beginner' ? 'rgba(52,211,153,0.15)' : 'transparent'};color:${currentFilter === 'beginner' ? '#34d399' : 'rgba(255,255,255,0.4)'};transition:all 0.2s">
+                ${t.filterBeginner}
+            </button>
+            <button class="tutorials-filter-btn" data-filter="intermediate" onclick="TutorialsPage.setFilter('intermediate')"
+                    style="padding:6px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ${currentFilter === 'intermediate' ? 'rgba(245,158,11,0.3)' : 'rgba(255,255,255,0.08)'};background:${currentFilter === 'intermediate' ? 'rgba(245,158,11,0.15)' : 'transparent'};color:${currentFilter === 'intermediate' ? '#f59e0b' : 'rgba(255,255,255,0.4)'};transition:all 0.2s">
+                ${t.filterIntermediate}
+            </button>
+            <button class="tutorials-filter-btn" data-filter="advanced" onclick="TutorialsPage.setFilter('advanced')"
+                    style="padding:6px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ${currentFilter === 'advanced' ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.08)'};background:${currentFilter === 'advanced' ? 'rgba(239,68,68,0.15)' : 'transparent'};color:${currentFilter === 'advanced' ? '#ef4444' : 'rgba(255,255,255,0.4)'};transition:all 0.2s">
+                ${t.filterAdvanced}
+            </button>
+        </div>
     `;
-    
-    // Getting Started
-    let result = createCategorySection('getting-started', 'rocket', 'emerald', videos.gettingStarted, 'catGettingStarted', 'catGettingStartedDesc', 0);
-    html += result.html;
-    
-    // Ecosystem
-    result = createCategorySection('ecosystem', 'cubes', 'amber', videos.ecosystem, 'catEcosystem', 'catEcosystemDesc', result.nextIndex);
-    html += result.html;
-    
-    // Advanced
-    result = createCategorySection('advanced', 'graduation-cap', 'cyan', videos.advanced, 'catAdvanced', 'catAdvancedDesc', result.nextIndex);
-    html += result.html;
-    
+
+    // Render each category
+    let idx = 0;
+    for (const cat of categories) {
+        const videoList = videos[cat.key];
+        if (!videoList) continue;
+        const result = createCategorySection(cat, videoList, idx);
+        html += result.html;
+        idx = result.nextIndex;
+    }
+
+    // Subscribe CTA
+    html += `
+        <div style="text-align:center;padding:32px 20px;margin-top:20px;background:linear-gradient(135deg,rgba(245,158,11,0.08),rgba(239,68,68,0.05));border:1px solid rgba(245,158,11,0.15);border-radius:16px">
+            <i class="fa-brands fa-youtube" style="font-size:36px;color:#ef4444;margin-bottom:12px"></i>
+            <h3 style="font-size:16px;font-weight:700;color:#fff;margin:0 0 6px">${t.subscribe}</h3>
+            <p style="font-size:12px;color:rgba(255,255,255,0.4);margin:0 0 16px">${currentLang === 'pt' ? 'Fique por dentro de novos tutoriais e atualizações' : 'Stay updated with new tutorials and updates'}</p>
+            <a href="${YOUTUBE_CHANNEL}" target="_blank" rel="noopener noreferrer"
+               style="display:inline-flex;align-items:center;gap:8px;background:#ef4444;color:#fff;padding:10px 24px;border-radius:10px;font-size:13px;font-weight:700;text-decoration:none;transition:all 0.2s;border:none"
+               onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">
+                <i class="fa-brands fa-youtube"></i>
+                ${currentLang === 'pt' ? 'Inscrever-se' : 'Subscribe'}
+            </a>
+        </div>
+    `;
+
     container.innerHTML = html;
 }
 
@@ -296,55 +823,56 @@ export const TutorialsPage = {
     render: function(isNewPage = false) {
         const container = document.getElementById('tutorials');
         if (!container) return;
-        
+
         if (isNewPage || container.innerHTML.trim() === '') {
             container.innerHTML = `
-                <div class="max-w-6xl mx-auto">
-                    <!-- Header with Language Switcher -->
-                    <div class="flex items-center justify-between mb-8">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
-                                <i class="fa-solid fa-play-circle text-cyan-400 text-xl"></i>
+                <div style="max-width:1100px;margin:0 auto;padding:0 16px">
+                    <!-- Header -->
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px">
+                        <div style="display:flex;align-items:center;gap:12px">
+                            <div style="width:42px;height:42px;border-radius:12px;background:rgba(34,211,238,0.15);display:flex;align-items:center;justify-content:center">
+                                <i class="fa-solid fa-play-circle" style="color:#22d3ee;font-size:20px"></i>
                             </div>
                             <div>
-                                <h1 class="text-xl font-bold text-white">Video Tutorials</h1>
-                                <p class="text-xs text-zinc-500">Learn how to use Backcoin</p>
+                                <h1 style="font-size:20px;font-weight:800;color:#fff;margin:0">Video Tutorials</h1>
+                                <p style="font-size:11px;color:rgba(255,255,255,0.35);margin:2px 0 0">${getTotalVideoCount()} videos — ${currentLang === 'pt' ? 'Todas as funções do ecossistema' : 'Every ecosystem feature'}</p>
                             </div>
                         </div>
-                        
+
                         <!-- Language Switcher -->
-                        <div class="flex items-center gap-1 bg-zinc-800 p-1 rounded-lg border border-zinc-700">
-                            <button id="tutorials-btn-en" onclick="TutorialsPage.setLang('en')" 
-                                    class="flex items-center gap-2 px-3 py-2 rounded-md text-xs font-bold transition-all ${currentLang === 'en' ? 'bg-amber-500 text-zinc-900' : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'}">
-                                <img src="./assets/en.png" alt="EN" class="w-5 h-5 rounded-full">
-                                <span class="hidden sm:inline">EN</span>
+                        <div style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,0.04);padding:4px;border-radius:10px;border:1px solid rgba(255,255,255,0.06)">
+                            <button class="tutorials-lang-btn" data-lang="en" onclick="TutorialsPage.setLang('en')"
+                                    style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:none;transition:all 0.2s;${currentLang === 'en' ? 'background:#f59e0b;color:#000' : 'background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.6)'}">
+                                <img src="./assets/en.png" alt="EN" style="width:18px;height:18px;border-radius:50%" onerror="this.style.display='none'">
+                                EN
                             </button>
-                            <button id="tutorials-btn-pt" onclick="TutorialsPage.setLang('pt')" 
-                                    class="flex items-center gap-2 px-3 py-2 rounded-md text-xs font-bold transition-all ${currentLang === 'pt' ? 'bg-amber-500 text-zinc-900' : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'}">
-                                <img src="./assets/pt.png" alt="PT" class="w-5 h-5 rounded-full">
-                                <span class="hidden sm:inline">PT</span>
+                            <button class="tutorials-lang-btn" data-lang="pt" onclick="TutorialsPage.setLang('pt')"
+                                    style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:none;transition:all 0.2s;${currentLang === 'pt' ? 'background:#f59e0b;color:#000' : 'background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.6)'}">
+                                <img src="./assets/pt.png" alt="PT" style="width:18px;height:18px;border-radius:50%" onerror="this.style.display='none'">
+                                PT
                             </button>
                         </div>
                     </div>
-                    
+
                     <!-- Content Container -->
                     <div id="tutorials-content"></div>
                 </div>
             `;
-            
+
             renderContent();
         }
     },
-    
+
     update: function(isConnected) {
-        // No updates needed based on connection
+        // No updates needed
     },
-    
+
     cleanup: function() {
-        // No cleanup needed
+        currentFilter = 'all';
     },
-    
-    setLang: setLanguage
+
+    setLang: setLanguage,
+    setFilter: setFilter
 };
 
 // Expose to window for onclick handlers
