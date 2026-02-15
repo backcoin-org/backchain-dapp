@@ -7,6 +7,7 @@ import { State } from '../state.js';
 import { formatBigNumber } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
 import { openConnectModal } from '../modules/wallet.js';
+import { getBkcPrice, formatUsd } from '../modules/price-service.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -561,10 +562,18 @@ function updateSwapButton() {
     btn.className = 'execute-trade-btn';
 }
 
-function updatePriceDisplay() {
+async function updatePriceDisplay() {
     const el = document.getElementById('trade-price');
     if (!el) return;
-    const txt = `1 ETH = ${formatPrice(TS.priceBkcPerEth)} BKC`;
+    let txt = `1 ETH = ${formatPrice(TS.priceBkcPerEth)} BKC`;
+    // Add USD price
+    const provider = State.publicProvider || State.provider;
+    if (provider && TS.priceEthPerBkc > 0) {
+        try {
+            const price = await getBkcPrice(provider);
+            if (price.bkcUsd > 0) txt += `  ·  1 BKC = ${formatUsd(price.bkcUsd)}`;
+        } catch (_) {}
+    }
     el.textContent = txt;
     el.classList.remove('trade-price-pulse');
     void el.offsetWidth;

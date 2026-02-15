@@ -34,6 +34,7 @@ import {
 } from '../utils.js';
 import { showToast, addNftToWallet } from '../ui-feedback.js';
 import { addresses, boosterTiers, getTierByBoost, getRecycleRateFromBoost, getKeepRateFromBoost } from '../config.js';
+import { getBkcPrice, formatUsd } from '../modules/price-service.js';
 
 // ============================================================================
 // LOCAL STATE
@@ -877,7 +878,7 @@ function injectStyles() {
         /* ── Metrics Bar ── */
         .dash-metrics-bar {
             display: grid;
-            grid-template-columns: repeat(6, 1fr);
+            grid-template-columns: repeat(7, 1fr);
             gap: 8px;
         }
         .dash-metric-pill {
@@ -1341,9 +1342,14 @@ function renderDashboardLayout() {
                     <div class="dash-metric-pill-label"><i class="fa-solid fa-vault" style="color:#60a5fa"></i> Locked</div>
                     <div id="dash-metric-locked" class="dash-metric-pill-value">--</div>
                 </div>
+                <div class="dash-metric-pill" title="BKC market price (via Uniswap V3 + CoinGecko)" style="border-color: rgba(34,197,94,0.2);">
+                    <div class="dash-metric-pill-label"><i class="fa-solid fa-chart-line" style="color:#22c55e"></i> BKC Price</div>
+                    <div id="dash-metric-bkcprice" class="dash-metric-pill-value" style="color:#22c55e">--</div>
+                </div>
                 <div class="dash-metric-pill" title="Your BKC balance" style="border-color: rgba(245,158,11,0.2);">
                     <div class="dash-metric-pill-label"><i class="fa-solid fa-wallet" style="color:#f59e0b"></i> Balance</div>
                     <div id="dash-metric-balance" class="dash-metric-pill-value" style="color:#f59e0b">--</div>
+                    <div id="dash-metric-balance-usd" style="font-size:10px;color:var(--dash-text-3);margin-top:-1px"></div>
                 </div>
             </div>
 
@@ -1534,6 +1540,9 @@ async function updateGlobalMetrics() {
 
         updateBalanceCard();
 
+        // BKC Price from Uniswap V3 + CoinGecko
+        updateBkcPriceMetric();
+
         const fortuneText = document.getElementById('dash-fortune-prize-text');
         if (fortuneText) fortuneText.innerText = fortunePrize > 0 ? `Prize: ${formatCompact(fortunePrize)} BKC` : 'Play to win';
 
@@ -1607,6 +1616,45 @@ async function handleDashBuyback(btn) {
         showToast('Buyback failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-hammer"></i> Execute';
+    }
+}
+
+async function updateBkcPriceMetric() {
+    const provider = State.publicProvider || State.provider;
+    if (!provider) return;
+    try {
+        const price = await getBkcPrice(provider);
+        const el = document.getElementById('dash-metric-bkcprice');
+        if (el) {
+            if (price.bkcUsd > 0) {
+                el.innerHTML = `${formatUsd(price.bkcUsd)}`;
+            } else if (price.bkcEth > 0) {
+                const ethStr = price.bkcEth < 0.001 ? price.bkcEth.toExponential(2) : price.bkcEth.toFixed(6);
+                el.innerHTML = `${ethStr} <span style="font-size:10px;color:var(--dash-text-3)">ETH</span>`;
+            } else {
+                el.innerHTML = `<span style="color:var(--dash-text-3)">--</span>`;
+            }
+        }
+        // Also update balance USD
+        updateBalanceUsd(price);
+    } catch (e) {
+        console.warn('[Dashboard] Price update failed:', e.message);
+    }
+}
+
+function updateBalanceUsd(price) {
+    const usdEl = document.getElementById('dash-metric-balance-usd');
+    if (!usdEl || !State.isConnected) {
+        if (usdEl) usdEl.textContent = '';
+        return;
+    }
+    const balance = State.currentUserBalance || State.bkcBalance || 0n;
+    if (balance > 0n && price?.bkcUsd > 0) {
+        const balanceNum = formatBigNumber(balance);
+        const usdValue = balanceNum * price.bkcUsd;
+        usdEl.textContent = `≈ ${formatUsd(usdValue)}`;
+    } else {
+        usdEl.textContent = '';
     }
 }
 
