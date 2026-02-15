@@ -571,7 +571,10 @@ export async function getHighestBoosterBoostFromAPI(forceRefresh = false) {
         return cachedBoosterResult;
     }
     
-    await loadMyBoostersFromAPI(forceRefresh);
+    await Promise.all([
+        loadMyBoostersFromAPI(forceRefresh),
+        loadUserRentals(forceRefresh)
+    ]);
 
     let maxBoost = 0;
     let bestTokenId = null;
