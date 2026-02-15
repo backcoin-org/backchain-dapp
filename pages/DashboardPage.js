@@ -77,13 +77,13 @@ const ACTIVITY_ICONS = {
     UNSTAKING: { icon: 'fa-unlock', color: '#fb923c', bg: 'rgba(249,115,22,0.15)', label: '🔓 Unstaked', emoji: '🔓' },
     FORCE_UNSTAKE: { icon: 'fa-bolt', color: '#ef4444', bg: 'rgba(239,68,68,0.15)', label: '⚡ Force Unstaked', emoji: '⚡' },
     CLAIM: { icon: 'fa-coins', color: '#fbbf24', bg: 'rgba(245,158,11,0.15)', label: '🪙 Rewards Claimed', emoji: '🪙' },
-    NFT_BUY: { icon: 'fa-bag-shopping', color: '#4ade80', bg: 'rgba(34,197,94,0.15)', label: '🛍️ Bought NFT', emoji: '🛍️' },
-    NFT_SELL: { icon: 'fa-hand-holding-dollar', color: '#fb923c', bg: 'rgba(249,115,22,0.15)', label: '💰 Sold NFT', emoji: '💰' },
+    NFT_BUY: { icon: 'fa-cart-plus', color: '#22c55e', bg: 'rgba(34,197,94,0.12)', label: '🛍️ Bought NFT', emoji: '🛍️' },
+    NFT_SELL: { icon: 'fa-money-bill-transfer', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', label: '💰 Sold NFT', emoji: '💰' },
     NFT_MINT: { icon: 'fa-gem', color: '#fde047', bg: 'rgba(234,179,8,0.15)', label: '💎 Minted Booster', emoji: '💎' },
     NFT_TRANSFER: { icon: 'fa-arrow-right-arrow-left', color: '#60a5fa', bg: 'rgba(59,130,246,0.15)', label: '↔️ Transfer', emoji: '↔️' },
-    RENTAL_LIST: { icon: 'fa-tag', color: '#4ade80', bg: 'rgba(34,197,94,0.15)', label: '🏷️ Listed NFT', emoji: '🏷️' },
-    RENTAL_RENT: { icon: 'fa-clock', color: '#22d3ee', bg: 'rgba(6,182,212,0.15)', label: '⏰ Rented NFT', emoji: '⏰' },
-    RENTAL_WITHDRAW: { icon: 'fa-rotate-left', color: '#fb923c', bg: 'rgba(249,115,22,0.15)', label: '↩️ Withdrawn', emoji: '↩️' },
+    RENTAL_LIST: { icon: 'fa-tag', color: '#14b8a6', bg: 'rgba(20,184,166,0.12)', label: '🏷️ Listed NFT', emoji: '🏷️' },
+    RENTAL_RENT: { icon: 'fa-handshake', color: '#3b82f6', bg: 'rgba(59,130,246,0.12)', label: '🤝 Rented NFT', emoji: '🤝' },
+    RENTAL_WITHDRAW: { icon: 'fa-rotate-left', color: '#6b7280', bg: 'rgba(107,114,128,0.12)', label: '↩️ Withdrawn', emoji: '↩️' },
     RENTAL_PROMOTE: { icon: 'fa-bullhorn', color: '#fbbf24', bg: 'rgba(251,191,36,0.2)', label: '📢 Promoted NFT', emoji: '📢' },
     FORTUNE_COMMIT: { icon: 'fa-lock', color: '#a855f7', bg: 'rgba(168,85,247,0.2)', label: '🔐 Game Committed', emoji: '🔐' },
     FORTUNE_REVEAL: { icon: 'fa-dice', color: '#f97316', bg: 'rgba(249,115,22,0.2)', label: '🎲 Game Revealed', emoji: '🎲' },
@@ -115,15 +115,15 @@ const ACTIVITY_ICONS = {
     TUTOR_CHANGED: { icon: 'fa-arrows-rotate', color: '#a78bfa', bg: 'rgba(167,139,250,0.15)', label: '🔄 Tutor Changed', emoji: '🔄' },
     TUTOR_EARNED: { icon: 'fa-hand-holding-dollar', color: '#10b981', bg: 'rgba(16,185,129,0.15)', label: '💰 Tutor Earned', emoji: '💰' },
     REWARD_RECYCLED: { icon: 'fa-recycle', color: '#22d3ee', bg: 'rgba(6,182,212,0.15)', label: '♻️ Rewards Recycled', emoji: '♻️' },
-    NFT_FUSION: { icon: 'fa-fire', color: '#f97316', bg: 'rgba(249,115,22,0.15)', label: '🔥 NFT Fused', emoji: '🔥' },
-    NFT_SPLIT: { icon: 'fa-scissors', color: '#60a5fa', bg: 'rgba(59,130,246,0.15)', label: '✂️ NFT Split', emoji: '✂️' },
+    NFT_FUSION: { icon: 'fa-fire', color: '#f97316', bg: 'rgba(249,115,22,0.12)', label: '🔥 NFT Fused', emoji: '🔥' },
+    NFT_SPLIT: { icon: 'fa-scissors', color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', label: '✂️ NFT Split', emoji: '✂️' },
     GOVERNANCE_VOTE: { icon: 'fa-check-to-slot', color: '#a78bfa', bg: 'rgba(167,139,250,0.15)', label: '🗳️ Voted', emoji: '🗳️' },
     GOVERNANCE_PROPOSE: { icon: 'fa-scroll', color: '#818cf8', bg: 'rgba(99,102,241,0.15)', label: '📜 Proposal Created', emoji: '📜' },
     BUYBACK: { icon: 'fa-hammer', color: '#f97316', bg: 'rgba(249,115,22,0.15)', label: '⛏️ Buyback', emoji: '⛏️' },
     SWAP: { icon: 'fa-arrow-right-arrow-left', color: '#22d3ee', bg: 'rgba(6,182,212,0.15)', label: '🔄 Swap', emoji: '🔄' },
     LIQUIDITY_ADD: { icon: 'fa-droplet', color: '#4ade80', bg: 'rgba(34,197,94,0.15)', label: '💧 Liquidity Added', emoji: '💧' },
     LIQUIDITY_REMOVE: { icon: 'fa-droplet-slash', color: '#fb923c', bg: 'rgba(249,115,22,0.15)', label: '💧 Liquidity Removed', emoji: '💧' },
-    RENTAL_EARNINGS: { icon: 'fa-money-bill-wave', color: '#4ade80', bg: 'rgba(34,197,94,0.15)', label: '💰 Earnings Withdrawn', emoji: '💰' },
+    RENTAL_EARNINGS: { icon: 'fa-coins', color: '#eab308', bg: 'rgba(234,179,8,0.12)', label: '💰 Earnings Withdrawn', emoji: '💰' },
     FORTUNE_EXPIRED: { icon: 'fa-hourglass-end', color: '#ef4444', bg: 'rgba(239,68,68,0.15)', label: '⏰ Game Expired', emoji: '⏰' },
     CHARITY_BOOST: { icon: 'fa-rocket', color: '#ec4899', bg: 'rgba(236,72,153,0.15)', label: '🚀 Campaign Boosted', emoji: '🚀' },
     CHARITY_CLOSED: { icon: 'fa-lock', color: '#71717a', bg: 'rgba(39,39,42,0.5)', label: '🔒 Campaign Closed', emoji: '🔒' },
@@ -1514,8 +1514,8 @@ async function updateGlobalMetrics() {
             ? `<span style="color:#ef4444">${formatCompact(burnedNum)}</span> <span style="font-size:10px;color:var(--dash-text-3)">BKC</span>`
             : `<span style="color:var(--dash-text-3)">0 BKC</span>`);
         setEl('dash-metric-fees', ethFeesNum > 0
-            ? `${formatCompact(ethFeesNum)} <span style="font-size:10px;color:var(--dash-text-3)">ETH</span>`
-            : `<span style="color:var(--dash-text-3)">0 ETH</span>`);
+            ? `${ethFeesNum < 1000 ? ethFeesNum.toFixed(3) : formatCompact(ethFeesNum)} <span style="font-size:10px;color:var(--dash-text-3)">ETH</span>`
+            : `<span style="color:var(--dash-text-3)">0.000 ETH</span>`);
 
         setEl('dash-metric-locked', lockedNum > 0
             ? `<span style="color:#60a5fa">${formatCompact(lockedNum)}</span> <span style="font-size:10px;color:var(--dash-text-3)">BKC</span>`
