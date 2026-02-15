@@ -89,6 +89,13 @@ export {
     IRYS_CONFIG
 } from './irys-uploader.js';
 
+// Media Optimization (Canvas-based)
+export {
+    optimizeImage,
+    optimizeMedia,
+    validateVideo
+} from './media-optimizer.js';
+
 // ============================================================================
 // CLIENT-SIDE FEE CALCULATION
 // Arbitrum doesn't support gasPrice override in eth_call, so we replicate

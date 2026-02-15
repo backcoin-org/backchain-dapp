@@ -1,12 +1,13 @@
 // modules/core/irys-uploader.js
-// Irys (Arweave) Decentralized Storage — Client-side uploads via MetaMask
+// Media Upload Pipeline — Optimize + Permanent Storage
 //
-// User pays ETH directly from their wallet for permanent Arweave storage.
-// No server-side upload API needed — 100% client-side.
+// Flow: file → client-side optimization → Irys/Arweave (permanent) → Pinata fallback
 //
-// Devnet: free faucet tokens, data lasts ~60 days. Remove .devnet() for mainnet.
+// Irys/Arweave: pay once, stored forever. Devnet: free, data ~60 days.
+// Pinata/IPFS: fallback when Irys unavailable.
 
 import { sepoliaRpcUrl } from '../../config.js';
+import { optimizeMedia } from './media-optimizer.js';
 
 // ============================================================================
 // CONFIG
@@ -77,6 +78,20 @@ export async function getUploader() {
         console.log('[Irys] SDK modules loaded');
     } catch (e) {
         console.error('[Irys] Failed to load SDK modules:', e);
+
+        // Stale chunk detection — after a rebuild, old chunk hashes no longer exist.
+        // Auto-reload the page once to get fresh bundle references.
+        if (e.message?.includes('Failed to fetch dynamically imported module')) {
+            if (!sessionStorage.getItem('_irys_retry')) {
+                sessionStorage.setItem('_irys_retry', '1');
+                console.log('[Irys] Stale chunk detected, reloading page...');
+                window.location.reload();
+                return; // Unreachable, but satisfies linter
+            }
+            sessionStorage.removeItem('_irys_retry');
+            throw new Error('Irys SDK failed to load. Please clear your browser cache (Ctrl+Shift+Del) and try again.');
+        }
+
         throw new Error('Failed to load Irys SDK: ' + (e.message || e));
     }
 
@@ -110,14 +125,16 @@ export async function getUploader() {
 // ============================================================================
 
 /**
- * Upload a File via server-side API (Lighthouse IPFS+Filecoin).
- * No MetaMask popup, no ETH cost to user — uses server API key.
- * Falls back to client-side Irys if API is unavailable.
+ * Upload a File with automatic optimization + permanent storage.
+ *
+ * Pipeline: optimize (Canvas WebP) → Irys/Arweave (permanent) → Pinata API (fallback)
  *
  * @param {File} file - Browser File object
  * @param {object} [options] - Upload options
  * @param {Array<{name:string, value:string}>} [options.tags] - Custom Arweave tags
  * @param {function} [options.onProgress] - Progress callback (phase, detail)
+ * @param {object} [options.optimize] - Optimization options (maxWidth, quality, etc.)
+ * @param {boolean} [options.skipOptimize] - Skip optimization (e.g., for pre-optimized files)
  * @returns {Promise<{id: string, url: string, size: number, type: string}>}
  */
 export async function uploadFile(file, options = {}) {
@@ -128,55 +145,67 @@ export async function uploadFile(file, options = {}) {
 
     const onProgress = options.onProgress || (() => {});
 
-    // Primary: server-side API upload (Lighthouse IPFS+Filecoin)
+    // Step 1: Optimize media (images → WebP, videos → size check)
+    let optimized = file;
+    if (!options.skipOptimize) {
+        onProgress('optimizing', 'Optimizing media...');
+        optimized = await optimizeMedia(file, options.optimize || {});
+    }
+
+    // Step 2: Primary — Irys/Arweave (permanent storage)
     try {
-        onProgress('uploading', `Uploading ${(file.size / 1024).toFixed(0)} KB...`);
-        const result = await _uploadViaAPI(file);
-        console.log(`[Upload] API success: ${result.url} (${(file.size / 1024).toFixed(0)} KB)`);
+        onProgress('preparing', 'Connecting to Arweave...');
+        const irys = await getUploader();
+
+        const tags = [
+            { name: 'App-Name', value: 'Backchain' },
+            { name: 'Content-Type', value: optimized.type || 'application/octet-stream' },
+            ...(options.tags || [])
+        ];
+
+        onProgress('pricing', 'Calculating storage cost...');
+        const price = await irys.getPrice(optimized.size);
+        const balance = await irys.getLoadedBalance();
+
+        const priceBn = BigInt(price.toString());
+        const balanceBn = BigInt(balance.toString());
+
+        if (balanceBn < priceBn) {
+            const deficit = priceBn - balanceBn;
+            const fundAmount = (deficit * 120n) / 100n;
+            onProgress('funding', `Funding Arweave storage (${_formatEth(fundAmount)})...`);
+            console.log(`[Irys] Funding ${_formatEth(fundAmount)} (balance: ${_formatEth(balanceBn)}, price: ${_formatEth(priceBn)})`);
+            await _manualFund(irys, fundAmount);
+        }
+
+        onProgress('uploading', `Uploading ${(optimized.size / 1024).toFixed(0)} KB to Arweave...`);
+        const receipt = await irys.uploadFile(optimized, { tags });
+
+        const result = {
+            id: receipt.id,
+            url: `${IRYS_CONFIG.gateway}/${receipt.id}`,
+            size: optimized.size,
+            type: optimized.type
+        };
+
+        console.log(`[Upload] Arweave permanent: ${result.url} (${(optimized.size / 1024).toFixed(0)} KB)`);
+        onProgress('done', result.url);
+        return result;
+    } catch (irysErr) {
+        console.warn('[Upload] Irys/Arweave failed, trying Pinata fallback:', irysErr.message);
+    }
+
+    // Step 3: Fallback — Pinata API (IPFS)
+    try {
+        onProgress('uploading', `Uploading ${(optimized.size / 1024).toFixed(0)} KB to IPFS...`);
+        const result = await _uploadViaAPI(optimized);
+        console.log(`[Upload] Pinata fallback: ${result.url} (${(optimized.size / 1024).toFixed(0)} KB)`);
         onProgress('done', result.url);
         return result;
     } catch (apiErr) {
-        console.warn('[Upload] API upload failed, trying Irys fallback:', apiErr.message);
+        console.error('[Upload] Both Irys and Pinata failed:', apiErr.message);
+        throw new Error('Upload failed. Please check your connection and try again.');
     }
-
-    // Fallback: client-side Irys (Arweave) — requires MetaMask
-    onProgress('preparing', 'Connecting to Irys...');
-    const irys = await getUploader();
-
-    const tags = [
-        { name: 'App-Name', value: 'Backchain' },
-        { name: 'Content-Type', value: file.type || 'application/octet-stream' },
-        ...(options.tags || [])
-    ];
-
-    onProgress('pricing', 'Calculating upload cost...');
-    const price = await irys.getPrice(file.size);
-    const balance = await irys.getLoadedBalance();
-
-    const priceBn = BigInt(price.toString());
-    const balanceBn = BigInt(balance.toString());
-
-    if (balanceBn < priceBn) {
-        const deficit = priceBn - balanceBn;
-        const fundAmount = (deficit * 120n) / 100n;
-        onProgress('funding', `Funding Irys node (${_formatEth(fundAmount)})...`);
-        console.log(`[Irys] Funding ${_formatEth(fundAmount)} (balance: ${_formatEth(balanceBn)}, price: ${_formatEth(priceBn)})`);
-        await _manualFund(irys, fundAmount);
-    }
-
-    onProgress('uploading', `Uploading ${(file.size / 1024).toFixed(0)} KB...`);
-    const receipt = await irys.uploadFile(file, { tags });
-
-    const result = {
-        id: receipt.id,
-        url: `${IRYS_CONFIG.gateway}/${receipt.id}`,
-        size: file.size,
-        type: file.type
-    };
-
-    console.log(`[Irys] Uploaded: ${result.url} (${(file.size / 1024).toFixed(0)} KB)`);
-    onProgress('done', result.url);
-    return result;
 }
 
 /**

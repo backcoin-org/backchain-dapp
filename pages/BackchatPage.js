@@ -26,7 +26,7 @@ import { showToast } from '../ui-feedback.js';
 import { addresses, agoraABI } from '../config.js';
 import { formatBigNumber } from '../utils.js';
 import { BackchatTx } from '../modules/transactions/index.js';
-import { calculateFeeClientSide, resolveContentUrl, irysUploadFile } from '../modules/core/index.js';
+import { calculateFeeClientSide, resolveContentUrl, irysUploadFile, optimizeImage } from '../modules/core/index.js';
 import { LiveStream } from '../modules/webrtc-live.js';
 
 // ============================================================================
@@ -1366,11 +1366,12 @@ async function doUpdateProfile() {
     if (avatarFile) {
         try {
             btn && (btn.disabled = true);
-            btn && (btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading avatar...');
+            btn && (btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Optimizing & uploading avatar...');
             const result = await irysUploadFile(avatarFile, {
-                tags: [{ name: 'Type', value: 'agora-avatar' }]
+                tags: [{ name: 'Type', value: 'agora-avatar' }],
+                optimize: { maxWidth: 512, maxHeight: 512, quality: 0.8 }
             });
-            avatar = `ar://${result.id}`;
+            avatar = result.id;
         } catch (e) {
             showToast('Avatar upload error: ' + e.message, 'error');
             btn && (btn.disabled = false);
