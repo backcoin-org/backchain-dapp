@@ -100,30 +100,30 @@ async function main() {
     console.log("\n═══════════════════════════════════════════════════════════════");
     console.log("   🎨 NFT POOLS");
     console.log("═══════════════════════════════════════════════════════════════");
-    const poolKeys = ["pool_bronze", "pool_silver", "pool_gold", "pool_diamond"];
-    const tierNames = ["BRONZE", "SILVER", "GOLD", "DIAMOND"];
     const poolAbi = [
         "function initialized() view returns (bool)",
         "function bkcBalance() view returns (uint256)",
         "function nftCount() view returns (uint256)",
+        "function mintableReserves() view returns (uint256)",
         "function k() view returns (uint256)",
         "function tier() view returns (uint8)"
     ];
-    for (let i = 0; i < 4; i++) {
-        const addr = addresses[poolKeys[i]];
-        console.log(`\n   --- ${tierNames[i]} ---`);
-        if (!addr) { console.log(`   ⚠️ Não encontrado`); continue; }
-        const pool = new ethers.Contract(addr, poolAbi, deployer);
+    const bronzeAddr = addresses["pool_bronze"];
+    console.log(`\n   --- BRONZE (single pool, on-demand minting) ---`);
+    if (!bronzeAddr) { console.log(`   ⚠️ Não encontrado`); }
+    else {
+        const pool = new ethers.Contract(bronzeAddr, poolAbi, deployer);
         try {
             const init = await pool.initialized();
-            console.log(`   Endereço:     ${addr}`);
+            console.log(`   Endereço:     ${bronzeAddr}`);
             console.log(`   Inicializado: ${init}`);
             if (init) {
-                const [bkcBal, nfts, kVal] = await Promise.all([
-                    pool.bkcBalance(), pool.nftCount(), pool.k()
+                const [bkcBal, nfts, mintable, kVal] = await Promise.all([
+                    pool.bkcBalance(), pool.nftCount(), pool.mintableReserves(), pool.k()
                 ]);
                 console.log(`   BKC Balance:  ${ethers.formatEther(bkcBal)}`);
-                console.log(`   NFTs:         ${nfts}`);
+                console.log(`   Real NFTs:    ${nfts}`);
+                console.log(`   Mintable:     ${mintable}`);
                 console.log(`   K:            ${ethers.formatEther(kVal)}`);
             }
         } catch (e: any) { console.log(`   Erro: ${e.message}`); }

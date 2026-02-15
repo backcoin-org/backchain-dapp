@@ -156,10 +156,10 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   }
 
   // ══════════════════════════════════════════════════════════════════════
-  // NFT: RewardBooster + 4 NFTPools
+  // NFT: RewardBooster + NFTPool (single Bronze)
   // ══════════════════════════════════════════════════════════════════════
   console.log("\n" + "=".repeat(70));
-  console.log("NFT: RewardBooster + 4 NFTPools");
+  console.log("NFT: RewardBooster + NFTPool (single Bronze)");
   console.log("=".repeat(70));
 
   // RewardBooster constructor(address _deployer)
@@ -170,17 +170,22 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     await sleep(VERIFY_DELAY_MS);
   }
 
-  // NFTPool constructor(address _ecosystem, address _bkcToken, address _rewardBooster, uint8 _tier)
-  const tierNames = ["bronze", "silver", "gold", "diamond"];
-  for (let tier = 0; tier < 4; tier++) {
-    const poolKey = `pool_${tierNames[tier]}`;
-    if (addr[poolKey]) {
-      const r = await verifyContract(hre, `NFTPool_${tierNames[tier]}`, addr[poolKey],
-        "contracts/NFTPool.sol:NFTPool",
-        [addr.backchainEcosystem, addr.bkcToken, addr.rewardBooster, tier]);
-      results.push(r);
-      await sleep(VERIFY_DELAY_MS);
-    }
+  // NFTFusion constructor(address _ecosystem, address _booster)
+  if (addr.nftFusion) {
+    const r = await verifyContract(hre, "NFTFusion", addr.nftFusion,
+      "contracts/NFTFusion.sol:NFTFusion",
+      [addr.backchainEcosystem, addr.rewardBooster]);
+    results.push(r);
+    await sleep(VERIFY_DELAY_MS);
+  }
+
+  // NFTPool V3 constructor(address _ecosystem, address _bkcToken, address _rewardBooster, uint8 _tier, uint256 _virtualReserves, uint256 _mintableReserves)
+  if (addr.pool_bronze) {
+    const r = await verifyContract(hre, "NFTPool_bronze", addr.pool_bronze,
+      "contracts/NFTPool.sol:NFTPool",
+      [addr.backchainEcosystem, addr.bkcToken, addr.rewardBooster, 0, 0, 10000]);
+    results.push(r);
+    await sleep(VERIFY_DELAY_MS);
   }
 
   // ══════════════════════════════════════════════════════════════════════
@@ -299,10 +304,8 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     { name: "StakingPool", address: addr.stakingPool },
     { name: "BuybackMiner", address: addr.buybackMiner },
     { name: "RewardBooster", address: addr.rewardBooster },
+    { name: "NFTFusion", address: addr.nftFusion },
     { name: "NFTPool_Bronze", address: addr.pool_bronze },
-    { name: "NFTPool_Silver", address: addr.pool_silver },
-    { name: "NFTPool_Gold", address: addr.pool_gold },
-    { name: "NFTPool_Diamond", address: addr.pool_diamond },
     { name: "FortunePool", address: addr.fortunePool },
     { name: "Agora", address: addr.agora },
     { name: "Notary", address: addr.notary },
