@@ -20,7 +20,7 @@ const ethers = window.ethers;
 import { State } from '../state.js';
 import { loadUserData, loadMyBoostersFromAPI, loadRentalListings, safeContractCall, getHighestBoosterBoostFromAPI, loadSystemDataFromAPI, API_ENDPOINTS } from '../modules/data.js';
 import { formatBigNumber, renderNoData } from '../utils.js';
-import { showToast, openModal, closeModal } from '../ui-feedback.js';
+import { showToast, openModal, closeModal, addNftToWallet } from '../ui-feedback.js';
 import { boosterTiers, addresses, nftPoolABI, ipfsGateway, getTierByBoost, getKeepRateFromBoost } from '../config.js';
 import { NftTx, FusionTx } from '../modules/transactions/index.js';
 
@@ -332,11 +332,19 @@ function injectStyles() {
         }
         .nft-inv-name { font-size: 9px; text-align: center; font-weight: 700; }
         .nft-inv-id { font-size: 8px; text-align: center; color: var(--nft-text-3); }
+        .nft-inv-actions {
+            display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 3px;
+        }
         .nft-inv-rent {
-            display: block; text-align: center; font-size: 8px; font-weight: 700;
-            color: var(--nft-accent); margin-top: 2px; text-decoration: none; cursor: pointer;
+            font-size: 8px; font-weight: 700;
+            color: var(--nft-accent); text-decoration: none; cursor: pointer;
         }
         .nft-inv-rent:hover { text-decoration: underline; }
+        .nft-inv-metamask {
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0.4; transition: opacity 0.2s ease; cursor: pointer;
+        }
+        .nft-inv-metamask:hover { opacity: 1; }
 
         /* ═══ Fusion/Split Section — Forge UI ═══ */
         .nft-fusion-card {
@@ -1465,7 +1473,12 @@ function renderInventory() {
                 </div>
                 <div class="nft-inv-name" style="color:${style.color}">${tier?.name || 'NFT'}</div>
                 <div class="nft-inv-id">#${nft.tokenId}</div>
-                ${isAvailable ? `<a href="#" class="nft-inv-rent go-to-rental" data-tokenid="${nft.tokenId}">Rent Out</a>` : ''}
+                <div class="nft-inv-actions">
+                    ${isAvailable ? `<a href="#" class="nft-inv-rent go-to-rental" data-tokenid="${nft.tokenId}">Rent</a>` : ''}
+                    <a href="#" class="nft-inv-metamask" data-add-wallet="${nft.tokenId}" data-tier-name="${tier?.name || 'NFT'}" title="Add to MetaMask">
+                        <i class="fa-solid fa-wallet" style="font-size:9px"></i>
+                    </a>
+                </div>
             </div>
         `;
     }).join('');
@@ -1774,6 +1787,16 @@ function setupEventListeners() {
                     }
                 });
             } finally { isTransactionInProgress = false; }
+            return;
+        }
+
+        // Add NFT to MetaMask
+        const metamaskBtn = e.target.closest('[data-add-wallet]');
+        if (metamaskBtn) {
+            e.preventDefault();
+            const tokenId = metamaskBtn.dataset.addWallet;
+            const tierName = metamaskBtn.dataset.tierName || 'NFT';
+            addNftToWallet(tokenId, tierName);
             return;
         }
 
