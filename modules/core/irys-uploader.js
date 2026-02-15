@@ -364,8 +364,9 @@ export function resolveContentUrl(uri) {
         return `${IPFS_GATEWAYS[0]}${trimmed}`;
     }
 
-    // Arweave TX ID: 43 chars, base64url charset
-    if (/^[a-zA-Z0-9_-]{43}$/.test(trimmed)) {
+    // Arweave/Irys TX ID: 43-44 chars, base64url or base58 charset
+    // (Irys IDs can be 43 or 44 chars depending on encoding)
+    if (/^[a-zA-Z0-9_-]{43,44}$/.test(trimmed) && !trimmed.startsWith('Qm')) {
         return `${IRYS_CONFIG.gateway}/${trimmed}`;
     }
 
