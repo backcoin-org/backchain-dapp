@@ -578,11 +578,12 @@ export const nftPoolABI = [
     "function getSpread() view returns (uint256 spread, uint256 spreadBips)",
 
     // Read — Pool State
-    "function getPoolInfo() view returns (uint256 bkcBalance, uint256 nftCount, uint256 k, bool initialized, uint8 tier)",
+    "function getPoolInfo() view returns (uint256 bkcBalance, uint256 nftCount, uint256 effectiveNftCount, uint256 virtualReserves, uint256 mintableReserves, uint256 k, bool initialized, uint8 tier)",
     "function getAvailableNFTs() view returns (uint256[])",
     "function isNFTInPool(uint256 tokenId) view returns (bool)",
     "function bkcBalance() view returns (uint256)",
     "function nftCount() view returns (uint256)",
+    "function mintableReserves() view returns (uint256)",
     "function tier() view returns (uint8)",
     "function initialized() view returns (bool)",
     "function getTierName() view returns (string)",

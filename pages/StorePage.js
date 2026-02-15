@@ -709,15 +709,20 @@ async function loadSinglePoolData(tier) {
     try {
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, State.publicProvider);
 
-        const [buyPriceResult, sellPriceResult, availableNFTsResult] = await Promise.all([
+        const [buyPriceResult, sellPriceResult, poolInfoResult] = await Promise.all([
             safeContractCall(poolContract, 'getBuyPrice', [], ethers.MaxUint256).catch(() => ethers.MaxUint256),
             safeContractCall(poolContract, 'getSellPrice', [], 0n).catch(() => 0n),
-            poolContract.getAvailableNFTs().catch(() => [])
+            poolContract.getPoolInfo().catch(() => null)
         ]);
 
-        const availableTokenIds = Array.isArray(availableNFTsResult) ? [...availableNFTsResult] : [];
         const buyPrice = (buyPriceResult === ethers.MaxUint256) ? 0n : buyPriceResult;
         const sellPrice = sellPriceResult;
+
+        // V3: getPoolInfo returns (bkcBalance, nftCount, effectiveNftCount, virtualReserves, mintableReserves, k, initialized, tier)
+        const realNftCount = poolInfoResult ? Number(poolInfoResult[1]) : 0;
+        const effectiveCount = poolInfoResult ? Number(poolInfoResult[2]) : 0;
+        const mintableReserves = poolInfoResult ? Number(poolInfoResult[4]) : 0;
+        const canBuy = effectiveCount > 1; // need at least 2 for bonding curve
 
         // Net sell price after tax
         let baseTaxBips = State.systemFees?.["NFT_POOL_SELL_TAX_BIPS"] || 1000n;
@@ -742,8 +747,8 @@ async function loadSinglePoolData(tier) {
 
         const poolData = {
             buyPrice, sellPrice, netSellPrice, poolAddress,
-            poolNFTCount: availableTokenIds.length,
-            firstAvailableTokenIdForBuy: availableTokenIds.length > 0 ? BigInt(availableTokenIds[availableTokenIds.length - 1]) : null,
+            poolNFTCount: effectiveCount,
+            canBuy,
             userOwned: userNFTsOfTier.length,
             availableToSell: availableNFTsOfTier.length,
             firstSellableTokenId: availableNFTsOfTier.length > 0 ? BigInt(availableNFTsOfTier[0].tokenId) : null,
@@ -824,7 +829,7 @@ function renderTierCards() {
         const netSell = data.netSellPrice || 0n;
         const poolCount = data.poolNFTCount || 0;
         const userOwned = data.userOwned || 0;
-        const soldOut = data.firstAvailableTokenIdForBuy === null;
+        const soldOut = !data.canBuy;
         const noSellable = data.availableToSell === 0;
         const balance = State.currentUserBalance || 0n;
         const insufficientBuy = buyPrice > 0n && buyPrice > balance;
@@ -845,11 +850,11 @@ function renderTierCards() {
         else if (userOwned === 0) { sellLabel = 'No NFT'; }
         else if (noSellable) { sellLabel = 'Rented'; }
 
-        // Fusion hint for sold-out tiers (Bronze can't be fused TO, Diamond can't be fused FROM)
+        // Fusion hint for non-buyable tiers (boosterTiers order: Diamond, Gold, Silver, Bronze — index+1 is lower tier)
         const tierIndex = boosterTiers.indexOf(tier);
         let fusionHint = '';
-        if (soldOut && tierIndex > 0) {
-            const lowerTier = boosterTiers[tierIndex - 1];
+        if (soldOut && tierIndex < boosterTiers.length - 1) {
+            const lowerTier = boosterTiers[tierIndex + 1];
             if (lowerTier) {
                 const lowerStyle = getTierStyle(lowerTier.name);
                 fusionHint = `<div style="text-align:center;padding:4px 0 2px;font-size:9px;color:var(--nft-text-3)">

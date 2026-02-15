@@ -76,7 +76,7 @@ const NFT_POOL_ABI = [
     'function getSpread() view returns (uint256 spread, uint256 spreadBips)',
 
     // Read - Pool State
-    'function getPoolInfo() view returns (uint256 bkcBalance, uint256 nftCount, uint256 k, bool initialized, uint8 tier)',
+    'function getPoolInfo() view returns (uint256 bkcBalance, uint256 nftCount, uint256 effectiveNftCount, uint256 virtualReserves, uint256 mintableReserves, uint256 k, bool initialized, uint8 tier)',
     'function getAvailableNFTs() view returns (uint256[])',
     'function isNFTInPool(uint256 tokenId) view returns (bool)',
     'function tier() view returns (uint8)',
@@ -175,7 +175,8 @@ export async function buyNft({
             console.log(`[BuyNFT] Price: ${ethers.formatEther(buyPrice)} BKC, Fee: ${ethers.formatEther(ethFee)} ETH`);
 
             const poolInfo = await contract.getPoolInfo();
-            if (Number(poolInfo[1]) <= 1) throw new Error('No NFTs available in pool');
+            // V3: effectiveNftCount = nftCount + virtualReserves + mintableReserves (index 2)
+            if (Number(poolInfo[2]) <= 1) throw new Error('No NFTs available in pool');
 
             const { NetworkManager } = await import('../core/index.js');
             const provider = NetworkManager.getProvider();
@@ -366,7 +367,9 @@ export async function getPoolInfo(poolAddress) {
     ]);
     return {
         bkcBalance: poolInfo[0], nftCount: Number(poolInfo[1]),
-        k: poolInfo[2], initialized: poolInfo[3], tier: Number(poolInfo[4]),
+        effectiveNftCount: Number(poolInfo[2]), virtualReserves: Number(poolInfo[3]),
+        mintableReserves: Number(poolInfo[4]),
+        k: poolInfo[5], initialized: poolInfo[6], tier: Number(poolInfo[7]),
         buyPrice, buyPriceFormatted: ethers.formatEther(buyPrice),
         sellPrice, sellPriceFormatted: ethers.formatEther(sellPrice)
     };
