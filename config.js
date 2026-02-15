@@ -696,6 +696,7 @@ export const notaryABI = [
 export const faucetABI = [
     // Write
     "function claim() external",
+    "function setPaused(bool _paused) external",
 
     // Read — User
     "function canClaim(address user) view returns (bool)",

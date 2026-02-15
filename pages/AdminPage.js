@@ -1,9 +1,7 @@
 // pages/AdminPage.js
-// ✅ VERSION V2.6: Wallet + Key from Environment Variables + Global Exposure
-// --- NOVO ---
-// Importa o ethers e os endereços dos contratos
+// ✅ VERSION V3.0: Admin Page Overhaul — Overview + Bulk Actions + Settings Accordion
 const ethers = window.ethers;
-import { addresses } from '../config.js'; 
+import { addresses, faucetABI } from '../config.js';
 import { showToast } from '../ui-feedback.js';
 import { renderPaginatedList, renderPaginationControls, renderNoData, formatAddress, renderLoading, renderError } from '../utils.js';
 import { State } from '../state.js';
@@ -71,34 +69,93 @@ const DEFAULT_PLATFORM_USAGE_CONFIG = {
     unstake:     { icon: '↩️', label: 'Unstake',        points: 500,   maxCount: 10, cooldownHours: 0,  enabled: true },
 };
 
+// --- HELPER FUNCTIONS ---
+
+function getTimeAgo(date) {
+    if (!date) return 'N/A';
+    const now = Date.now();
+    const d = date instanceof Date ? date.getTime() : new Date(date).getTime();
+    const diff = Math.floor((now - d) / 1000);
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+    return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function getPlatformIcon(platform) {
+    const map = {
+        'YouTube': 'fa-brands fa-youtube text-red-500',
+        'YouTube Shorts': 'fa-brands fa-youtube text-red-400',
+        'Instagram': 'fa-brands fa-instagram text-pink-500',
+        'X/Twitter': 'fa-brands fa-x-twitter text-zinc-300',
+        'Facebook': 'fa-brands fa-facebook text-blue-500',
+        'Telegram': 'fa-brands fa-telegram text-sky-400',
+        'TikTok': 'fa-brands fa-tiktok text-pink-400',
+        'Reddit': 'fa-brands fa-reddit text-orange-500',
+        'LinkedIn': 'fa-brands fa-linkedin text-blue-400',
+    };
+    return map[platform] || 'fa-solid fa-globe text-zinc-400';
+}
+
+function truncateUrl(url, maxLen = 45) {
+    if (!url) return '';
+    if (url.length <= maxLen) return url;
+    return url.substring(0, maxLen - 3) + '...';
+}
+
+function exportCSV(rows, headers, filename) {
+    const headerLabels = headers.map(h => h.label || h.key);
+    const csvLines = [headerLabels.join(',')];
+    for (const row of rows) {
+        const values = headers.map(h => {
+            let val = row[h.key] ?? '';
+            val = String(val).replace(/"/g, '""');
+            return `"${val}"`;
+        });
+        csvLines.push(values.join(','));
+    }
+    const csv = csvLines.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+}
 
 let adminState = {
-    allSubmissions: [], // Submissões pendentes/auditing
-    dailyTasks: [],     // Todas as tarefas (ativas e inativas)
-    ugcBasePoints: null, // Para salvar os pontos base do UGC
-    platformUsageConfig: null, // Platform Usage Config
-    editingTask: null, // Tarefa sendo editada no formulário
-    activeTab: 'review-submissions', 
-    
-    // --- (INÍCIO) ESTADOS "MANAGE USERS" ---
+    allSubmissions: [],
+    dailyTasks: [],
+    ugcBasePoints: null,
+    platformUsageConfig: null,
+    editingTask: null,
+    activeTab: 'overview', // Default to overview
+
+    // Manage Users
     allUsers: [],
     selectedUserSubmissions: [],
     isSubmissionsModalOpen: false,
     selectedWallet: null,
-    
-    // Estados de Filtro e Paginação para "Manage Users"
-    usersFilter: 'all', // 'all', 'banned', 'appealing'
+    usersFilter: 'all',
     usersSearch: '',
     usersPage: 1,
-    usersPerPage: 100, // <-- ATUALIZADO DE 15 PARA 100
-    
-    // --- (INÍCIO) NOVOS ESTADOS DE PAGINAÇÃO ---
-    submissionsPage: 1,
-    submissionsPerPage: 100, // <-- NOVO
+    usersPerPage: 100,
 
+    // Submissions
+    submissionsPage: 1,
+    submissionsPerPage: 100,
+    selectedSubmissions: new Set(),       // Bulk select
+    submissionsFilterPlatform: 'all',     // Platform filter
+
+    // Tasks
     tasksPage: 1,
-    tasksPerPage: 100 // <-- NOVO
-    // --- (FIM) NOVOS ESTADOS ---
+    tasksPerPage: 100,
+
+    // Overview
+    faucetStatus: null,
+
+    // Settings
+    settingsOpenSection: 'ugc-points',
 };
 
 // --- ADMIN DATA LOADING (ATUALIZADO) ---
@@ -166,84 +223,347 @@ const loadAdminData = async () => {
     }
 };
 
-// --- (INÍCIO) NOVAS FUNÇÕES DE RESGATE (PRESALE) ---
+// --- FAUCET MANAGEMENT ---
 
-/**
- * Busca o saldo do contrato PublicSale e exibe no painel.
- */
-const loadPresaleBalance = async () => {
-    const balanceEl = document.getElementById('presale-balance-amount');
-    if (!balanceEl) return;
-
-    // Mostra loader
-    balanceEl.innerHTML = '<span class="loader !w-5 !h-5 inline-block"></span>';
-
+const loadFaucetStatus = async () => {
     try {
-        if (!State.signer || !State.signer.provider) {
-            throw new Error("Admin provider not found.");
+        const faucetContract = State.faucetContractPublic;
+        if (!faucetContract) {
+            adminState.faucetStatus = { error: 'Contract not loaded' };
+            return;
         }
-        if (!addresses.publicSale) {
-             throw new Error("PublicSale address not configured.");
-        }
-
-        const balanceWei = await State.signer.provider.getBalance(addresses.publicSale);
-        const balanceEth = ethers.formatEther(balanceWei);
-        
-        // Exibe o saldo formatado
-        balanceEl.textContent = `${parseFloat(balanceEth).toFixed(6)} ETH/BNB`;
+        const [status, stats, isPaused] = await Promise.all([
+            faucetContract.getFaucetStatus(),
+            faucetContract.getStats(),
+            faucetContract.paused(),
+        ]);
+        adminState.faucetStatus = {
+            ethBalance: status.ethBalance,
+            tokenBalance: status.tokenBalance,
+            ethPerDrip: status.ethPerDrip,
+            tokensPerDrip: status.tokensPerDrip,
+            estimatedEthClaims: status.estimatedEthClaims,
+            estimatedTokenClaims: status.estimatedTokenClaims,
+            totalTokens: stats.tokens,
+            totalEth: stats.eth,
+            totalClaims: stats.claims,
+            totalUsers: stats.users,
+            isPaused,
+        };
     } catch (error) {
-        console.error("Error loading presale balance:", error);
-        balanceEl.textContent = "Error";
+        console.error("Error loading faucet status:", error);
+        adminState.faucetStatus = { error: error.message };
     }
+    // Re-render overview if visible
+    const overviewEl = document.getElementById('overview-faucet-card');
+    if (overviewEl) renderFaucetCard();
 };
 
-/**
- * Manipulador para o botão de resgate de fundos da pré-venda.
- */
-const handleWithdrawPresaleFunds = async (buttonElement) => {
-    if (!State.signer) {
-        showToast("Por favor, conecte a carteira do Owner primeiro.", "error");
+const renderFaucetCard = () => {
+    const container = document.getElementById('overview-faucet-card');
+    if (!container) return;
+    const fs = adminState.faucetStatus;
+
+    if (!fs || fs.error) {
+        container.innerHTML = `<div class="p-4 text-sm text-zinc-400">${fs?.error || 'Loading faucet...'}</div>`;
         return;
     }
 
-    if (!window.confirm("Are you sure you want to withdraw ALL funds from the Presale contract to the Treasury wallet?")) {
-        return;
-    }
+    const tokenBal = parseFloat(ethers.formatEther(fs.tokenBalance));
+    const ethBal = parseFloat(ethers.formatEther(fs.ethBalance));
+    const totalTokensDist = parseFloat(ethers.formatEther(fs.totalTokens));
+    const statusColor = fs.isPaused ? 'text-red-400' : 'text-green-400';
+    const statusText = fs.isPaused ? 'Paused' : 'Active';
+    const statusDot = fs.isPaused ? 'bg-red-500' : 'bg-green-500';
 
-    const presaleAbi = ["function withdrawFunds() external"];
-    const saleAddress = addresses.publicSale;
-    
-    const contract = new ethers.Contract(saleAddress, presaleAbi, State.signer);
-    
-    const originalHtml = buttonElement.innerHTML;
-    buttonElement.disabled = true;
-    buttonElement.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Withdrawing...';
+    container.innerHTML = `
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="text-lg font-bold text-white"><i class="fa-solid fa-faucet-drip mr-2 text-sky-400"></i>Faucet Status</h3>
+            <span class="flex items-center gap-2 text-sm font-semibold ${statusColor}">
+                <span class="w-2.5 h-2.5 rounded-full ${statusDot} animate-pulse"></span>${statusText}
+            </span>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div class="text-center">
+                <span class="block text-lg font-bold text-amber-400">${tokenBal.toLocaleString('en-US', {maximumFractionDigits:0})} BKC</span>
+                <span class="text-xs text-zinc-500">Token Balance</span>
+            </div>
+            <div class="text-center">
+                <span class="block text-lg font-bold text-sky-400">${ethBal.toFixed(4)} ETH</span>
+                <span class="text-xs text-zinc-500">ETH Balance</span>
+            </div>
+            <div class="text-center">
+                <span class="block text-lg font-bold text-purple-400">${Number(fs.totalClaims).toLocaleString()}</span>
+                <span class="text-xs text-zinc-500">Total Claims</span>
+            </div>
+            <div class="text-center">
+                <span class="block text-lg font-bold text-green-400">${Number(fs.totalUsers).toLocaleString()}</span>
+                <span class="text-xs text-zinc-500">Unique Users</span>
+            </div>
+        </div>
+        <div class="flex flex-wrap gap-2 text-xs text-zinc-400 mb-4">
+            <span>Per claim: ${parseFloat(ethers.formatEther(fs.tokensPerDrip)).toLocaleString()} BKC + ${parseFloat(ethers.formatEther(fs.ethPerDrip))} ETH</span>
+            <span>|</span>
+            <span>Total distributed: ${totalTokensDist.toLocaleString('en-US', {maximumFractionDigits:0})} BKC</span>
+        </div>
+        <div class="flex gap-3">
+            <button id="toggle-faucet-pause-btn" class="${fs.isPaused ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} text-white text-sm font-bold py-2 px-4 rounded-lg transition-colors">
+                <i class="fa-solid ${fs.isPaused ? 'fa-play' : 'fa-pause'} mr-2"></i>${fs.isPaused ? 'Unpause Faucet' : 'Pause Faucet'}
+            </button>
+            <a href="https://sepolia.arbiscan.io/address/${addresses.faucet}" target="_blank" rel="noopener noreferrer"
+               class="bg-zinc-700 hover:bg-zinc-600 text-white text-sm py-2 px-4 rounded-lg transition-colors inline-flex items-center gap-2">
+                <i class="fa-solid fa-arrow-up-right-from-square"></i>Arbiscan
+            </a>
+        </div>
+    `;
+
+    document.getElementById('toggle-faucet-pause-btn')?.addEventListener('click', handleToggleFaucetPause);
+};
+
+const handleToggleFaucetPause = async () => {
+    const btn = document.getElementById('toggle-faucet-pause-btn');
+    if (!btn || btn.disabled) return;
+
+    const fs = adminState.faucetStatus;
+    if (!fs) return;
+
+    const newPaused = !fs.isPaused;
+    const confirmText = newPaused
+        ? "Are you sure you want to PAUSE the faucet? Users won't be able to claim."
+        : "Are you sure you want to UNPAUSE the faucet?";
+    if (!window.confirm(confirmText)) return;
+
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Processing...';
 
     try {
-        console.log(`Calling withdrawFunds() on ${saleAddress}...`);
-        const tx = await contract.withdrawFunds();
-        
-        showToast("Transaction sent. Awaiting confirmation...", "info");
-        const receipt = await tx.wait();
-        
-        console.log("Funds withdrawn successfully!", receipt.hash);
-        showToast("Funds withdrawn successfully!", "success", receipt.hash);
-        
-        // Atualiza o saldo exibido
-        loadPresaleBalance();
-
+        const faucetContract = State.faucetContract;
+        if (!faucetContract) throw new Error("Faucet signer contract not available.");
+        const tx = await faucetContract.setPaused(newPaused);
+        showToast("Transaction sent...", "info");
+        await tx.wait();
+        showToast(`Faucet ${newPaused ? 'PAUSED' : 'UNPAUSED'} successfully!`, "success");
+        await loadFaucetStatus();
     } catch (error) {
-        console.error("Error withdrawing funds:", error);
-        const message = error.reason || error.message || "Transaction failed.";
-        showToast(`Error: ${message}`, "error");
-    } finally {
-        buttonElement.disabled = false;
-        buttonElement.innerHTML = originalHtml;
+        console.error("Error toggling faucet pause:", error);
+        showToast(`Error: ${error.reason || error.message}`, "error");
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
     }
 };
 
-// --- (FIM) NOVAS FUNÇÕES DE RESGATE (PRESALE) ---
+// --- OVERVIEW PANEL ---
 
+const renderOverviewPanel = () => {
+    const container = document.getElementById('overview-content');
+    if (!container) return;
+
+    const totalUsers = adminState.allUsers.length;
+    const pendingCount = adminState.allSubmissions.length;
+    const bannedCount = adminState.allUsers.filter(u => u.isBanned).length;
+    const totalPoints = adminState.allUsers.reduce((sum, u) => sum + (u.totalPoints || 0), 0);
+
+    container.innerHTML = `
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-4 text-center">
+                <i class="fa-solid fa-users text-2xl text-blue-400 mb-2"></i>
+                <span class="block text-2xl font-bold text-white">${totalUsers.toLocaleString()}</span>
+                <span class="text-xs text-zinc-500">Total Users</span>
+            </div>
+            <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-4 text-center cursor-pointer hover:border-amber-500/50 transition-colors" id="overview-go-submissions">
+                <i class="fa-solid fa-clock text-2xl text-amber-400 mb-2"></i>
+                <span class="block text-2xl font-bold text-white">${pendingCount.toLocaleString()}</span>
+                <span class="text-xs text-zinc-500">Pending Submissions</span>
+            </div>
+            <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-4 text-center">
+                <i class="fa-solid fa-star text-2xl text-yellow-400 mb-2"></i>
+                <span class="block text-2xl font-bold text-white">${totalPoints >= 1000000 ? (totalPoints / 1000000).toFixed(1) + 'M' : totalPoints >= 1000 ? (totalPoints / 1000).toFixed(1) + 'K' : totalPoints.toLocaleString()}</span>
+                <span class="text-xs text-zinc-500">Total Points</span>
+            </div>
+            <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-4 text-center">
+                <i class="fa-solid fa-ban text-2xl text-red-400 mb-2"></i>
+                <span class="block text-2xl font-bold text-white">${bannedCount}</span>
+                <span class="text-xs text-zinc-500">Banned Users</span>
+            </div>
+        </div>
+
+        <!-- Faucet Status -->
+        <div id="overview-faucet-card" class="bg-zinc-800 border border-zinc-700 rounded-xl p-5 mb-6">
+            <div class="p-4 text-sm text-zinc-400"><span class="loader !w-5 !h-5 inline-block mr-2"></span>Loading faucet status...</div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-5">
+            <h3 class="text-lg font-bold text-white mb-4"><i class="fa-solid fa-bolt mr-2 text-amber-400"></i>Quick Actions</h3>
+            <div class="flex flex-wrap gap-3">
+                <button id="overview-go-submissions-btn" class="bg-amber-600 hover:bg-amber-500 text-white text-sm font-bold py-2 px-4 rounded-lg transition-colors">
+                    <i class="fa-solid fa-list-check mr-2"></i>Review Submissions ${pendingCount > 0 ? `(${pendingCount})` : ''}
+                </button>
+                <button id="overview-export-users-btn" class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold py-2 px-4 rounded-lg transition-colors">
+                    <i class="fa-solid fa-file-csv mr-2"></i>Export Users CSV
+                </button>
+                <button id="overview-reload-btn" class="bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-bold py-2 px-4 rounded-lg transition-colors">
+                    <i class="fa-solid fa-rotate mr-2"></i>Reload Data
+                </button>
+            </div>
+        </div>
+    `;
+
+    // Load faucet data
+    loadFaucetStatus();
+
+    // Quick action listeners
+    const goToTab = (tabName) => {
+        adminState.activeTab = tabName;
+        renderAdminPanel();
+    };
+    document.getElementById('overview-go-submissions')?.addEventListener('click', () => goToTab('review-submissions'));
+    document.getElementById('overview-go-submissions-btn')?.addEventListener('click', () => goToTab('review-submissions'));
+    document.getElementById('overview-export-users-btn')?.addEventListener('click', handleExportUsersCSV);
+    document.getElementById('overview-reload-btn')?.addEventListener('click', () => {
+        showToast("Reloading data...", "info");
+        loadAdminData();
+    });
+};
+
+
+// --- CSV EXPORT ---
+
+const handleExportUsersCSV = () => {
+    const users = adminState.allUsers;
+    if (!users || users.length === 0) {
+        showToast("No users to export.", "info");
+        return;
+    }
+    const headers = [
+        { key: 'walletAddress', label: 'Wallet' },
+        { key: 'totalPoints', label: 'Total Points' },
+        { key: 'approvedSubmissionsCount', label: 'Approved' },
+        { key: 'rejectedCount', label: 'Rejected' },
+        { key: 'isBanned', label: 'Banned' },
+        { key: 'hasPendingAppeal', label: 'Appealing' },
+    ];
+    exportCSV(users, headers, `backchain-users-${new Date().toISOString().split('T')[0]}.csv`);
+    showToast(`Exported ${users.length} users.`, "success");
+};
+
+const handleExportSubmissionsCSV = () => {
+    const subs = adminState.allSubmissions;
+    if (!subs || subs.length === 0) {
+        showToast("No submissions to export.", "info");
+        return;
+    }
+    const headers = [
+        { key: 'walletAddress', label: 'Wallet' },
+        { key: 'platform', label: 'Platform' },
+        { key: 'normalizedUrl', label: 'URL' },
+        { key: 'status', label: 'Status' },
+        { key: 'basePoints', label: 'Base Points' },
+    ];
+    exportCSV(subs, headers, `backchain-submissions-${new Date().toISOString().split('T')[0]}.csv`);
+    showToast(`Exported ${subs.length} submissions.`, "success");
+};
+
+// --- BULK ACTIONS ---
+
+const handleBulkAction = async (action) => {
+    const selected = adminState.selectedSubmissions;
+    if (selected.size === 0) return;
+
+    const confirmText = action === 'approved'
+        ? `Approve ${selected.size} submission(s)?`
+        : `Reject ${selected.size} submission(s)?`;
+    if (!window.confirm(confirmText)) return;
+
+    // Find submission data for selected IDs
+    const toProcess = adminState.allSubmissions.filter(s => selected.has(s.submissionId));
+
+    // Show processing state
+    const bulkBar = document.getElementById('bulk-action-bar');
+    if (bulkBar) bulkBar.innerHTML = `<span class="text-sm text-zinc-300"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Processing ${toProcess.length}...</span>`;
+
+    const results = await Promise.allSettled(
+        toProcess.map(s => db.updateSubmissionStatus(s.userId, s.submissionId, action))
+    );
+
+    const succeeded = results.filter(r => r.status === 'fulfilled').length;
+    const failed = results.filter(r => r.status === 'rejected').length;
+
+    // Remove processed from state
+    const processedIds = new Set(toProcess.map(s => s.submissionId));
+    adminState.allSubmissions = adminState.allSubmissions.filter(s => !processedIds.has(s.submissionId));
+    adminState.selectedSubmissions.clear();
+
+    if (failed > 0) {
+        showToast(`${succeeded} ${action}, ${failed} failed.`, "warning");
+    } else {
+        showToast(`${succeeded} submission(s) ${action}!`, "success");
+    }
+    renderSubmissionsPanel();
+};
+
+const handleSubmissionCheckbox = (submissionId, checked) => {
+    if (checked) {
+        adminState.selectedSubmissions.add(submissionId);
+    } else {
+        adminState.selectedSubmissions.delete(submissionId);
+    }
+    updateBulkActionBar();
+};
+
+const handleSelectAllSubmissions = (checked) => {
+    // Get currently visible (filtered) submissions
+    const filtered = getFilteredSubmissions();
+    if (checked) {
+        filtered.forEach(s => adminState.selectedSubmissions.add(s.submissionId));
+    } else {
+        adminState.selectedSubmissions.clear();
+    }
+    // Update all checkboxes
+    document.querySelectorAll('.submission-checkbox').forEach(cb => { cb.checked = checked; });
+    updateBulkActionBar();
+};
+
+const updateBulkActionBar = () => {
+    const bar = document.getElementById('bulk-action-bar');
+    if (!bar) return;
+    const count = adminState.selectedSubmissions.size;
+    if (count === 0) {
+        bar.classList.add('hidden');
+        return;
+    }
+    bar.classList.remove('hidden');
+    bar.innerHTML = `
+        <span class="text-sm text-zinc-300 font-medium">${count} selected</span>
+        <div class="flex gap-2">
+            <button id="bulk-approve-btn" class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-1.5 px-3 rounded transition-colors">
+                <i class="fa-solid fa-check mr-1"></i>Approve (${count})
+            </button>
+            <button id="bulk-reject-btn" class="bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1.5 px-3 rounded transition-colors">
+                <i class="fa-solid fa-times mr-1"></i>Reject (${count})
+            </button>
+            <button id="bulk-clear-btn" class="bg-zinc-700 hover:bg-zinc-600 text-white text-xs py-1.5 px-3 rounded transition-colors">Clear</button>
+        </div>
+    `;
+    document.getElementById('bulk-approve-btn')?.addEventListener('click', () => handleBulkAction('approved'));
+    document.getElementById('bulk-reject-btn')?.addEventListener('click', () => handleBulkAction('rejected'));
+    document.getElementById('bulk-clear-btn')?.addEventListener('click', () => {
+        adminState.selectedSubmissions.clear();
+        document.querySelectorAll('.submission-checkbox').forEach(cb => { cb.checked = false; });
+        document.getElementById('select-all-checkbox')?.setAttribute('checked', false);
+        updateBulkActionBar();
+    });
+};
+
+function getFilteredSubmissions() {
+    let subs = adminState.allSubmissions;
+    if (adminState.submissionsFilterPlatform !== 'all') {
+        subs = subs.filter(s => s.platform === adminState.submissionsFilterPlatform);
+    }
+    return [...subs].sort((a, b) => (b.submittedAt?.getTime() || 0) - (a.submittedAt?.getTime() || 0));
+}
 
 // --- ADMIN ACTION HANDLERS ---
 
@@ -1004,8 +1324,13 @@ const renderManageUsersPanel = () => {
     `;
 
     container.innerHTML = `
-        <h2 class="text-2xl font-bold mb-4">Manage Users (${totalCount})</h2>
-        
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h2 class="text-2xl font-bold">Users (${totalCount})</h2>
+            <button id="export-users-csv-btn" class="bg-zinc-700 hover:bg-zinc-600 text-white text-xs py-1.5 px-3 rounded-lg transition-colors">
+                <i class="fa-solid fa-file-csv mr-1"></i>Export CSV
+            </button>
+        </div>
+
         <div class="mb-4 p-4 bg-zinc-800 rounded-xl border border-border-color flex flex-wrap gap-4 justify-between items-center">
             <div id="user-filters-nav" class="flex items-center gap-2">
                 <button class="user-filter-btn text-sm py-2 px-4 rounded-md ${filterType === 'all' ? 'bg-blue-600 text-white font-bold' : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300'}" data-filter="all">
@@ -1048,8 +1373,9 @@ const renderManageUsersPanel = () => {
         renderPaginationControls(paginationContainer, adminState.usersPage, totalPages, handleUsersPageChange);
     }
     
-    // --- CORREÇÃO DOS LISTENERS ---
-    
+    // CSV Export button
+    document.getElementById('export-users-csv-btn')?.addEventListener('click', handleExportUsersCSV);
+
     // Listener da Tabela (Delegado)
     document.getElementById('admin-users-tbody')?.addEventListener('click', (e) => {
         // ==========================================================
@@ -1309,10 +1635,13 @@ const renderManageTasksPanel = () => {
 };
 
 
-// ATUALIZADO: renderSubmissionsPanel (com Paginação)
+// ENHANCED: renderSubmissionsPanel (Platform Filter + Bulk Actions + Improved Rows)
 const renderSubmissionsPanel = () => {
     const container = document.getElementById('submissions-content');
     if (!container) return;
+
+    // Clear selection when re-rendering
+    adminState.selectedSubmissions.clear();
 
     if (!adminState.allSubmissions || adminState.allSubmissions.length === 0) {
         const tempDiv = document.createElement('div');
@@ -1320,45 +1649,79 @@ const renderSubmissionsPanel = () => {
         container.innerHTML = tempDiv.innerHTML;
         return;
     }
-    
-    // --- Lógica de Paginação para Submissions ---
+
+    // Platform filter
+    const platforms = [...new Set(adminState.allSubmissions.map(s => s.platform).filter(Boolean))].sort();
+    const currentFilter = adminState.submissionsFilterPlatform;
+
+    // Filtered + sorted submissions
+    const filteredSubmissions = getFilteredSubmissions();
+
+    // Pagination
     const page = adminState.submissionsPage;
-    const perPage = adminState.submissionsPerPage; // 100
-
-    const sortedSubmissions = [...adminState.allSubmissions].sort((a, b) => (b.submittedAt?.getTime() || 0) - (a.submittedAt?.getTime() || 0));
-
-    const totalSubmissions = sortedSubmissions.length;
-    const totalPages = Math.ceil(totalSubmissions / perPage);
+    const perPage = adminState.submissionsPerPage;
+    const totalFiltered = filteredSubmissions.length;
+    const totalPages = Math.ceil(totalFiltered / perPage);
     const start = (page - 1) * perPage;
-    const end = page * perPage;
-    
-    const paginatedSubmissions = sortedSubmissions.slice(start, end);
+    const paginatedSubmissions = filteredSubmissions.slice(start, start + perPage);
 
     const submissionsHtml = paginatedSubmissions.map(item => `
         <tr class="border-b border-border-color hover:bg-zinc-800/50">
-            <td class="p-3 text-xs text-zinc-400 font-mono" title="${item.userId}">${formatAddress(item.walletAddress)}</td>
-            <td class="p-3 text-sm max-w-xs truncate" title="${item.normalizedUrl}">
-                <a href="${item.normalizedUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:underline">${item.normalizedUrl}</a>
-                <span class="block text-xs text-zinc-500">${item.platform || 'N/A'} - ${item.basePoints || 0} base pts</span>
+            <td class="p-3 text-center">
+                <input type="checkbox" class="submission-checkbox accent-blue-500 w-4 h-4 cursor-pointer" data-id="${item.submissionId}">
             </td>
-            <td class="p-3 text-xs text-zinc-400">${item.submittedAt ? item.submittedAt.toLocaleString('en-US') : 'N/A'}</td>
+            <td class="p-3 text-xs text-zinc-400 font-mono" title="${item.userId}">${formatAddress(item.walletAddress)}</td>
+            <td class="p-3 text-sm max-w-xs" title="${item.normalizedUrl}">
+                <a href="${item.normalizedUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:underline">${truncateUrl(item.normalizedUrl)}</a>
+                <span class="flex items-center gap-1.5 text-xs text-zinc-500 mt-0.5">
+                    <i class="${getPlatformIcon(item.platform)} text-[10px]"></i>${item.platform || 'Other'}
+                    <span class="text-zinc-600">|</span>
+                    ${item.basePoints || 0} pts
+                </span>
+            </td>
+            <td class="p-3 text-xs text-zinc-400" title="${item.submittedAt ? item.submittedAt.toLocaleString('en-US') : ''}">${getTimeAgo(item.submittedAt)}</td>
             <td class="p-3 text-xs font-semibold ${statusUI[item.status]?.color || 'text-gray-500'}">${statusUI[item.status]?.text || item.status}</td>
             <td class="p-3 text-right">
                 <div class="flex items-center justify-end gap-2">
-                    
                     <button data-user-id="${item.userId}" data-submission-id="${item.submissionId}" data-action="approved" class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-1 px-2 rounded transition-colors"><i class="fa-solid fa-check"></i></button>
-                    <button data-user-id="${item.userId}" data-submission-id="${item.submissionId}" data-action="rejected" class="bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-2 rounded transition-colors ml-1"><i class="fa-solid fa-times"></i></button>
-                    </div>
+                    <button data-user-id="${item.userId}" data-submission-id="${item.submissionId}" data-action="rejected" class="bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-2 rounded transition-colors"><i class="fa-solid fa-times"></i></button>
+                </div>
             </td>
         </tr>
     `).join('');
 
+    // Platform filter pills
+    const platformPillsHtml = `
+        <button class="platform-filter-btn text-xs py-1.5 px-3 rounded-full transition-colors ${currentFilter === 'all' ? 'bg-blue-600 text-white font-bold' : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300'}" data-platform="all">
+            All (${adminState.allSubmissions.length})
+        </button>
+        ${platforms.map(p => {
+            const count = adminState.allSubmissions.filter(s => s.platform === p).length;
+            return `<button class="platform-filter-btn text-xs py-1.5 px-3 rounded-full transition-colors ${currentFilter === p ? 'bg-blue-600 text-white font-bold' : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300'}" data-platform="${p}">
+                <i class="${getPlatformIcon(p)} mr-1"></i>${p} (${count})
+            </button>`;
+        }).join('')}
+    `;
+
     container.innerHTML = `
-        <h2 class="text-2xl font-bold mb-6">Review Pending Submissions (${sortedSubmissions.length})</h2>
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h2 class="text-2xl font-bold">Submissions (${adminState.allSubmissions.length})</h2>
+            <button id="export-submissions-btn" class="bg-zinc-700 hover:bg-zinc-600 text-white text-xs py-1.5 px-3 rounded-lg transition-colors">
+                <i class="fa-solid fa-file-csv mr-1"></i>Export CSV
+            </button>
+        </div>
+
+        <!-- Platform Filter -->
+        <div id="platform-filter-bar" class="flex flex-wrap gap-2 mb-4">${platformPillsHtml}</div>
+
+        <!-- Bulk Action Bar -->
+        <div id="bulk-action-bar" class="hidden mb-3 p-3 bg-blue-900/30 border border-blue-500/30 rounded-lg flex items-center justify-between gap-3"></div>
+
         <div class="bg-zinc-800 rounded-xl border border-border-color overflow-x-auto">
-            <table class="w-full text-left min-w-[700px]">
+            <table class="w-full text-left min-w-[750px]">
                 <thead>
                     <tr class="bg-main border-b border-border-color text-xs text-zinc-400 uppercase">
+                        <th class="p-3 w-10 text-center"><input type="checkbox" id="select-all-checkbox" class="accent-blue-500 w-4 h-4 cursor-pointer"></th>
                         <th class="p-3 font-semibold">Wallet</th>
                         <th class="p-3 font-semibold">Link & Platform</th>
                         <th class="p-3 font-semibold">Submitted</th>
@@ -1372,15 +1735,35 @@ const renderSubmissionsPanel = () => {
         <div id="admin-submissions-pagination" class="mt-6"></div>
     `;
 
-    // Renderiza paginação de Submissions
+    // Pagination
     const paginationContainer = document.getElementById('admin-submissions-pagination');
     if (paginationContainer && totalPages > 1) {
-        // ### CORREÇÃO 4/4: Chamando a função CORRETA ###
         renderPaginationControls(paginationContainer, adminState.submissionsPage, totalPages, handleSubmissionsPageChange);
     }
 
-    // Anexa listener à tabela
+    // Listeners
     document.getElementById('admin-submissions-tbody')?.addEventListener('click', handleAdminAction);
+    document.getElementById('export-submissions-btn')?.addEventListener('click', handleExportSubmissionsCSV);
+
+    // Select all checkbox
+    document.getElementById('select-all-checkbox')?.addEventListener('change', (e) => handleSelectAllSubmissions(e.target.checked));
+
+    // Individual checkboxes
+    document.getElementById('admin-submissions-tbody')?.addEventListener('change', (e) => {
+        if (e.target.classList.contains('submission-checkbox')) {
+            handleSubmissionCheckbox(e.target.dataset.id, e.target.checked);
+        }
+    });
+
+    // Platform filter
+    document.getElementById('platform-filter-bar')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('.platform-filter-btn');
+        if (!btn) return;
+        adminState.submissionsFilterPlatform = btn.dataset.platform;
+        adminState.submissionsPage = 1;
+        adminState.selectedSubmissions.clear();
+        renderSubmissionsPanel();
+    });
 };
 
 
@@ -1576,106 +1959,126 @@ const handleResetPlatformConfig = async () => {
 };
 
 
-// --- (AJUSTADO) RENDERIZA O PAINEL PRINCIPAL COM A NOVA ABA ---
+// --- SETTINGS ACCORDION PANEL ---
+
+const renderSettingsPanel = () => {
+    const container = document.getElementById('settings-content');
+    if (!container) return;
+
+    const openSection = adminState.settingsOpenSection;
+
+    const sections = [
+        { id: 'ugc-points', title: 'UGC Base Points', icon: 'fa-solid fa-coins text-yellow-400', contentId: 'manage-ugc-points-content' },
+        { id: 'daily-tasks', title: 'Daily Tasks', icon: 'fa-solid fa-list-check text-green-400', contentId: 'manage-tasks-content' },
+        { id: 'platform-usage', title: 'Platform Usage', icon: 'fa-solid fa-gamepad text-purple-400', contentId: 'platform-usage-content' },
+    ];
+
+    container.innerHTML = `
+        <h2 class="text-2xl font-bold mb-6">Settings</h2>
+        <div class="space-y-3">
+            ${sections.map(s => `
+                <div class="bg-zinc-800 border border-zinc-700 rounded-xl overflow-hidden">
+                    <button class="settings-accordion-btn w-full flex items-center justify-between p-4 hover:bg-zinc-700/50 transition-colors" data-section="${s.id}">
+                        <span class="flex items-center gap-3">
+                            <i class="${s.icon}"></i>
+                            <span class="font-semibold text-white">${s.title}</span>
+                        </span>
+                        <i class="fa-solid ${openSection === s.id ? 'fa-chevron-up' : 'fa-chevron-down'} text-zinc-400 transition-transform"></i>
+                    </button>
+                    <div class="settings-accordion-body ${openSection === s.id ? '' : 'hidden'}" data-section="${s.id}">
+                        <div class="border-t border-zinc-700 p-4">
+                            <div id="${s.contentId}"></div>
+                        </div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+
+    // Render open section content
+    if (openSection === 'ugc-points') renderUgcPointsPanel();
+    else if (openSection === 'daily-tasks') renderManageTasksPanel();
+    else if (openSection === 'platform-usage') renderPlatformUsagePanel();
+
+    // Accordion toggle listeners
+    container.querySelectorAll('.settings-accordion-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const sectionId = btn.dataset.section;
+            if (adminState.settingsOpenSection === sectionId) {
+                // Close current
+                adminState.settingsOpenSection = null;
+            } else {
+                adminState.settingsOpenSection = sectionId;
+            }
+            renderSettingsPanel();
+        });
+    });
+};
+
+// --- MAIN ADMIN PANEL ---
 const renderAdminPanel = () => {
     const adminContent = document.getElementById('admin-content-wrapper');
     if (!adminContent) return;
 
-    // ==========================================================
-    // INÍCIO DA ATUALIZAÇÃO (Adiciona Painel de Resgate)
-    // ==========================================================
-    adminContent.innerHTML = `
-        <div id="presale-withdraw-panel" class="mb-8 p-6 bg-zinc-800 rounded-xl border border-border-color flex flex-col md:flex-row gap-4 justify-between items-center">
-            <div>
-                <h3 class="text-xl font-bold text-white">Presale Contract Funds</h3>
-                <p class="text-sm text-zinc-400">Total accumulated in the PublicSale contract available for withdrawal.</p>
-            </div>
-            <div class="flex items-center gap-4">
-                <div class="text-right">
-                    <span class="block text-2xl font-bold text-amber-400" id="presale-balance-amount">
-                        <span class="loader !w-5 !h-5 inline-block"></span>
-                    </span>
-                    <span class="text-xs text-zinc-500">ETH/BNB Balance</span>
-                </div>
-                <button id="withdraw-presale-funds-btn" class="btn-primary py-3 px-5 whitespace-nowrap">
-                    <i class="fa-solid fa-download mr-2"></i> Withdraw Funds
-                </button>
-            </div>
-        </div>
+    const pendingCount = adminState.allSubmissions.length;
+    const tab = adminState.activeTab;
 
-        <h1 class="text-3xl font-bold mb-8">Airdrop Admin Panel</h1>
-    
-    
+    adminContent.innerHTML = `
+        <h1 class="text-3xl font-bold mb-6">Admin Panel</h1>
+
         <div class="border-b border-border-color mb-6">
             <nav id="admin-tabs" class="-mb-px flex flex-wrap gap-x-6 gap-y-2">
-                <button class="tab-btn ${adminState.activeTab === 'review-submissions' ? 'active' : ''}" data-target="review-submissions">Review Submissions</button>
-                <button class="tab-btn ${adminState.activeTab === 'manage-users' ? 'active' : ''}" data-target="manage-users">Manage Users</button>
-                <button class="tab-btn ${adminState.activeTab === 'manage-ugc-points' ? 'active' : ''}" data-target="manage-ugc-points">Manage UGC Points</button>
-                <button class="tab-btn ${adminState.activeTab === 'manage-tasks' ? 'active' : ''}" data-target="manage-tasks">Manage Daily Tasks</button>
-                <button class="tab-btn ${adminState.activeTab === 'platform-usage' ? 'active' : ''}" data-target="platform-usage">Platform Usage</button>
+                <button class="tab-btn ${tab === 'overview' ? 'active' : ''}" data-target="overview">
+                    <i class="fa-solid fa-gauge-high mr-1.5"></i>Overview
+                </button>
+                <button class="tab-btn ${tab === 'review-submissions' ? 'active' : ''}" data-target="review-submissions">
+                    <i class="fa-solid fa-list-check mr-1.5"></i>Submissions${pendingCount > 0 ? ` <span class="ml-1 text-xs bg-amber-600 text-white px-1.5 py-0.5 rounded-full">${pendingCount}</span>` : ''}
+                </button>
+                <button class="tab-btn ${tab === 'manage-users' ? 'active' : ''}" data-target="manage-users">
+                    <i class="fa-solid fa-users mr-1.5"></i>Users
+                </button>
+                <button class="tab-btn ${tab === 'settings' ? 'active' : ''}" data-target="settings">
+                    <i class="fa-solid fa-gear mr-1.5"></i>Settings
+                </button>
             </nav>
         </div>
 
-        <div id="review_submissions_tab" class="tab-content ${adminState.activeTab === 'review-submissions' ? 'active' : ''}">
+        <div id="overview_tab" class="tab-content ${tab === 'overview' ? 'active' : ''}">
+            <div id="overview-content" class="max-w-7xl mx-auto"></div>
+        </div>
+
+        <div id="review_submissions_tab" class="tab-content ${tab === 'review-submissions' ? 'active' : ''}">
             <div id="submissions-content" class="max-w-7xl mx-auto"></div>
         </div>
 
-        <div id="manage_users_tab" class="tab-content ${adminState.activeTab === 'manage-users' ? 'active' : ''}">
+        <div id="manage_users_tab" class="tab-content ${tab === 'manage-users' ? 'active' : ''}">
             <div id="manage-users-content" class="max-w-7xl mx-auto"></div>
         </div>
 
-        <div id="manage_ugc_points_tab" class="tab-content ${adminState.activeTab === 'manage-ugc-points' ? 'active' : ''}">
-            <div id="manage-ugc-points-content" class="max-w-4xl mx-auto"></div>
-        </div>
-
-        <div id="manage_tasks_tab" class="tab-content ${adminState.activeTab === 'manage-tasks' ? 'active' : ''}">
-            <div id="manage-tasks-content" class="max-w-4xl mx-auto"></div>
-        </div>
-
-        <div id="platform_usage_tab" class="tab-content ${adminState.activeTab === 'platform-usage' ? 'active' : ''}">
-            <div id="platform-usage-content" class="max-w-4xl mx-auto"></div>
+        <div id="settings_tab" class="tab-content ${tab === 'settings' ? 'active' : ''}">
+            <div id="settings-content" class="max-w-4xl mx-auto"></div>
         </div>
     `;
-    // ==========================================================
-    // FIM DA ATUALIZAÇÃO
-    // ==========================================================
 
-    // --- (INÍCIO) NOVOS LISTENERS E CARREGAMENTO DE SALDO ---
-    
-    // Anexa o listener ao novo botão de resgate
-    document.getElementById('withdraw-presale-funds-btn')?.addEventListener('click', (e) => handleWithdrawPresaleFunds(e.target));
-    
-    // Carrega o saldo da pré-venda assim que o painel é renderizado
-    loadPresaleBalance();
-    
-    // --- (FIM) NOVOS LISTENERS ---
+    // Render active tab content
+    const renderTab = (tabId) => {
+        if (tabId === 'overview') renderOverviewPanel();
+        else if (tabId === 'review-submissions') renderSubmissionsPanel();
+        else if (tabId === 'manage-users') renderManageUsersPanel();
+        else if (tabId === 'settings') renderSettingsPanel();
+    };
+    renderTab(tab);
 
-
-    // Renderiza o conteúdo da aba ativa inicial (CORRIGIDO O TYPO)
-    if (adminState.activeTab === 'manage-ugc-points') {
-        renderUgcPointsPanel();
-    } else if (adminState.activeTab === 'manage-tasks') {
-        renderManageTasksPanel();
-    } else if (adminState.activeTab === 'review-submissions') { 
-        renderSubmissionsPanel();
-    } else if (adminState.activeTab === 'manage-users') {
-        renderManageUsersPanel(); 
-    } else if (adminState.activeTab === 'platform-usage') {
-        renderPlatformUsagePanel();
-    }
-
-
+    // Tab click handler
     const adminTabs = document.getElementById('admin-tabs');
-    
-    // Adiciona listener nas ABAS (só precisa ser feito uma vez)
     if (adminTabs && !adminTabs._listenerAttached) {
         adminTabs.addEventListener('click', (e) => {
             const button = e.target.closest('.tab-btn');
             if (!button || button.classList.contains('active')) return;
             const targetId = button.dataset.target;
-            adminState.activeTab = targetId; // Atualiza o estado da aba ativa
-            
-            // ATUALIZADO: Reseta filtros/pagina ao sair da aba
+            adminState.activeTab = targetId;
+
+            // Reset filters when leaving tabs
             if (targetId !== 'manage-users') {
                 adminState.usersPage = 1;
                 adminState.usersFilter = 'all';
@@ -1683,30 +2086,18 @@ const renderAdminPanel = () => {
             }
             if (targetId !== 'review-submissions') {
                 adminState.submissionsPage = 1;
+                adminState.submissionsFilterPlatform = 'all';
+                adminState.selectedSubmissions.clear();
             }
-            if (targetId !== 'manage-tasks') {
-                adminState.tasksPage = 1;
-            }
-            // Fim da atualização
 
             document.querySelectorAll('#admin-tabs .tab-btn').forEach(btn => btn.classList.remove('active'));
             button.classList.add('active');
 
             adminContent.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            // Procura pelo ID do contêiner da aba (ex: manage_users_tab)
             const targetTabElement = document.getElementById(targetId.replace(/-/g, '_') + '_tab');
-
             if (targetTabElement) {
-                 targetTabElement.classList.add('active');
-                 
-                 // Renderiza o conteúdo da nova aba ativa
-                 if (targetId === 'manage-ugc-points') renderUgcPointsPanel();
-                 if (targetId === 'manage-tasks') renderManageTasksPanel();
-                 if (targetId === 'review-submissions') renderSubmissionsPanel();
-                 if (targetId === 'manage-users') renderManageUsersPanel();
-                 if (targetId === 'platform-usage') renderPlatformUsagePanel(); 
-            } else {
-                 console.warn(`Tab content container not found for target: ${targetId}`);
+                targetTabElement.classList.add('active');
+                renderTab(targetId);
             }
         });
         adminTabs._listenerAttached = true;
@@ -1803,11 +2194,6 @@ export const AdminPage = {
          if (adminContainer && !adminContainer.classList.contains('hidden') && isAdminSessionValid()) {
              console.log("Refreshing Admin Page data...");
              loadAdminData();
-             
-             // --- NOVO ---
-             // Também atualiza o saldo da pré-venda se a página de admin for atualizada
-             loadPresaleBalance();
-             // --- FIM NOVO ---
          }
      }
 };
