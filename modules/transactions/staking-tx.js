@@ -228,6 +228,7 @@ export async function forceUnstake({
 
     let storedIndex = delegationIndex;
     let storedOperator = operator;
+    let ethFee = 0n;
 
     return await txEngine.execute({
         name: 'ForceUnstake',
@@ -236,6 +237,7 @@ export async function forceUnstake({
         getContract: async (signer) => getStakingContract(signer),
         method: 'forceUnstake',
         args: () => [storedIndex, resolveOperator(storedOperator)],
+        get value() { return ethFee; },
 
         validate: async (signer, userAddress) => {
             const contract = getStakingContract(signer);
@@ -251,6 +253,9 @@ export async function forceUnstake({
             if (Number(delegation.lockEnd) <= now) {
                 throw new Error('Lock period has ended. Use normal Unstake to avoid penalty.');
             }
+
+            // Read ETH fee required for force unstake
+            ethFee = await contract.forceUnstakeEthFee();
         },
 
         onSuccess,
