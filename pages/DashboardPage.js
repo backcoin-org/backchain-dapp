@@ -296,7 +296,12 @@ async function requestSmartFaucet(btnElement) {
             DashboardState.faucet.canClaim = false;
             try { localStorage.setItem('bkc_faucet_' + State.userAddress.toLowerCase(), '1'); } catch(e) {}
             updateFaucetWidget();
-            setTimeout(() => { DashboardPage.update(true); }, 4000);
+            // Force refresh with cache bypass — tokens are already confirmed on-chain
+            setTimeout(async () => {
+                await loadUserData(true);
+                updateBalanceCard();
+                if (window.updateUIState) window.updateUIState(false);
+            }, 3000);
         } else {
             const msg = data.error || data.message || "Faucet unavailable";
             console.warn('[Faucet] API error:', msg);
