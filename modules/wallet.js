@@ -450,7 +450,15 @@ async function setupSignerAndLoadData(provider, address) {
         State.provider = provider;
 
         try {
-            State.signer = await provider.getSigner(address);
+            // For embedded wallets: use getSigner() without address arg (index 0).
+            // ethers v6 getSigner(address) does a string comparison that can fail
+            // due to checksum/format mismatch between intercepted accounts and the address param.
+            // getSigner() with no arg uses numeric index path, bypassing the comparison.
+            if (isEmbedded) {
+                State.signer = await provider.getSigner();
+            } else {
+                State.signer = await provider.getSigner(address);
+            }
             console.log('[Wallet] Signer obtained successfully for', address.slice(0, 10) + '...');
         } catch(signerError) {
             State.signer = provider;
