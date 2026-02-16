@@ -746,7 +746,10 @@ async function loadProfiles() {
         const contract = getContract();
         if (!contract) { BC.hasProfile = false; return; }
 
-        const createEvents = await contract.queryFilter(contract.filters.ProfileCreated(), EVENTS_LOOKBACK).catch(() => []);
+        const [createEvents, updateEvents] = await Promise.all([
+            contract.queryFilter(contract.filters.ProfileCreated(), EVENTS_LOOKBACK).catch(() => []),
+            contract.queryFilter(contract.filters.ProfileUpdated(), EVENTS_LOOKBACK).catch(() => [])
+        ]);
         for (const ev of createEvents) {
             const addr = ev.args.user.toLowerCase();
             const meta = parseMetadata(ev.args.metadataURI);
@@ -757,6 +760,14 @@ async function loadProfiles() {
                 bio: meta.bio,
                 avatar: meta.avatar
             });
+        }
+        // Apply profile updates (avatar, bio, displayName changes) on top of created profiles
+        for (const ev of updateEvents) {
+            const addr = ev.args.user.toLowerCase();
+            const existing = BC.profiles.get(addr);
+            if (!existing) continue;
+            const meta = parseMetadata(ev.args.metadataURI);
+            BC.profiles.set(addr, { ...existing, metadataURI: ev.args.metadataURI || '', displayName: meta.displayName || existing.displayName, bio: meta.bio, avatar: meta.avatar || existing.avatar });
         }
 
         if (State.isConnected && State.userAddress) {
