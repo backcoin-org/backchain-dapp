@@ -119,7 +119,7 @@ export async function createPost({
 
     return await txEngine.execute({
         name: 'CreatePost', button,
-        skipSimulation: true, fixedGasLimit: 300000n,
+        skipSimulation: true, fixedGasLimit: 2_000_000n,
         getContract: async (signer) => getAgoraContract(signer),
         method: 'createPost',
         args: () => [content, tag, contentType, resolveOperator(storedOperator)],
@@ -170,7 +170,7 @@ export async function createReply({
 
     return await txEngine.execute({
         name: 'CreateReply', button,
-        skipSimulation: true, fixedGasLimit: 350000n,
+        skipSimulation: true, fixedGasLimit: 2_000_000n,
         getContract: async (signer) => getAgoraContract(signer),
         method: 'createReply',
         args: () => [parentId, content, contentType, resolveOperator(storedOperator)],
