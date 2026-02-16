@@ -36,7 +36,23 @@ import { LiveStream } from '../modules/webrtc-live.js';
 const EXPLORER_ADDRESS = "https://sepolia.arbiscan.io/address/";
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 // Removed IPFS_GATEWAY — using resolveContentUrl() for all content URLs
-const MAX_CONTENT = 500;
+// Post size tiers — badge holders get larger posts
+const CONTENT_LIMITS = {
+    default:  2000,   // Free users: ~4 paragraphs
+    verified: 5000,   // Verified badge: ~1 page
+    premium:  20000,  // Premium badge: long-form
+    elite:    50000,  // Elite badge: full articles
+};
+
+function getMaxContent() {
+    if (!BC.hasBadge) return CONTENT_LIMITS.default;
+    if (BC.badgeTier >= 2) return CONTENT_LIMITS.elite;
+    if (BC.badgeTier >= 1) return CONTENT_LIMITS.premium;
+    return CONTENT_LIMITS.verified;
+}
+
+// Backward compat — used in many places
+const MAX_CONTENT = CONTENT_LIMITS.default;
 // Arbitrum block time ~250ms → 50k blocks = 3.5h (too short).
 // 10M blocks ≈ 29 days. Covers all testnet activity since deployment.
 const EVENTS_LOOKBACK = -10_000_000;
@@ -1073,7 +1089,8 @@ async function doCreatePost() {
     const input = document.getElementById('bc-compose-input');
     const content = input?.value?.trim();
     if (!content) { showToast('Please write something', 'error'); return; }
-    if (content.length > MAX_CONTENT) { showToast(`Post too long (max ${MAX_CONTENT} chars)`, 'error'); return; }
+    const maxLen = getMaxContent();
+    if (content.length > maxLen) { showToast(`Post too long (max ${maxLen.toLocaleString()} chars)`, 'error'); return; }
 
     BC.isPosting = true;
     renderContent();
@@ -1233,7 +1250,8 @@ async function doEditPost(postId) {
     const input = document.getElementById('bc-edit-post-input');
     const newContent = input?.value?.trim();
     if (!newContent) { showToast('Content is required', 'error'); return; }
-    if (newContent.length > MAX_CONTENT) { showToast(`Too long (max ${MAX_CONTENT})`, 'error'); return; }
+    const maxLen = getMaxContent();
+    if (newContent.length > maxLen) { showToast(`Too long (max ${maxLen.toLocaleString()})`, 'error'); return; }
 
     const btn = document.getElementById('bc-edit-post-btn');
     await BackchatTx.editPost({
@@ -1963,7 +1981,7 @@ function renderCompose() {
                     ${BC.userProfile?.username ? BC.userProfile.username.charAt(0).toUpperCase() : getInitials(State.userAddress)}
                 </div>
                 <div class="bc-compose-body">
-                    <textarea id="bc-compose-input" class="bc-compose-textarea" placeholder="What's happening on-chain?" maxlength="${MAX_CONTENT}" oninput="BackchatPage._updateCharCount(this)"></textarea>
+                    <textarea id="bc-compose-input" class="bc-compose-textarea" placeholder="What's happening on-chain?" maxlength="${getMaxContent()}" oninput="BackchatPage._updateCharCount(this)"></textarea>
                     ${BC.pendingImagePreview ? `
                         <div class="bc-image-preview">
                             <img src="${BC.pendingImagePreview}" alt="Preview">
@@ -1984,7 +2002,7 @@ function renderCompose() {
                     </button>
                 </div>
                 <div class="bc-compose-right">
-                    <span class="bc-char-count" id="bc-char-counter">0/${MAX_CONTENT}</span>
+                    <span class="bc-char-count" id="bc-char-counter">0/${getMaxContent().toLocaleString()}</span>
                     <span class="bc-compose-fee">${feeLabel}</span>
                     <button id="bc-post-btn" class="bc-post-btn" onclick="BackchatPage.createPost()" ${BC.isPosting ? 'disabled' : ''}>
                         ${BC.isPosting ? '<i class="fa-solid fa-spinner fa-spin"></i> Posting' : 'Post'}
@@ -2384,7 +2402,7 @@ function renderPostDetail() {
             <div class="bc-reply-compose">
                 <div class="bc-reply-label">Replying to ${parentAuthor}</div>
                 <div class="bc-reply-row">
-                    <textarea id="bc-reply-input" class="bc-reply-input" placeholder="Write a reply..." maxlength="${MAX_CONTENT}"></textarea>
+                    <textarea id="bc-reply-input" class="bc-reply-input" placeholder="Write a reply..." maxlength="${getMaxContent()}"></textarea>
                     <button id="bc-reply-btn" class="bc-btn bc-btn-primary bc-reply-send" onclick="BackchatPage.submitReply('${post.id}')">Reply</button>
                 </div>
                 <div style="font-size:11px;color:var(--bc-text-3);margin-top:6px;">Text replies: FREE (gas only)</div>
@@ -2736,7 +2754,7 @@ function renderModals() {
                 <div class="bc-modal-inner">
                     <p class="bc-modal-desc">Edit within 15 minutes of posting. Free (gas only). Can only edit once.</p>
                     <div class="bc-field">
-                        <textarea id="bc-edit-post-input" class="bc-input" rows="4" maxlength="${MAX_CONTENT}" style="resize:none;"></textarea>
+                        <textarea id="bc-edit-post-input" class="bc-input" rows="4" maxlength="${getMaxContent()}" style="resize:none;"></textarea>
                     </div>
                     <button id="bc-edit-post-btn" class="bc-btn bc-btn-primary" style="width:100%;justify-content:center;" onclick="BackchatPage.confirmEditPost()"><i class="fa-solid fa-check"></i> Save Edit</button>
                 </div>
@@ -2909,14 +2927,15 @@ function checkDeepLink() {
 function _updateCharCount(textarea) {
     const counter = document.getElementById('bc-char-counter');
     if (!counter) return;
+    const maxLen = getMaxContent();
     const len = textarea.value.length;
-    counter.textContent = `${len}/${MAX_CONTENT}`;
+    counter.textContent = `${len.toLocaleString()}/${maxLen.toLocaleString()}`;
     counter.className = 'bc-char-count';
-    if (len > MAX_CONTENT - 50) counter.classList.add('danger');
-    else if (len > MAX_CONTENT - 150) counter.classList.add('warn');
+    if (len > maxLen - 50) counter.classList.add('danger');
+    else if (len > maxLen * 0.9) counter.classList.add('warn');
     // Auto-resize textarea
     textarea.style.height = 'auto';
-    textarea.style.height = Math.min(textarea.scrollHeight, 240) + 'px';
+    textarea.style.height = Math.min(textarea.scrollHeight, 400) + 'px';
 }
 
 // Close post menus on click outside
