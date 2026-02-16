@@ -81,13 +81,16 @@ const metadata = {
 
 const ethersConfig = defaultConfig({
     metadata,
-    enableEIP6963: true,      
-    enableInjected: true,     
-    enableCoinbase: false,    
+    enableEIP6963: true,
+    enableInjected: true,
+    enableCoinbase: false,
     rpcUrl: sepoliaRpcUrl,
     defaultChainId: ARBITRUM_SEPOLIA_ID_DECIMAL,
     enableEmail: true,
     enableEns: false,
+    defaultAccountTypes: {
+        eip155: 'eoa'  // Force single EOA wallet for social logins (no smart account)
+    },
     auth: {
         email: true,
         showWallets: true,
@@ -401,16 +404,43 @@ async function setupSignerAndLoadData(provider, address) {
     try {
         if (!validateEthereumAddress(address)) return false;
 
-        await ensureNetwork(provider);
+        const rawProvider = provider?.provider || State.web3Provider;
+        const isEmbedded = !isExtensionWallet(rawProvider);
+
+        // Network: extension wallets use RPC, embedded wallets use Web3Modal API
+        if (isEmbedded) {
+            try {
+                const chainId = web3modal.getChainId();
+                if (chainId !== ARBITRUM_SEPOLIA_ID_DECIMAL) {
+                    console.log(`[Wallet] Embedded wallet on chain ${chainId}, switching to Arbitrum Sepolia...`);
+                    await web3modal.switchNetwork(ARBITRUM_SEPOLIA_ID_DECIMAL);
+                    // Re-create provider after network switch
+                    const newWalletProvider = web3modal.getWalletProvider();
+                    if (newWalletProvider) {
+                        provider = new ethers.BrowserProvider(newWalletProvider);
+                    }
+                    console.log('[Wallet] Embedded wallet switched to Arbitrum Sepolia');
+                }
+            } catch (e) {
+                console.warn('[Wallet] Embedded wallet network switch:', e.message);
+            }
+        } else {
+            await ensureNetwork(provider);
+        }
 
         State.provider = provider;
-        
-        // Garante que State.signer nunca seja nulo
+
+        // Get signer: embedded wallets don't support eth_requestAccounts,
+        // so pass address explicitly to avoid that call
         try {
-            State.signer = await provider.getSigner(); 
+            State.signer = await provider.getSigner(address);
         } catch(signerError) {
-            State.signer = provider; 
-            console.warn(`Could not get standard Signer. Using Provider as read-only. Warning: ${signerError.message}`);
+            try {
+                State.signer = await provider.getSigner();
+            } catch(e2) {
+                State.signer = provider;
+                console.warn(`Could not get Signer. Using Provider as read-only.`);
+            }
         }
         
         State.userAddress = address;
@@ -550,9 +580,15 @@ export function initWalletSubscriptions(callback) {
                 if (!activeAddress && provider) {
                     try {
                         const tempProvider = new ethers.BrowserProvider(provider);
-                        const signer = await tempProvider.getSigner();
-                        activeAddress = await signer.getAddress();
-                    } catch(e) {}
+                        const accounts = await tempProvider.send('eth_accounts', []);
+                        activeAddress = accounts?.[0] || null;
+                    } catch(e) {
+                        try {
+                            const tempProvider = new ethers.BrowserProvider(provider);
+                            const signer = await tempProvider.getSigner();
+                            activeAddress = await signer.getAddress();
+                        } catch(e2) {}
+                    }
                 }
 
                 if (activeAddress) {
