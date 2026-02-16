@@ -1054,19 +1054,19 @@ async function loadPosts() {
         BC.posts = filterBlocked(feedPosts);
         BC.allItems = allItems;
 
-        // ── Discover: Velocity-weighted trending ─────────────────────
-        // Score = (superLikeETH × engagement_multiplier) / sqrt(age_hours)
-        // Newer trending posts surface faster
+        // ── Discover: Engagement-ranked feed ─────────────────────
+        // Score = (baseEngagement + superLikeBoost) / sqrt(age_hours)
+        // All posts appear; Super Likes boost ranking but aren't required
         BC.trendingPosts = filterBlocked([...allItems]
-            .filter(p => p.type !== 'repost' && (p.superLikeETH || 0n) > 0n))
+            .filter(p => p.type !== 'repost'))
             .map(p => {
                 const ageH = Math.max((nowSec - p.timestamp) / 3600, 0.5);
                 const ethVal = Number(ethers.formatEther(p.superLikeETH || 0n));
                 const likes = p.likesCount || 0;
                 const replies = p.repliesCount || BC.replyCountMap.get(p.id) || 0;
                 const reposts = p.repostsCount || BC.repostCountMap.get(p.id) || 0;
-                const engMul = 1 + likes * 0.1 + replies * 0.2 + reposts * 0.15;
-                p._trendScore = (ethVal * engMul) / Math.sqrt(ageH);
+                const base = 1 + likes * 0.5 + replies * 1.0 + reposts * 0.8 + ethVal * 50;
+                p._trendScore = base / Math.sqrt(ageH);
                 return p;
             })
             .sort((a, b) => b._trendScore - a._trendScore);
@@ -2268,19 +2268,19 @@ function renderDiscover() {
         return `
             <div class="bc-discover-header">
                 <h2><i class="fa-solid fa-fire"></i> Discover</h2>
-                <p>Ranked by Super Like value — pure organic discovery</p>
+                <p>Ranked by engagement — likes, replies, reposts & Super Likes</p>
                 ${statsHtml}
             </div>
             <div class="bc-empty">
                 <div class="bc-empty-glyph accent"><i class="fa-solid fa-fire"></i></div>
-                <div class="bc-empty-title">No trending posts</div>
-                <div class="bc-empty-text">Super Like posts to make them trend! Ranking is 100% organic, based on ETH spent.</div>
+                <div class="bc-empty-title">No posts yet</div>
+                <div class="bc-empty-text">Be the first to post! Posts are ranked by engagement — likes, replies, and Super Likes boost visibility.</div>
             </div>`;
     }
     return `
         <div class="bc-discover-header">
             <h2><i class="fa-solid fa-fire"></i> Discover</h2>
-            <p>Ranked by Super Like value — pure organic discovery</p>
+            <p>Ranked by engagement — likes, replies, reposts & Super Likes</p>
             ${statsHtml}
         </div>
         ${BC.trendingPosts.map((post, i) => renderPost(post, i, { trendingRank: i + 1 })).join('')}`;
