@@ -2015,6 +2015,9 @@ function renderPostMenu(post) {
                 <button class="bc-post-dropdown-item danger" onclick="event.stopPropagation(); BackchatPage.openReport('${post.id}')">
                     <i class="fa-solid fa-flag"></i> Report
                 </button>`}
+                <button class="bc-post-dropdown-item" onclick="event.stopPropagation(); BackchatPage.sharePost('${post.id}')">
+                    <i class="fa-solid fa-share-nodes"></i> Share
+                </button>
                 <button class="bc-post-dropdown-item" onclick="event.stopPropagation(); BackchatPage.openBoostPost('${post.id}')">
                     <i class="fa-solid fa-rocket"></i> Boost Post
                 </button>
@@ -2098,6 +2101,9 @@ function renderPost(post, index = 0, options = {}) {
                 </button>
                 <button class="bc-action act-super" onclick="BackchatPage.openSuperLike('${post.id}')" title="Super Like">
                     <i class="fa-solid fa-star"></i>${(post.superLikeETH || 0n) > 0n ? `<span class="bc-eth-val">${superLikesETH}</span>` : ''}
+                </button>
+                <button class="bc-action act-share" onclick="BackchatPage.sharePost('${post.id}')" title="Share">
+                    <i class="fa-solid fa-arrow-up-from-bracket"></i>
                 </button>
             </div>
         </div>`;
@@ -2833,6 +2839,58 @@ function togglePostMenu(postId) {
     menu.style.display = isVisible ? 'none' : 'block';
 }
 
+function sharePost(postId) {
+    document.querySelectorAll('.bc-post-dropdown').forEach(el => el.style.display = 'none');
+    const url = `${window.location.origin}/#agora?post=${postId}`;
+    const post = BC.postsById.get(postId);
+    const text = post?.content ? post.content.slice(0, 100) + (post.content.length > 100 ? '...' : '') : 'Check out this post on Backchain Agora';
+
+    // Use Web Share API if available (mobile), otherwise copy to clipboard
+    if (navigator.share) {
+        navigator.share({ title: 'Backchain Agora', text, url }).catch(() => {});
+    } else {
+        navigator.clipboard.writeText(url).then(() => {
+            showToast('Link copied to clipboard!', 'success');
+        }).catch(() => {
+            // Fallback for older browsers
+            const input = document.createElement('input');
+            input.value = url;
+            document.body.appendChild(input);
+            input.select();
+            document.execCommand('copy');
+            document.body.removeChild(input);
+            showToast('Link copied to clipboard!', 'success');
+        });
+    }
+}
+
+/**
+ * Check for deep-link params (e.g., #agora?post=123) and navigate to post.
+ * Called after posts are loaded.
+ */
+function checkDeepLink() {
+    const hash = window.location.hash;
+    const qIndex = hash.indexOf('?');
+    if (qIndex === -1) return;
+
+    const params = new URLSearchParams(hash.substring(qIndex));
+    const postId = params.get('post');
+    if (!postId) return;
+
+    // Clean the URL (remove ?post= param) to avoid re-triggering
+    window.history.replaceState(null, '', `${window.location.pathname}#agora`);
+
+    // Navigate to the post detail view
+    if (BC.postsById.has(postId)) {
+        navigateView('post-detail', { post: postId });
+    } else {
+        // Post might not be loaded yet — set selectedPost so when render happens it shows
+        BC.selectedPost = postId;
+        BC.view = 'post-detail';
+        render();
+    }
+}
+
 // ============================================================================
 // INTERNAL HELPERS
 // ============================================================================
@@ -2873,6 +2931,7 @@ export const BackchatPage = {
             loadActiveRooms()
         ]);
         await loadBlockedAuthors();
+        checkDeepLink();
     },
 
     async refresh() {
@@ -2916,6 +2975,7 @@ export const BackchatPage = {
     },
 
     goBack,
+    sharePost,
     viewPost(postId) { navigateView('post-detail', { post: postId }); },
     viewProfile(address) {
         if (address?.toLowerCase() === State.userAddress?.toLowerCase()) {

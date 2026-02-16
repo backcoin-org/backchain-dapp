@@ -14,7 +14,7 @@ import { optimizeMedia } from './media-optimizer.js';
 // ============================================================================
 
 export const IRYS_CONFIG = {
-    gateway: 'https://gateway.irys.xyz',
+    gateway: 'https://devnet.irys.xyz',  // devnet data lives here (gateway.irys.xyz 302-redirects)
     devnet: true,
     maxFileSize: 100 * 1024 * 1024, // 100MB
     allowedTypes: {
@@ -388,7 +388,7 @@ export function isArweaveContent(uri) {
     if (!uri) return false;
     const trimmed = uri.trim();
     if (trimmed.startsWith('ar://')) return true;
-    if (trimmed.includes('gateway.irys.xyz/') || trimmed.includes('arweave.net/')) return true;
+    if (trimmed.includes('irys.xyz/') || trimmed.includes('arweave.net/')) return true;
     // Arweave TX ID: exactly 43 chars base64url (no Qm prefix, no bafy prefix)
     if (/^[a-zA-Z0-9_-]{43}$/.test(trimmed) && !trimmed.startsWith('Qm')) return true;
     return false;
