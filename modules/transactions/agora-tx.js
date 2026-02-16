@@ -797,4 +797,7 @@ export const BackchatTx = {
     getGlobalStats, getOperatorStats, getVersion
 };
 
+// Alias for new naming convention
+export const AgoraTx = BackchatTx;
+
 export default BackchatTx;

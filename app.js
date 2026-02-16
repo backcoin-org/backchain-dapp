@@ -34,7 +34,7 @@ import { SocialMediaPage } from './pages/SocialMedia.js';
 // CreditCardPage, DexPage, DaoPage removed (were demo placeholders)
 import { TutorialsPage } from './pages/TutorialsPage.js';
 import { CharityPage } from './pages/CharityPage.js';
-import { BackchatPage } from './pages/BackchatPage.js';
+import { AgoraPage } from './pages/agora/AgoraPage.js';
 import { ReferralPage } from './pages/ReferralPage.js';
 import { OperatorPage } from './pages/OperatorPage.js';
 import { TradePage } from './pages/TradePage.js';
@@ -62,7 +62,7 @@ const routes = {
     'store': StorePage,
     'fortune': FortunePoolPage,
     'charity': CharityPage,
-    'agora': BackchatPage,
+    'agora': AgoraPage,
     'notary': NotaryPage,
     'airdrop': AirdropPage,
     'tokenomics': TokenomicsPage,
@@ -78,7 +78,7 @@ const routes = {
     'mine': StakingPage,
     'rewards': StakingPage,
     'actions': FortunePoolPage,
-    'backchat': BackchatPage
+    'backchat': AgoraPage
 };
 
 // ============================================================================

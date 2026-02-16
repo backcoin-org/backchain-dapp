@@ -1,0 +1,334 @@
+// pages/agora/AgoraPage.js
+// Agora V13 — Main orchestrator
+// ============================================================================
+
+import { State } from '../../state.js';
+import { BC, getMaxContent } from './state.js';
+import { getProfileName, getInitials } from './utils.js';
+import { injectStyles } from './styles.js';
+import { loadFees, loadUserStatus, loadGlobalStats, loadProfiles, loadPosts, loadSocialGraph, loadBlockedAuthors, loadActiveRooms } from './data-loader.js';
+import { navigateView, goBack, doCreatePost, doCreateReply, doLike, doFollow, doUnfollow, doDeletePost, doPinPost, doBlockUser, doUnblockUser, handleImageSelect, removeImage, onWizUsernameInput, doCreateProfile, goLive, endLive, watchLive, leaveLive, sharePost, closeModal, togglePostMenu, openChangeTag, selectNewTag, confirmChangeTag } from './actions.js';
+import { renderCompose } from './composer.js';
+import { renderFeed, renderDiscover, renderTagBar, renderLanguageBar, renderLiveStreamBar } from './feed.js';
+import { renderProfile, renderUserProfile, renderProfileSetup } from './profile.js';
+import { renderPostDetail } from './post-detail.js';
+import { renderModals, openSuperLike, confirmSuperLike, openDownvote, confirmDownvote, openBadge, confirmBadge, openBoost, confirmBoost, openReport, confirmReport, openBoostPost, confirmBoostPost, openTip, confirmTip, openEditPost, confirmEditPost, previewAvatar, openRepostConfirm, confirmRepost, openEditProfile, confirmEditProfile } from './modals.js';
+
+// ============================================================================
+// HEADER
+// ============================================================================
+
+function renderHeader() {
+    const isDetailView = ['post-detail', 'user-profile', 'profile-setup'].includes(BC.view);
+    if (isDetailView) {
+        let title = 'Post';
+        if (BC.view === 'user-profile') title = getProfileName(BC.selectedProfile);
+        if (BC.view === 'profile-setup') title = 'Create Profile';
+        return `
+            <div class="bc-header">
+                <div class="bc-back-header">
+                    <button class="bc-back-btn" onclick="AgoraPage.goBack()"><i class="fa-solid fa-arrow-left"></i></button>
+                    <span class="bc-back-title">${title}</span>
+                </div>
+            </div>`;
+    }
+    return `
+        <div class="bc-header">
+            <div class="bc-header-bar">
+                <div class="bc-brand">
+                    <img src="assets/Agora.png" alt="Agora" class="bc-brand-icon" onerror="this.style.display='none'">
+                    <span class="bc-brand-name">Agora</span>
+                </div>
+                <div class="bc-header-right">
+                    <button class="bc-icon-btn" onclick="AgoraPage.refresh()" title="Refresh"><i class="fa-solid fa-arrows-rotate"></i></button>
+                </div>
+            </div>
+            <div class="bc-nav">
+                <button class="bc-nav-item ${BC.activeTab === 'feed' ? 'active' : ''}" onclick="AgoraPage.setTab('feed')">
+                    <i class="fa-solid fa-house"></i> Feed
+                </button>
+                <button class="bc-nav-item ${BC.activeTab === 'discover' ? 'active' : ''}" onclick="AgoraPage.setTab('discover')">
+                    <i class="fa-solid fa-fire"></i> Discover
+                </button>
+                <button class="bc-nav-item ${BC.activeTab === 'profile' ? 'active' : ''}" onclick="AgoraPage.setTab('profile')">
+                    <i class="fa-solid fa-user"></i> Profile
+                </button>
+            </div>
+        </div>`;
+}
+
+// ============================================================================
+// CONTENT ROUTER
+// ============================================================================
+
+function renderContent() {
+    const container = document.getElementById('backchat-content');
+    if (!container) return;
+    let content = '';
+    switch (BC.view) {
+        case 'feed':
+            content = renderLiveStreamBar() + renderCompose() + renderLanguageBar() + renderTagBar() + renderFeed();
+            break;
+        case 'discover':
+            content = renderDiscover();
+            break;
+        case 'profile':
+            content = (!BC.hasProfile && State.isConnected) ? renderProfileSetup() : renderProfile();
+            break;
+        case 'post-detail':
+            content = renderPostDetail();
+            break;
+        case 'user-profile':
+            content = renderUserProfile();
+            break;
+        case 'profile-setup':
+            content = renderProfileSetup();
+            break;
+        default:
+            content = renderCompose() + renderLanguageBar() + renderTagBar() + renderFeed();
+    }
+    container.innerHTML = content;
+}
+
+// Connect BC._render to renderContent so modules can trigger re-renders
+BC._render = renderContent;
+
+// ============================================================================
+// MAIN RENDER
+// ============================================================================
+
+function render() {
+    injectStyles();
+    const section = document.getElementById('agora');
+    if (!section) return;
+    section.innerHTML = `
+        <div class="bc-shell">
+            ${renderHeader()}
+            <div id="backchat-content"></div>
+        </div>
+        ${renderModals()}`;
+    renderContent();
+}
+
+// ============================================================================
+// DEEP LINK
+// ============================================================================
+
+function checkDeepLink() {
+    const hash = window.location.hash;
+    const qIndex = hash.indexOf('?');
+    if (qIndex === -1) return;
+
+    const query = hash.substring(qIndex + 1);
+    let postId = null;
+
+    // New format: @username/postId
+    const usernameMatch = query.match(/^@[\w]+\/(\d+)/);
+    if (usernameMatch) postId = usernameMatch[1];
+
+    // Legacy format: ?post=123
+    if (!postId) {
+        const params = new URLSearchParams(query);
+        postId = params.get('post');
+    }
+
+    if (!postId) return;
+
+    // Clean the URL to avoid re-triggering
+    window.history.replaceState(null, '', `${window.location.pathname}#agora`);
+
+    if (BC.postsById.has(postId)) {
+        navigateView('post-detail', { post: postId });
+    } else {
+        BC.selectedPost = postId;
+        BC.view = 'post-detail';
+        render();
+    }
+}
+
+// ============================================================================
+// INTERNAL HELPERS
+// ============================================================================
+
+function _updateCharCount(textarea) {
+    const counter = document.getElementById('bc-char-counter');
+    if (!counter) return;
+    const maxLen = getMaxContent();
+    const len = textarea.value.length;
+    counter.textContent = `${len.toLocaleString()}/${maxLen.toLocaleString()}`;
+    counter.className = 'bc-char-count';
+    if (len > maxLen - 50) counter.classList.add('danger');
+    else if (len > maxLen * 0.9) counter.classList.add('warn');
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(textarea.scrollHeight, 400) + 'px';
+}
+
+// Close post menus on click outside
+document.addEventListener('click', () => {
+    document.querySelectorAll('.bc-post-dropdown').forEach(el => el.style.display = 'none');
+});
+
+// ============================================================================
+// EXPORT
+// ============================================================================
+
+export const AgoraPage = {
+    async render(isActive) {
+        if (!isActive) return;
+        render();
+        await Promise.all([
+            loadFees(),
+            loadUserStatus(),
+            loadGlobalStats(),
+            loadProfiles(),
+            loadPosts(),
+            loadSocialGraph(),
+            loadActiveRooms()
+        ]);
+        await loadBlockedAuthors();
+        checkDeepLink();
+    },
+
+    async refresh() {
+        await Promise.all([
+            loadFees(),
+            loadUserStatus(),
+            loadGlobalStats(),
+            loadProfiles(),
+            loadPosts(),
+            loadSocialGraph(),
+            loadActiveRooms()
+        ]);
+        await loadBlockedAuthors();
+    },
+
+    setTab(tab) {
+        BC.activeTab = tab;
+        BC.view = tab;
+        BC.selectedTag = -1;
+        render();
+    },
+
+    filterTag(tagId) {
+        BC.selectedTag = tagId;
+        renderContent();
+    },
+
+    filterLanguage(code) {
+        BC.selectedLanguage = code;
+        renderContent();
+    },
+
+    setWizLanguage(code) {
+        BC.wizLanguage = code;
+        renderContent();
+    },
+
+    setComposeTag(tagId) {
+        BC.composeTag = tagId;
+        renderContent();
+    },
+
+    goBack,
+    sharePost,
+    viewPost(postId) { navigateView('post-detail', { post: postId }); },
+    viewProfile(address) {
+        if (address?.toLowerCase() === State.userAddress?.toLowerCase()) {
+            BC.activeTab = 'profile';
+            BC.view = 'profile';
+            render();
+        } else {
+            navigateView('user-profile', { profile: address });
+        }
+    },
+    openReply(postId) { navigateView('post-detail', { post: postId }); },
+    openProfileSetup() {
+        BC.wizStep = 1;
+        BC.wizUsername = '';
+        BC.wizDisplayName = '';
+        BC.wizBio = '';
+        BC.wizUsernameOk = null;
+        BC.wizFee = null;
+        navigateView('profile-setup');
+    },
+
+    // Actions
+    createPost: doCreatePost,
+    submitReply: doCreateReply,
+    like: doLike,
+    follow: doFollow,
+    unfollow: doUnfollow,
+    deletePost: doDeletePost,
+    pinPost: doPinPost,
+    blockUser: doBlockUser,
+    unblockUser: doUnblockUser,
+    handleImageSelect,
+    removeImage,
+    onWizUsernameInput,
+    closeModal,
+    togglePostMenu,
+    openChangeTag,
+    selectNewTag,
+    confirmChangeTag,
+
+    // Modals
+    openSuperLike,
+    confirmSuperLike,
+    openDownvote,
+    confirmDownvote,
+    openRepostConfirm,
+    confirmRepost,
+    openBadge,
+    confirmBadge,
+    openBoost,
+    confirmBoost,
+    openEditProfile,
+    confirmEditProfile,
+    openReport,
+    confirmReport,
+    openBoostPost,
+    confirmBoostPost,
+    openTip,
+    confirmTip,
+    previewAvatar,
+    openEditPost,
+    confirmEditPost,
+
+    // Live streaming
+    goLive,
+    endLive,
+    watchLive,
+    leaveLive,
+
+    // Wizard
+    wizNext() {
+        if (BC.wizStep === 1 && !BC.wizUsernameOk) return;
+        if (BC.wizStep === 1) {
+            BC.wizStep = 2;
+        } else if (BC.wizStep === 2) {
+            BC.wizDisplayName = document.getElementById('wiz-displayname-input')?.value?.trim() || '';
+            BC.wizBio = document.getElementById('wiz-bio-input')?.value?.trim() || '';
+            BC.wizStep = 3;
+        }
+        renderContent();
+    },
+    wizBack() {
+        if (BC.wizStep > 1) {
+            if (BC.wizStep === 2) {
+                BC.wizDisplayName = document.getElementById('wiz-displayname-input')?.value?.trim() || '';
+                BC.wizBio = document.getElementById('wiz-bio-input')?.value?.trim() || '';
+            }
+            BC.wizStep--;
+            renderContent();
+        }
+    },
+    wizConfirm: doCreateProfile,
+
+    _updateCharCount
+};
+
+// Expose globally for inline onclick handlers
+window.AgoraPage = AgoraPage;
+
+// Legacy alias for backward compatibility
+window.BackchatPage = AgoraPage;

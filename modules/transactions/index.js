@@ -167,9 +167,10 @@ export {
     getSupplyInfo
 } from './buyback-tx.js';
 
-// Backchat / Agora V3 (The Forever Protocol)
+// Agora V3 (The Forever Protocol)
 export {
     BackchatTx,
+    BackchatTx as AgoraTx,
     createProfile,
     updateProfile,
     createPost,
@@ -206,7 +207,7 @@ export {
     checkBlocked,
     getGlobalStats,
     getVersion as backchatGetVersion
-} from './backchat-tx.js';
+} from './agora-tx.js';
 
 // ============================================================================
 // CONVENIENCE OBJECT
@@ -225,7 +226,7 @@ export const Transactions = {
     Faucet: (async () => (await import('./faucet-tx.js')).FaucetTx)(),
     Fusion: (async () => (await import('./fusion-tx.js')).FusionTx)(),
     Buyback: (async () => (await import('./buyback-tx.js')).BuybackTx)(),
-    Backchat: (async () => (await import('./backchat-tx.js')).BackchatTx)()
+    Agora: (async () => (await import('./agora-tx.js')).BackchatTx)()
 };
 
 export default Transactions;
