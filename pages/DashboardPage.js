@@ -292,15 +292,28 @@ async function requestSmartFaucet(btnElement) {
 
         if (response.ok && data.success) {
             apiSuccess = true;
-            showToast(`Faucet: ${FAUCET_BKC_AMOUNT} BKC + ${FAUCET_ETH_AMOUNT} ETH enviados!`, "success");
+            const bkcAmt = data.bkcAmount || FAUCET_BKC_AMOUNT;
+            const ethAmt = data.ethAmount || FAUCET_ETH_AMOUNT;
+            showToast(`Faucet: ${bkcAmt} BKC + ${ethAmt} ETH sent to your wallet!`, "success");
             DashboardState.faucet.canClaim = false;
             try { localStorage.setItem('bkc_faucet_' + State.userAddress.toLowerCase(), '1'); } catch(e) {}
             updateFaucetWidget();
             // Force refresh with cache bypass — tokens are already confirmed on-chain
+            console.log('[Faucet] Claim success, txHash:', data.txHash, '— refreshing balance in 3s...');
             setTimeout(async () => {
-                await loadUserData(true);
-                updateBalanceCard();
-                if (window.updateUIState) window.updateUIState(false);
+                try {
+                    // Direct on-chain check first (bypasses all caching)
+                    if (State.bkcTokenContractPublic) {
+                        const directBal = await State.bkcTokenContractPublic.balanceOf(State.userAddress);
+                        console.log('[Faucet] Direct on-chain BKC after claim:', ethers.formatEther(directBal));
+                    }
+                    await loadUserData(true);
+                    console.log('[Faucet] Post-claim balance:', State.currentUserBalance?.toString());
+                    updateBalanceCard();
+                    if (window.updateUIState) window.updateUIState(false);
+                } catch(e) {
+                    console.warn('[Faucet] Post-claim refresh error:', e.message);
+                }
             }, 3000);
         } else {
             const msg = data.error || data.message || "Faucet unavailable";

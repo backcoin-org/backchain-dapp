@@ -422,20 +422,25 @@ async function setupSignerAndLoadData(provider, address) {
 
         const rawProvider = provider?.provider || State.web3Provider;
         const isEmbedded = !isExtensionWallet(rawProvider);
+        console.log(`[Wallet] Setup: isEmbedded=${isEmbedded}, address=${address?.slice(0,10)}...`);
 
         // Network: extension wallets use RPC, embedded wallets use Web3Modal API
         if (isEmbedded) {
             try {
                 const chainId = web3modal.getChainId();
+                console.log(`[Wallet] Embedded wallet chainId: ${chainId} (need: ${ARBITRUM_SEPOLIA_ID_DECIMAL})`);
                 if (chainId !== ARBITRUM_SEPOLIA_ID_DECIMAL) {
-                    console.log(`[Wallet] Embedded wallet on chain ${chainId}, switching to Arbitrum Sepolia...`);
+                    console.log(`[Wallet] Switching embedded wallet to Arbitrum Sepolia...`);
                     await web3modal.switchNetwork(ARBITRUM_SEPOLIA_ID_DECIMAL);
                     // Dismiss the "wrong network" banner/modal
                     try { web3modal.close(); } catch(_) {}
-                    console.log('[Wallet] Embedded wallet switched to Arbitrum Sepolia');
+                    const newChainId = web3modal.getChainId();
+                    console.log(`[Wallet] After switch, chainId: ${newChainId}`);
+                } else {
+                    console.log('[Wallet] Embedded wallet already on Arbitrum Sepolia');
                 }
             } catch (e) {
-                console.warn('[Wallet] Embedded wallet network switch:', e.message);
+                console.warn('[Wallet] Embedded wallet network switch error:', e.message);
             }
 
             // Get fresh wallet provider after any potential network switch
@@ -453,6 +458,9 @@ async function setupSignerAndLoadData(provider, address) {
                         rawWP._bkcPatched = true;
                     }
                     provider = new ethers.BrowserProvider(rawWP);
+                    console.log('[Wallet] BrowserProvider created from raw wallet provider');
+                } else {
+                    console.warn('[Wallet] No raw wallet provider available!');
                 }
             }
         } else {
@@ -484,11 +492,18 @@ async function setupSignerAndLoadData(provider, address) {
         loadCachedBalance(address);
         instantiateContracts(State.signer);
 
-        // Debug: direct on-chain balance check
+        // Debug: verify public contract and chain state
+        console.log('[Wallet] State check — publicProvider:', !!State.publicProvider, 'bkcPublic:', !!State.bkcTokenContractPublic, 'signer:', !!State.signer);
         if (State.bkcTokenContractPublic && address) {
             State.bkcTokenContractPublic.balanceOf(address).then(bal => {
-                console.log('[Wallet] Direct BKC balance check:', ethers.formatEther(bal), 'BKC for', address.slice(0, 10) + '...');
+                console.log('[Wallet] Direct BKC balance (via Alchemy):', ethers.formatEther(bal), 'BKC for', address.slice(0, 10) + '...');
             }).catch(e => console.warn('[Wallet] Direct balance check FAILED:', e.message));
+            // Also check ETH via public provider
+            if (State.publicProvider) {
+                State.publicProvider.getBalance(address).then(eth => {
+                    console.log('[Wallet] Direct ETH balance (via Alchemy):', ethers.formatEther(eth), 'ETH');
+                }).catch(e => console.warn('[Wallet] Direct ETH check FAILED:', e.message));
+            }
         } else {
             console.warn('[Wallet] Cannot check balance — publicContract:', !!State.bkcTokenContractPublic, 'address:', !!address);
         }
@@ -623,6 +638,7 @@ export function initWalletSubscriptions(callback) {
 
     const handler = async ({ provider, address, chainId, isConnected }) => {
         try {
+            console.log(`[Wallet] subscribeProvider event: connected=${isConnected}, chain=${chainId}, addr=${address?.slice(0,10) || 'null'}, hasProvider=${!!provider}`);
             if (isConnected) {
                 let activeAddress = address || web3modal.getAddress();
                 if (!activeAddress && provider) {
