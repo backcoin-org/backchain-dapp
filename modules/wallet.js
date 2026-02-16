@@ -88,9 +88,6 @@ const ethersConfig = defaultConfig({
     defaultChainId: ARBITRUM_SEPOLIA_ID_DECIMAL,
     enableEmail: true,
     enableEns: false,
-    defaultAccountTypes: {
-        eip155: 'eoa'  // Force single EOA wallet for social logins (no smart account)
-    },
     auth: {
         email: true,
         showWallets: true,
@@ -102,14 +99,20 @@ const web3modal = createWeb3Modal({
     ethersConfig,
     chains: [arbitrumSepoliaConfig],
     projectId: WALLETCONNECT_PROJECT_ID,
-    enableAnalytics: true,    
+    enableAnalytics: true,
     themeMode: 'dark',
     themeVariables: {
-        '--w3m-accent': '#f59e0b', 
+        '--w3m-accent': '#f59e0b',
         '--w3m-border-radius-master': '1px',
         '--w3m-z-index': 100
-    }
+    },
+    // Force EOA only — no smart accounts for social/email login
+    defaultAccountTypes: { eip155: 'eoa' },
+    preferredAccountType: 'eoa'
 });
+
+// Force EOA account type (belt-and-suspenders)
+try { web3modal.setPreferredAccountType?.('eoa'); } catch(e) {}
 
 // ============================================================================
 // 3. 🔥 MULTI-RPC SYSTEM (NOVO!)
@@ -423,25 +426,22 @@ async function setupSignerAndLoadData(provider, address) {
                 console.warn('[Wallet] Embedded wallet network switch:', e.message);
             }
 
-            // Patch the raw EIP-1193 wallet provider to intercept eth_requestAccounts.
-            // ethers v6 BrowserProvider.getSigner() calls _send() → #request() → rawProvider.request()
-            // via a private closure, so patching BrowserProvider.send is NOT sufficient.
-            // We must patch at the raw provider level.
+            // Get fresh wallet provider after any potential network switch
             if (address) {
                 const rawWP = web3modal.getWalletProvider() || State.web3Provider;
-                if (rawWP && rawWP.request && !rawWP._bkcPatched) {
-                    const origRequest = rawWP.request.bind(rawWP);
-                    rawWP.request = async function(args) {
-                        if (args?.method === 'eth_requestAccounts') {
-                            console.log('[Wallet] Intercepted eth_requestAccounts → returning known address');
-                            return [address];
-                        }
-                        return origRequest(args);
-                    };
-                    rawWP._bkcPatched = true;
+                if (rawWP) {
+                    // Patch raw provider for any future eth_requestAccounts calls
+                    // (needed by other code that might call getSigner later)
+                    if (rawWP.request && !rawWP._bkcPatched) {
+                        const origRequest = rawWP.request.bind(rawWP);
+                        rawWP.request = async function(args) {
+                            if (args?.method === 'eth_requestAccounts') return [address];
+                            return origRequest(args);
+                        };
+                        rawWP._bkcPatched = true;
+                    }
+                    provider = new ethers.BrowserProvider(rawWP);
                 }
-                // Re-create BrowserProvider from patched raw provider
-                provider = new ethers.BrowserProvider(rawWP);
             }
         } else {
             await ensureNetwork(provider);
@@ -450,16 +450,16 @@ async function setupSignerAndLoadData(provider, address) {
         State.provider = provider;
 
         try {
-            // For embedded wallets: use getSigner() without address arg (index 0).
-            // ethers v6 getSigner(address) does a string comparison that can fail
-            // due to checksum/format mismatch between intercepted accounts and the address param.
-            // getSigner() with no arg uses numeric index path, bypassing the comparison.
-            if (isEmbedded) {
-                State.signer = await provider.getSigner();
+            if (isEmbedded && address) {
+                // Construct JsonRpcSigner directly — bypasses eth_requestAccounts entirely.
+                // getSigner() always calls eth_requestAccounts internally which embedded
+                // wallets block. Direct construction just stores provider + address.
+                State.signer = new ethers.JsonRpcSigner(provider, address);
+                console.log('[Wallet] Embedded signer created for', address.slice(0, 10) + '...');
             } else {
                 State.signer = await provider.getSigner(address);
+                console.log('[Wallet] Signer obtained for', address.slice(0, 10) + '...');
             }
-            console.log('[Wallet] Signer obtained successfully for', address.slice(0, 10) + '...');
         } catch(signerError) {
             State.signer = provider;
             console.warn(`Could not get Signer. Using Provider as read-only.`, signerError.message);
