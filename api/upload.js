@@ -4,10 +4,9 @@
 
 import { Formidable } from 'formidable';
 import fs from 'fs';
+import https from 'https';
 import { ethers } from 'ethers';
 import crypto from 'crypto';
-
-const LIGHTHOUSE_UPLOAD_URL = 'https://node.lighthouse.storage/api/v0/add';
 
 export const config = {
     api: {
@@ -109,31 +108,33 @@ export default async function handler(req, res) {
         hashSum.update(fileBuffer);
         const contentHash = '0x' + hashSum.digest('hex');
 
-        // Upload to IPFS+Filecoin via Lighthouse REST API (manual multipart)
-        const boundary = '----LH' + crypto.randomBytes(16).toString('hex');
-        const body = Buffer.concat([
-            Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: ${fileMime}\r\n\r\n`),
-            fileBuffer,
-            Buffer.from(`\r\n--${boundary}--\r\n`)
-        ]);
-
-        const lhResponse = await fetch(LIGHTHOUSE_UPLOAD_URL, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${API_KEY}`,
-                'Content-Type': `multipart/form-data; boundary=${boundary}`
-            },
-            body
+        // Upload via https.request (most reliable in serverless)
+        const lhData = await new Promise((resolve, reject) => {
+            const boundary = '----LH' + crypto.randomBytes(16).toString('hex');
+            const reqBody = Buffer.concat([
+                Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: ${fileMime}\r\n\r\n`),
+                fileBuffer,
+                Buffer.from(`\r\n--${boundary}--\r\n`)
+            ]);
+            const opts = {
+                hostname: 'node.lighthouse.storage', path: '/api/v0/add', method: 'POST',
+                headers: { 'Authorization': `Bearer ${API_KEY}`, 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': reqBody.length }
+            };
+            const r = https.request(opts, (resp) => {
+                let d = '';
+                resp.on('data', c => d += c);
+                resp.on('end', () => {
+                    if (resp.statusCode !== 200) return reject(new Error(`Lighthouse HTTP ${resp.statusCode}: ${d.slice(0, 300)}`));
+                    try { resolve(JSON.parse(d)); } catch { reject(new Error('Lighthouse bad JSON: ' + d.slice(0, 300))); }
+                });
+            });
+            r.on('error', e => reject(new Error('Lighthouse network: ' + e.message)));
+            r.setTimeout(60000, () => { r.destroy(); reject(new Error('Lighthouse timeout')); });
+            r.write(reqBody);
+            r.end();
         });
 
-        if (!lhResponse.ok) {
-            const errText = await lhResponse.text().catch(() => '');
-            throw new Error(`Lighthouse HTTP ${lhResponse.status}: ${errText.slice(0, 200)}`);
-        }
-
-        const lhData = await lhResponse.json();
         const ipfsHash = lhData?.Hash;
-
         if (!ipfsHash) {
             throw new Error('Lighthouse returned no hash: ' + JSON.stringify(lhData).slice(0, 200));
         }

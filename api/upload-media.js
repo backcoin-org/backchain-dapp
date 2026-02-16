@@ -1,11 +1,12 @@
 // api/upload-media.js
-// V3.1: Unified media upload via Lighthouse REST API (IPFS + Filecoin permanent storage)
-// Uses direct REST API instead of SDK for reliable serverless operation.
+// V3.2: Unified media upload via Lighthouse REST API (IPFS + Filecoin permanent storage)
+// Uses https.request for maximum serverless compatibility.
 // Used by: Agora posts, avatars, Charity campaigns, general media
 
 import { Formidable } from 'formidable';
 import fs from 'fs';
 import crypto from 'crypto';
+import https from 'https';
 
 export const config = {
     api: {
@@ -14,7 +15,6 @@ export const config = {
     },
 };
 
-const LIGHTHOUSE_UPLOAD_URL = 'https://node.lighthouse.storage/api/v0/add';
 const IPFS_GATEWAY = 'https://gateway.lighthouse.storage/ipfs/';
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const ALLOWED_TYPES = [
@@ -22,6 +22,49 @@ const ALLOWED_TYPES = [
     'audio/webm', 'audio/ogg', 'audio/mpeg',
     'image/jpeg', 'image/png', 'image/gif', 'image/webp'
 ];
+
+function uploadToLighthouse(fileBuffer, fileName, mimeType, apiKey) {
+    return new Promise((resolve, reject) => {
+        const boundary = '----LH' + crypto.randomBytes(16).toString('hex');
+        const body = Buffer.concat([
+            Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: ${mimeType}\r\n\r\n`),
+            fileBuffer,
+            Buffer.from(`\r\n--${boundary}--\r\n`)
+        ]);
+
+        const options = {
+            hostname: 'node.lighthouse.storage',
+            path: '/api/v0/add',
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': `multipart/form-data; boundary=${boundary}`,
+                'Content-Length': body.length
+            }
+        };
+
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                if (res.statusCode !== 200) {
+                    reject(new Error(`Lighthouse HTTP ${res.statusCode}: ${data.slice(0, 300)}`));
+                    return;
+                }
+                try {
+                    resolve(JSON.parse(data));
+                } catch (e) {
+                    reject(new Error('Lighthouse invalid response: ' + data.slice(0, 300)));
+                }
+            });
+        });
+
+        req.on('error', (e) => reject(new Error('Lighthouse network error: ' + e.message)));
+        req.setTimeout(60000, () => { req.destroy(); reject(new Error('Lighthouse upload timeout (60s)')); });
+        req.write(body);
+        req.end();
+    });
+}
 
 const setCorsHeaders = (res) => {
     res.setHeader('Access-Control-Allow-Credentials', true);
@@ -88,30 +131,9 @@ export default async function handler(req, res) {
         const sizeMB = (fileSize / (1024 * 1024)).toFixed(1);
         console.log(`Media: ${fileName} | Size: ${sizeMB} MB | Type: ${fileMime}`);
 
-        // Read file buffer and upload via Lighthouse REST API (manual multipart)
+        // Upload via https.request (most reliable in serverless)
         const fileBuffer = fs.readFileSync(file.filepath);
-        const boundary = '----LH' + crypto.randomBytes(16).toString('hex');
-        const body = Buffer.concat([
-            Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: ${fileMime}\r\n\r\n`),
-            fileBuffer,
-            Buffer.from(`\r\n--${boundary}--\r\n`)
-        ]);
-
-        const lhResponse = await fetch(LIGHTHOUSE_UPLOAD_URL, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${API_KEY}`,
-                'Content-Type': `multipart/form-data; boundary=${boundary}`
-            },
-            body
-        });
-
-        if (!lhResponse.ok) {
-            const errText = await lhResponse.text().catch(() => '');
-            throw new Error(`Lighthouse HTTP ${lhResponse.status}: ${errText.slice(0, 200)}`);
-        }
-
-        const lhData = await lhResponse.json();
+        const lhData = await uploadToLighthouse(fileBuffer, fileName, fileMime, API_KEY);
         const ipfsHash = lhData?.Hash;
 
         if (!ipfsHash) {
