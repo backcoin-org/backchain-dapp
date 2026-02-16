@@ -36,15 +36,14 @@ export interface ContractAddresses {
     rewardBooster: string;
     nftFusion: string;
     poolBronze: string;
-    poolSilver: string;
-    poolGold: string;
-    poolDiamond: string;
+    poolSilver?: string;
+    poolGold?: string;
+    poolDiamond?: string;
     fortunePool: string;
     agora: string;
     notary: string;
     charityPool: string;
     rentalManager: string;
-    simpleBkcFaucet: string;
     backchainGovernance: string;
 }
 
@@ -344,24 +343,6 @@ export interface BuybackStats {
     totalCallerRewards: bigint;
     avgEthPerBuyback: bigint;
     avgBkcPerBuyback: bigint;
-}
-
-// ── Faucet ──────────────────────────────────────────────────────────────────
-
-export interface FaucetStatus {
-    ethBalance: bigint;
-    tokenBalance: bigint;
-    ethPerDrip: bigint;
-    tokensPerDrip: bigint;
-    estimatedEthClaims: bigint;
-    estimatedTokenClaims: bigint;
-}
-
-export interface UserFaucetInfo {
-    lastClaim: bigint;
-    claims: bigint;
-    eligible: boolean;
-    cooldownLeft: bigint;
 }
 
 // ── Fusion ──────────────────────────────────────────────────────────────────

@@ -74,10 +74,6 @@ export type {
     BuybackPreview,
     BuybackStats,
 
-    // Faucet
-    FaucetStatus,
-    UserFaucetInfo,
-
     // Fusion
     FusionPreview,
     SplitPreview,

@@ -26,7 +26,6 @@ import { AgoraModule } from '@backchain/agora';
 import { CharityModule } from '@backchain/charity';
 import { RentalModule } from '@backchain/rental';
 import { SwapModule } from '@backchain/swap';
-import { FaucetModule } from '@backchain/faucet';
 import { FusionModule } from '@backchain/fusion';
 import { BuybackModule } from '@backchain/buyback';
 
@@ -45,7 +44,6 @@ export class Backchain implements BackchainContext {
     readonly charity: CharityModule;
     readonly rental: RentalModule;
     readonly swap: SwapModule;
-    readonly faucet: FaucetModule;
     readonly fusion: FusionModule;
     readonly buyback: BuybackModule;
 
@@ -71,7 +69,6 @@ export class Backchain implements BackchainContext {
         this.charity = new CharityModule(this);
         this.rental = new RentalModule(this);
         this.swap = new SwapModule(this);
-        this.faucet = new FaucetModule(this);
         this.fusion = new FusionModule(this);
         this.buyback = new BuybackModule(this);
     }

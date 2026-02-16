@@ -46,8 +46,7 @@ export async function promptModules() {
         { key: '6', id: 'charity',  name: 'Charity',                 desc: 'Transparent fundraising campaigns' },
         { key: '7', id: 'rental',   name: 'NFT Rental (AirBNFT)',   desc: 'List & rent NFT Boosters' },
         { key: '8', id: 'swap',     name: 'Swap (AMM)',              desc: 'Trade ETH ↔ BKC' },
-        { key: '9', id: 'faucet',   name: 'Faucet',                  desc: 'Testnet token distribution' },
-        { key: '0', id: 'fusion',  name: 'NFT Fusion',              desc: 'Fuse & split NFT Boosters' },
+        { key: '9', id: 'fusion',  name: 'NFT Fusion',              desc: 'Fuse & split NFT Boosters' },
         { key: 'b', id: 'buyback', name: 'Buyback Mining',          desc: 'Convert ETH fees → BKC rewards' },
     ];
 

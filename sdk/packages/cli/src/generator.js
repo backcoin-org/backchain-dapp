@@ -34,7 +34,6 @@ export function generateProject(dir, config) {
         charity: genCharityPage,
         rental: genRentalPage,
         swap: genSwapPage,
-        faucet: genFaucetPage,
         fusion: genFusionPage,
         buyback: genBuybackPage,
     };
@@ -341,7 +340,6 @@ function genIndexHtml(config) {
         charity: { icon: '&#9829;', label: 'Charity' },
         rental: { icon: '&#8962;', label: 'Rental' },
         swap: { icon: '&#8646;', label: 'Swap' },
-        faucet: { icon: '&#9751;', label: 'Faucet' },
         fusion: { icon: '&#9878;', label: 'Fusion' },
         buyback: { icon: '&#8635;', label: 'Buyback' },
     };
@@ -1036,49 +1034,6 @@ export async function render(el, bkc) {
             const amount = ethers.parseEther(el.querySelector('#sellBkcAmount').value);
             await bkc.swap.sellBkc(amount);
             toast('Swap complete!', 'success');
-        } catch (err) { toast(err.message, 'error'); }
-    };
-}
-`;
-}
-
-function genFaucetPage() {
-    return `// Faucet Module (Testnet)
-import { ethers } from 'ethers';
-import { toast } from '../main.js';
-
-let _status = null;
-
-export async function load(bkc) {
-    _status = await bkc.faucet.getStatus();
-}
-
-export async function render(el, bkc) {
-    if (!_status) await load(bkc);
-
-    el.innerHTML = \`
-        <h1 class="page-title">Testnet Faucet</h1>
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-label">BKC per Claim</div>
-                <div class="stat-value accent">\${Number(ethers.formatEther(_status.tokensPerDrip)).toFixed(0)} BKC</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">ETH per Claim</div>
-                <div class="stat-value">\${Number(ethers.formatEther(_status.ethPerDrip)).toFixed(4)} ETH</div>
-            </div>
-        </div>
-        <div class="card">
-            <div class="card-title">Claim Testnet Tokens</div>
-            <p style="color:var(--text-dim);margin-bottom:12px;">Free BKC + ETH for testing on Arbitrum Sepolia.</p>
-            <button id="claimBtn" class="btn btn-primary">Claim</button>
-        </div>
-    \`;
-
-    el.querySelector('#claimBtn').onclick = async () => {
-        try {
-            await bkc.faucet.claim();
-            toast('Claimed!', 'success');
         } catch (err) { toast(err.message, 'error'); }
     };
 }

@@ -31,7 +31,7 @@ export {
     BKC_TOKEN_ABI, ECOSYSTEM_ABI, STAKING_POOL_ABI, NFT_POOL_ABI,
     REWARD_BOOSTER_ABI, FORTUNE_POOL_ABI, NOTARY_ABI, CHARITY_POOL_ABI,
     AGORA_ABI, RENTAL_MANAGER_ABI, LIQUIDITY_POOL_ABI, BUYBACK_MINER_ABI,
-    NFT_FUSION_ABI, FAUCET_ABI,
+    NFT_FUSION_ABI,
     // Enums
     DocType, CampaignStatus, ContentType, BadgeTier, TierNames, TierBoosts,
 } from '@backchain/core';
@@ -67,8 +67,6 @@ export type {
     LiquidityPoolStats,
     BuybackPreview,
     BuybackStats,
-    FaucetStatus,
-    UserFaucetInfo,
     FusionPreview,
     SplitPreview,
     EcosystemStats,
@@ -85,7 +83,6 @@ export { AgoraModule } from '@backchain/agora';
 export { CharityModule } from '@backchain/charity';
 export { RentalModule } from '@backchain/rental';
 export { SwapModule } from '@backchain/swap';
-export { FaucetModule } from '@backchain/faucet';
 export { BuybackModule } from '@backchain/buyback';
 
 // ── Events (re-exported) ────────────────────────────────────────────────────
@@ -95,7 +92,7 @@ export {
     BKC_TOKEN_EVENTS, ECOSYSTEM_EVENTS, STAKING_EVENTS, LIQUIDITY_POOL_EVENTS,
     BUYBACK_EVENTS, REWARD_BOOSTER_EVENTS, NFT_POOL_EVENTS, NFT_FUSION_EVENTS,
     FORTUNE_EVENTS, NOTARY_EVENTS, CHARITY_EVENTS, AGORA_EVENTS,
-    RENTAL_EVENTS, FAUCET_EVENTS, GOVERNANCE_EVENTS, AIRDROP_EVENTS,
+    RENTAL_EVENTS, GOVERNANCE_EVENTS, AIRDROP_EVENTS,
 } from '@backchain/events';
 
 export type {

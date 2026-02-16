@@ -14,7 +14,6 @@
     "packages/charity",
     "packages/rental",
     "packages/swap",
-    "packages/faucet",
     "packages/buyback",
     "packages/events",
     "packages/indexer",
@@ -25,7 +24,7 @@
   "scripts": {
     "build:core": "cd packages/core && npm run build",
     "build:events": "cd packages/events && npm run build",
-    "build:modules": "npm run build --workspace=packages/staking --workspace=packages/nft --workspace=packages/fusion --workspace=packages/fortune --workspace=packages/notary --workspace=packages/agora --workspace=packages/charity --workspace=packages/rental --workspace=packages/swap --workspace=packages/faucet --workspace=packages/buyback",
+    "build:modules": "npm run build --workspace=packages/staking --workspace=packages/nft --workspace=packages/fusion --workspace=packages/fortune --workspace=packages/notary --workspace=packages/agora --workspace=packages/charity --workspace=packages/rental --workspace=packages/swap --workspace=packages/buyback",
     "build:indexer": "cd packages/indexer && npm run build",
     "build:api": "cd packages/api && npm run build",
     "build:sdk": "cd packages/sdk && npm run build",

@@ -5,24 +5,20 @@ import type { ContractAddresses, NetworkId } from '../types/index.js';
 
 /** Arbitrum Sepolia testnet addresses (current deployment) */
 const SEPOLIA_ADDRESSES: ContractAddresses = {
-    bkcToken: '0x4d8bF6a6ebCa6FEc94Ac975Ee4B097d5b194dDa3',
-    backchainEcosystem: '0xE08F491C07BFdA63dfd50b7305a756f527398065',
-    liquidityPool: '0x58B4284Ce727bffe3439bEE9441dcfA8B9E61052',
-    stakingPool: '0x74Cb45E5aE1e15E0816C072E4BDC2227158196E7',
-    buybackMiner: '0xbac1622A845d4A27f5B3f5714ba4a2231Bd49d0E',
-    rewardBooster: '0xff95a8dB84dFc2f7562d17436Ceb1C4e1b9563f6',
-    nftFusion: '0x5477cD750d920eEc0F73E5A55aA33a667D5DD30a',
-    poolBronze: '0x59F0197FA5D4b75ADC32A6cdD19aA2807dDf8093',
-    poolSilver: '0x619C4482b68934B0e3519a941406ddF54F9F2204',
-    poolGold: '0xfc4340f72AEFfa6Aa9F0D3c878f1BfC3b27A3641',
-    poolDiamond: '0xAf667626998A6a4320c9DD3A62930578e35043d4',
-    fortunePool: '0x2d2CB332f61A1dB1cCfD67002fE38b846CA1F063',
-    agora: '0x822aDceaa6F88B8c1c9DE736a412265B58aE9039',
-    notary: '0x19518B29BbC8b085B68c8AceC42317b0db581CB5',
-    charityPool: '0x1645974236BE5548df645010e5bc2ac5DF59Edf7',
-    rentalManager: '0x13323724a20cd48C5dD78f78b5aa07D8Cc46EDf3',
-    simpleBkcFaucet: '0x350888B5dCB1D616350c0da2929A0b093DeBF03D',
-    backchainGovernance: '0x8507A1BEcEAA3D31af35E31212c9f4E475C027C8',
+    bkcToken: '0x8264fa8C238Ca723A5D55D77E7aeC1271bd7E737',
+    backchainEcosystem: '0x967857764D5Aa4952bEC08684293B1f52e4F6be2',
+    liquidityPool: '0xE32D9D147b650100701d36bF91c49c2c43CFFEd8',
+    stakingPool: '0xcf21A15853812730C3b22B794A519BE60D8331c7',
+    buybackMiner: '0x9a33254a3e37C68be45Dd8Fad0357Cfc2c4B4e47',
+    rewardBooster: '0xfa95fB1A4A293d01B2c19c71aAE448a6806465A7',
+    nftFusion: '0x72D7E16F34363C04f30b014692ebB7a93335e75F',
+    poolBronze: '0x39cB88dC4620902a706bfE210b161EB2c3f427f3',
+    fortunePool: '0x0407B1AC0D42c41026161bE10BfeE97223a780ae',
+    agora: '0xa879F909A5415A28Eb953F2109cE5590658F80Df',
+    notary: '0x34C2541D4196B681C6DA5D4cE30BB4597BC3774A',
+    charityPool: '0xBc6876aef3C250e909Ab1312F28C11e4e151A3a7',
+    rentalManager: '0x69ef555320F5A8627883E52d5780AD093eFbC908',
+    backchainGovernance: '0x74b6A8a77438d5B9Fd8b304Bd2c58F3f036E8C88',
 };
 
 /** Arbitrum One mainnet addresses (TBD) */
@@ -35,15 +31,11 @@ const MAINNET_ADDRESSES: ContractAddresses = {
     rewardBooster: '',
     nftFusion: '',
     poolBronze: '',
-    poolSilver: '',
-    poolGold: '',
-    poolDiamond: '',
     fortunePool: '',
     agora: '',
     notary: '',
     charityPool: '',
     rentalManager: '',
-    simpleBkcFaucet: '',
     backchainGovernance: '',
 };
 
@@ -58,7 +50,9 @@ export function getAddresses(network: NetworkId): ContractAddresses {
 
 /** NFT pool address by tier (0=Bronze, 1=Silver, 2=Gold, 3=Diamond) */
 export function getPoolAddress(addresses: ContractAddresses, tier: number): string {
-    const pools = [addresses.poolBronze, addresses.poolSilver, addresses.poolGold, addresses.poolDiamond];
+    const pools = [addresses.poolBronze, addresses.poolSilver || '', addresses.poolGold || '', addresses.poolDiamond || ''];
     if (tier < 0 || tier > 3) throw new Error(`Invalid tier: ${tier}. Must be 0-3.`);
-    return pools[tier];
+    const addr = pools[tier];
+    if (!addr) throw new Error(`Pool for tier ${tier} not yet deployed.`);
+    return addr;
 }
