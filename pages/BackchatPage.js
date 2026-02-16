@@ -2257,19 +2257,11 @@ function renderFeed() {
 }
 
 function renderDiscover() {
-    const stats = BC.globalStats;
-    const statsHtml = stats ? `
-        <div class="bc-stats-row">
-            <div class="bc-mini-stat"><i class="fa-solid fa-pen-to-square" style="color:var(--bc-accent)"></i> <strong>${stats.totalPosts}</strong> posts</div>
-            <div class="bc-mini-stat"><i class="fa-solid fa-users" style="color:var(--bc-blue)"></i> <strong>${stats.totalProfiles}</strong> profiles</div>
-        </div>` : '';
-
     if (BC.trendingPosts.length === 0) {
         return `
             <div class="bc-discover-header">
                 <h2><i class="fa-solid fa-fire"></i> Discover</h2>
                 <p>Ranked by engagement — likes, replies, reposts & Super Likes</p>
-                ${statsHtml}
             </div>
             <div class="bc-empty">
                 <div class="bc-empty-glyph accent"><i class="fa-solid fa-fire"></i></div>
@@ -2281,7 +2273,6 @@ function renderDiscover() {
         <div class="bc-discover-header">
             <h2><i class="fa-solid fa-fire"></i> Discover</h2>
             <p>Ranked by engagement — likes, replies, reposts & Super Likes</p>
-            ${statsHtml}
         </div>
         ${BC.trendingPosts.map((post, i) => renderPost(post, i, { trendingRank: i + 1 })).join('')}`;
 }
@@ -2870,50 +2861,71 @@ function togglePostMenu(postId) {
 
 function sharePost(postId) {
     document.querySelectorAll('.bc-post-dropdown').forEach(el => el.style.display = 'none');
-    const url = `${window.location.origin}/#agora?post=${postId}`;
     const post = BC.postsById.get(postId);
-    const text = post?.content ? post.content.slice(0, 100) + (post.content.length > 100 ? '...' : '') : 'Check out this post on Backchain Agora';
+
+    // Build share URL: username-based + tutor referral
+    const authorUsername = getProfileUsername(post?.author);
+    const myAddress = State.userAddress || '';
+    const postParam = authorUsername ? `@${authorUsername}/${postId}` : `post=${postId}`;
+    const refParam = myAddress ? `&ref=${myAddress}` : '';
+    const url = `${window.location.origin}/#agora?${postParam}${refParam}`;
+
+    const authorName = authorUsername ? `@${authorUsername}` : 'someone';
+    const preview = post?.content ? post.content.slice(0, 100) + (post.content.length > 100 ? '...' : '') : '';
+    const text = preview || `Check out ${authorName}'s post on Backchain Agora`;
 
     // Use Web Share API if available (mobile), otherwise copy to clipboard
     if (navigator.share) {
-        navigator.share({ title: 'Backchain Agora', text, url }).catch(() => {});
+        navigator.share({ title: `${authorName} on Backchain`, text, url }).catch(() => {});
     } else {
         navigator.clipboard.writeText(url).then(() => {
-            showToast('Link copied to clipboard!', 'success');
+            showToast('Link copied!', 'success');
         }).catch(() => {
-            // Fallback for older browsers
             const input = document.createElement('input');
             input.value = url;
             document.body.appendChild(input);
             input.select();
             document.execCommand('copy');
             document.body.removeChild(input);
-            showToast('Link copied to clipboard!', 'success');
+            showToast('Link copied!', 'success');
         });
     }
 }
 
 /**
- * Check for deep-link params (e.g., #agora?post=123) and navigate to post.
- * Called after posts are loaded.
+ * Check for deep-link params and navigate to post.
+ * Supports: #agora?@username/123&ref=0x... (new) and #agora?post=123 (legacy)
+ * The ref param is captured by app.js captureTutorParam() for tutor onboarding.
  */
 function checkDeepLink() {
     const hash = window.location.hash;
     const qIndex = hash.indexOf('?');
     if (qIndex === -1) return;
 
-    const params = new URLSearchParams(hash.substring(qIndex));
-    const postId = params.get('post');
+    const query = hash.substring(qIndex + 1);
+    let postId = null;
+
+    // New format: @username/postId (e.g., ?@alice/42&ref=0x...)
+    const usernameMatch = query.match(/^@[\w]+\/(\d+)/);
+    if (usernameMatch) {
+        postId = usernameMatch[1];
+    }
+
+    // Legacy format: ?post=123
+    if (!postId) {
+        const params = new URLSearchParams(query);
+        postId = params.get('post');
+    }
+
     if (!postId) return;
 
-    // Clean the URL (remove ?post= param) to avoid re-triggering
+    // Clean the URL (remove params) to avoid re-triggering
     window.history.replaceState(null, '', `${window.location.pathname}#agora`);
 
     // Navigate to the post detail view
     if (BC.postsById.has(postId)) {
         navigateView('post-detail', { post: postId });
     } else {
-        // Post might not be loaded yet — set selectedPost so when render happens it shows
         BC.selectedPost = postId;
         BC.view = 'post-detail';
         render();
