@@ -106,6 +106,8 @@ const web3modal = createWeb3Modal({
         '--w3m-border-radius-master': '1px',
         '--w3m-z-index': 100
     },
+    // Force Arbitrum Sepolia as default chain for new connections
+    defaultChain: arbitrumSepoliaConfig,
     // Force EOA only — no smart accounts for social/email login
     defaultAccountTypes: { eip155: 'eoa' },
     preferredAccountType: 'eoa'
@@ -420,6 +422,8 @@ async function setupSignerAndLoadData(provider, address) {
                 if (chainId !== ARBITRUM_SEPOLIA_ID_DECIMAL) {
                     console.log(`[Wallet] Embedded wallet on chain ${chainId}, switching to Arbitrum Sepolia...`);
                     await web3modal.switchNetwork(ARBITRUM_SEPOLIA_ID_DECIMAL);
+                    // Dismiss the "wrong network" banner/modal
+                    try { web3modal.close(); } catch(_) {}
                     console.log('[Wallet] Embedded wallet switched to Arbitrum Sepolia');
                 }
             } catch (e) {
