@@ -49,6 +49,7 @@ let balancePollingInterval = null;
 // 🔥 V6.9: Variáveis para controle de throttle
 let lastBalanceUpdate = 0;
 let balanceErrorCount = 0;
+let balancePollingLogCount = 0;
 const BALANCE_UPDATE_THROTTLE_MS = 5000;  // Mínimo 5s entre updates de UI
 const MAX_BALANCE_ERRORS = 3;              // Para de tentar após 3 erros
 const POLLING_INTERVAL_MS = 60000;         // 60s entre checks (otimizado: 30s→60s para reduzir RPC Alchemy)
@@ -309,6 +310,7 @@ function startBalancePolling() {
     
     // Reset contadores
     balanceErrorCount = 0;
+    balancePollingLogCount = 0;
     rpcRetryCount = 0;
     
     // Check inicial com delay para UI estabilizar
@@ -343,7 +345,13 @@ async function checkBalance() {
         
         // Reset contador de erros em sucesso
         balanceErrorCount = 0;
-        
+
+        // Debug: log polling result (first 3 polls only)
+        if (balanceErrorCount === 0 && balancePollingLogCount < 3) {
+            console.log('[Poll] BKC balance:', ethers.formatEther(newBalance), 'for', State.userAddress?.slice(0, 10) + '...');
+            balancePollingLogCount++;
+        }
+
         // Compara saldos corretamente (BigInt comparison)
         const currentBalance = State.currentUserBalance || 0n;
         const hasChanged = newBalance.toString() !== currentBalance.toString();
@@ -475,14 +483,26 @@ async function setupSignerAndLoadData(provider, address) {
         // Cache + Contratos
         loadCachedBalance(address);
         instantiateContracts(State.signer);
-        
+
+        // Debug: direct on-chain balance check
+        if (State.bkcTokenContractPublic && address) {
+            State.bkcTokenContractPublic.balanceOf(address).then(bal => {
+                console.log('[Wallet] Direct BKC balance check:', ethers.formatEther(bal), 'BKC for', address.slice(0, 10) + '...');
+            }).catch(e => console.warn('[Wallet] Direct balance check FAILED:', e.message));
+        } else {
+            console.warn('[Wallet] Cannot check balance — publicContract:', !!State.bkcTokenContractPublic, 'address:', !!address);
+        }
+
         // Login Firebase
         try { signIn(State.userAddress); } catch (e) { }
 
         // Carregamento Assíncrono - usa false para não forçar re-render
         loadUserData().then(() => {
+            console.log('[Wallet] loadUserData OK — BKC:', State.currentUserBalance?.toString(), 'ETH:', State.currentUserNativeBalance?.toString());
             if (window.updateUIState) window.updateUIState(false);
-        }).catch(() => {});
+        }).catch(e => {
+            console.warn('[Wallet] loadUserData FAILED:', e.message);
+        });
 
         startBalancePolling();
 
