@@ -1,9 +1,9 @@
 // api/upload-media.js
-// V2.0: Media upload via Pinata (IPFS permanent storage)
-// Used by: Agora posts (images, videos), avatars, VOD recordings
-// Supports: PINATA_JWT (primary)
+// V3.0: Unified media upload via Lighthouse (IPFS + Filecoin permanent storage)
+// Used by: Agora posts, avatars, Charity campaigns, general media
+// Supports: images, videos, audio — permanently stored, ~$0.005/GB
 
-import PinataSDK from '@pinata/sdk';
+import lighthouse from '@lighthouse-web3/sdk';
 import { Formidable } from 'formidable';
 import fs from 'fs';
 
@@ -14,8 +14,8 @@ export const config = {
     },
 };
 
-const IPFS_GATEWAY = 'https://gateway.pinata.cloud/ipfs/';
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB for video
+const IPFS_GATEWAY = 'https://gateway.lighthouse.storage/ipfs/';
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const ALLOWED_TYPES = [
     'video/webm', 'video/mp4', 'video/ogg',
     'audio/webm', 'audio/ogg', 'audio/mpeg',
@@ -38,9 +38,9 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
-    const JWT = process.env.PINATA_JWT;
-    if (!JWT) {
-        console.error('PINATA_JWT not configured');
+    const API_KEY = process.env.LIGHTHOUSE_API_KEY;
+    if (!API_KEY) {
+        console.error('LIGHTHOUSE_API_KEY not configured');
         return res.status(500).json({ error: 'Server configuration error.' });
     }
 
@@ -93,21 +93,17 @@ export default async function handler(req, res) {
         const sizeMB = (fileSize / (1024 * 1024)).toFixed(1);
         console.log(`Media: ${fileName} | Size: ${sizeMB} MB | Type: ${fileMime}`);
 
-        // Upload to IPFS via Pinata
-        const pinata = new PinataSDK({ pinataJWTKey: JWT });
-        const readStream = fs.createReadStream(file.filepath);
-        const result = await pinata.pinFileToIPFS(readStream, {
-            pinataMetadata: { name: `backchain-${fileName}` }
-        });
+        // Upload to IPFS + Filecoin via Lighthouse (permanent storage)
+        const result = await lighthouse.upload(file.filepath, API_KEY);
 
-        if (!result?.IpfsHash) {
-            throw new Error('Pinata upload returned no hash');
+        if (!result?.data?.Hash) {
+            throw new Error('Lighthouse upload returned no hash');
         }
 
-        const ipfsHash = result.IpfsHash;
+        const ipfsHash = result.data.Hash;
         const mediaUrl = `${IPFS_GATEWAY}${ipfsHash}`;
 
-        console.log('Media uploaded (Pinata):', mediaUrl);
+        console.log('Media uploaded (Lighthouse):', mediaUrl);
 
         return res.status(200).json({
             success: true,

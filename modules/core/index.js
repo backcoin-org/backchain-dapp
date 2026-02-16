@@ -78,14 +78,14 @@ export {
     OPERATOR_ZERO
 } from './operator.js';
 
-// Irys (Arweave) Decentralized Storage
+// Decentralized Storage (Lighthouse/Filecoin — permanent, ~$0.005/GB)
 export {
     uploadFile as irysUploadFile,
     uploadData as irysUploadData,
     getUploadPrice,
-    getBalance as irysGetBalance,
     resolveContentUrl,
     isArweaveContent,
+    UPLOAD_CONFIG,
     IRYS_CONFIG
 } from './irys-uploader.js';
 

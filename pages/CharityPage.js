@@ -42,7 +42,6 @@ const STATUS_CONFIG = {
 const CHARITY_API = {
     getCampaigns: 'https://getcharitycampaigns-4wvdcuoouq-uc.a.run.app',
     saveCampaign: 'https://savecharitycampaign-4wvdcuoouq-uc.a.run.app',
-    uploadImage: '/api/upload-image',
     uploadMedia: '/api/upload-media'
 };
 
