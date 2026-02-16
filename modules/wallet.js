@@ -400,9 +400,12 @@ async function ensureNetwork(provider) {
     } catch (e) { return true; }
 }
 
+let _setupInProgress = false;
 async function setupSignerAndLoadData(provider, address) {
+    if (_setupInProgress) return true; // Prevent concurrent calls during social login flow
+    _setupInProgress = true;
     try {
-        if (!validateEthereumAddress(address)) return false;
+        if (!validateEthereumAddress(address)) { _setupInProgress = false; return false; }
 
         const rawProvider = provider?.provider || State.web3Provider;
         const isEmbedded = !isExtensionWallet(rawProvider);
@@ -428,19 +431,24 @@ async function setupSignerAndLoadData(provider, address) {
             await ensureNetwork(provider);
         }
 
+        // For embedded wallets: patch BrowserProvider.send to handle eth_requestAccounts
+        // ethers v6 getSigner() always calls eth_requestAccounts internally,
+        // but embedded wallets block this method. Intercept and return known address.
+        if (isEmbedded && address) {
+            const origSend = provider.send.bind(provider);
+            provider.send = async function(method, params) {
+                if (method === 'eth_requestAccounts') return [address];
+                return origSend(method, params);
+            };
+        }
+
         State.provider = provider;
 
-        // Get signer: embedded wallets don't support eth_requestAccounts,
-        // so pass address explicitly to avoid that call
         try {
             State.signer = await provider.getSigner(address);
         } catch(signerError) {
-            try {
-                State.signer = await provider.getSigner();
-            } catch(e2) {
-                State.signer = provider;
-                console.warn(`Could not get Signer. Using Provider as read-only.`);
-            }
+            State.signer = provider;
+            console.warn(`Could not get Signer. Using Provider as read-only.`);
         }
         
         State.userAddress = address;
@@ -459,13 +467,15 @@ async function setupSignerAndLoadData(provider, address) {
         }).catch(() => {});
 
         startBalancePolling();
-        
+
         return true;
 
     } catch (error) {
         console.error("Setup warning:", error);
         if (address) return true;
         return false;
+    } finally {
+        _setupInProgress = false;
     }
 }
 
