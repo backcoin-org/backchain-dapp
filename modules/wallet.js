@@ -115,6 +115,16 @@ const web3modal = createWeb3Modal({
 /**
  * Verifica se um erro é relacionado a RPC
  */
+/**
+ * Detect if a provider is a native browser extension wallet (MetaMask, Rabby, etc.)
+ * vs an embedded/social wallet (Reown email, Google login).
+ * Embedded wallets don't support wallet_* RPC methods.
+ */
+function isExtensionWallet(provider) {
+    if (!provider) return false;
+    return !!(provider.isMetaMask || provider.isCoinbaseWallet || provider.isBraveWallet || provider.isRabby || provider.isTrust);
+}
+
 function isRpcError(error) {
     const errorMessage = error?.message?.toLowerCase() || '';
     const errorCode = error?.code || error?.error?.code;
@@ -372,10 +382,14 @@ async function checkBalance() {
 }
 
 async function ensureNetwork(provider) {
+    // Skip for embedded/social wallets — chain is pre-configured via Web3Modal
+    const rawProvider = provider?.provider || State.web3Provider;
+    if (!isExtensionWallet(rawProvider)) return true;
+
     try {
         const network = await provider.getNetwork();
         if (Number(network.chainId) === ARBITRUM_SEPOLIA_ID_DECIMAL) return true;
-        
+
         try {
             await provider.send("wallet_switchEthereumChain", [{ chainId: ARBITRUM_SEPOLIA_ID_HEX }]);
             return true;
@@ -433,7 +447,8 @@ async function setupSignerAndLoadData(provider, address) {
 export async function initPublicProvider() {
     try {
         // 🔥 V8.0: Verifica e corrige configuração de rede no MetaMask automaticamente
-        if (window.ethereum) {
+        // Only for extension wallets (MetaMask etc.) — embedded/social wallets don't support wallet_* methods
+        if (window.ethereum && isExtensionWallet(window.ethereum)) {
             const networkCheck = await ensureCorrectNetworkConfig();
             if (networkCheck.fixed) {
                 console.log('✅ MetaMask network config was auto-fixed');
@@ -469,21 +484,22 @@ export async function initPublicProvider() {
             console.warn("Initial public data load failed, will retry on user interaction");
         }
         
-        // 🔥 V8.0: Configura listener para mudanças de rede
-        setupNetworkChangeListener(async (info) => {
-            if (!info.isCorrectNetwork) {
-                console.log('⚠️ User switched to wrong network');
-                showToast("Please switch back to Arbitrum Sepolia", "warning");
-            } else {
-                // Rede correta, verifica se RPCs estão bons
-                const health = await checkRpcHealth();
-                if (!health.healthy) {
-                    console.log('⚠️ RPC issues after network change, updating...');
-                    await updateMetaMaskNetwork();
-                    await recreatePublicProvider();
+        // 🔥 V8.0: Configura listener para mudanças de rede (extension wallets only)
+        if (window.ethereum && isExtensionWallet(window.ethereum)) {
+            setupNetworkChangeListener(async (info) => {
+                if (!info.isCorrectNetwork) {
+                    console.log('⚠️ User switched to wrong network');
+                    showToast("Please switch back to Arbitrum Sepolia", "warning");
+                } else {
+                    const health = await checkRpcHealth();
+                    if (!health.healthy) {
+                        console.log('⚠️ RPC issues after network change, updating...');
+                        await updateMetaMaskNetwork();
+                        await recreatePublicProvider();
+                    }
                 }
-            }
-        });
+            });
+        }
         
         // 🔥 V8.0: Inicia monitoramento periódico de saúde do RPC
         startRpcHealthMonitoring();
@@ -496,7 +512,7 @@ export async function initPublicProvider() {
         console.error("Public provider error:", e);
         
         // 🔥 V8.0: Tenta corrigir MetaMask e usar próximo RPC
-        if (window.ethereum) {
+        if (window.ethereum && isExtensionWallet(window.ethereum)) {
             await updateMetaMaskNetwork();
         }
         
@@ -601,7 +617,9 @@ function startRpcHealthMonitoring() {
             if (!health.healthy) {
                 lastMetaMaskUpdateAttempt = now;
                 console.log('⚠️ RPC unhealthy on tab focus, fixing...');
-                await updateMetaMaskNetwork();
+                if (window.ethereum && isExtensionWallet(window.ethereum)) {
+                    await updateMetaMaskNetwork();
+                }
                 await recreatePublicProvider();
                 balanceErrorCount = 0;
                 rpcRetryCount = 0;
