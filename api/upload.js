@@ -117,7 +117,7 @@ export default async function handler(req, res) {
                 Buffer.from(`\r\n--${boundary}--\r\n`)
             ]);
             const opts = {
-                hostname: 'node.lighthouse.storage', path: '/api/v0/add', method: 'POST',
+                hostname: 'upload.lighthouse.storage', path: '/api/v0/add', method: 'POST',
                 headers: { 'Authorization': `Bearer ${API_KEY}`, 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': reqBody.length }
             };
             const r = https.request(opts, (resp) => {

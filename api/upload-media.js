@@ -33,7 +33,7 @@ function uploadToLighthouse(fileBuffer, fileName, mimeType, apiKey) {
         ]);
 
         const options = {
-            hostname: 'node.lighthouse.storage',
+            hostname: 'upload.lighthouse.storage',
             path: '/api/v0/add',
             method: 'POST',
             headers: {
