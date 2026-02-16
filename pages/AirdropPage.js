@@ -5,6 +5,8 @@ import { State } from '../state.js';
 import * as db from '../modules/firebase-auth-service.js';
 import { showToast, closeModal, openModal } from '../ui-feedback.js';
 import { formatAddress, renderNoData, formatBigNumber, renderLoading, renderError } from '../utils.js';
+import { NetworkManager } from '../modules/core/index.js';
+import { addresses, contractAddresses, agoraABI } from '../config.js';
 
 // ==========================================================
 //  1. CONSTANTES E HELPERS
@@ -27,6 +29,9 @@ function getRandomAuditMessage() {
 
 // Platform Usage Config (valores padrão - sobrescritos pelo Firebase)
 const DEFAULT_PLATFORM_USAGE_CONFIG = {
+    agoraProfile:{ icon: '👤', label: 'Create Profile', points: 3000,  maxCount: 1,  cooldownHours: 0,  enabled: true },
+    agoraPost:   { icon: '✍️', label: 'Post on Agora',  points: 2000,  maxCount: 20, cooldownHours: 0,  enabled: true },
+    agoraLike:   { icon: '❤️', label: 'Like a Post',    points: 500,   maxCount: 20, cooldownHours: 0,  enabled: true },
     faucet:      { icon: '🚰', label: 'Claim Faucet',    points: 1000,  maxCount: 1,  cooldownHours: 0,  enabled: true },
     delegation:  { icon: '📊', label: 'Delegate BKC',   points: 2000,  maxCount: 10, cooldownHours: 24, enabled: true },
     fortune:     { icon: '🎰', label: 'Play Fortune',   points: 1500,  maxCount: 10, cooldownHours: 1,  enabled: true },
@@ -40,6 +45,9 @@ const DEFAULT_PLATFORM_USAGE_CONFIG = {
 };
 
 const PLATFORM_ACTION_PAGES = {
+    agoraProfile:'agora',
+    agoraPost:   'agora',
+    agoraLike:   'agora',
     faucet:      'faucet',
     delegation:  'tokenomics',
     fortune:     'fortune',
@@ -99,7 +107,11 @@ let airdropState = {
     isBanned: false,
     activeTab: 'earn',
     activeRanking: 'posts',
-    historyExpanded: false
+    historyExpanded: false,
+    // Agora integration
+    agoraHasProfile: false,
+    agoraUsername: null,
+    agoraPosts: []
 };
 
 // ==========================================================
@@ -378,6 +390,49 @@ async function loadAirdropData() {
     }
 }
 
+// --- Agora On-Chain Data ---
+const EVENTS_LOOKBACK = -10_000_000;
+
+async function loadAgoraData() {
+    airdropState.agoraHasProfile = false;
+    airdropState.agoraUsername = null;
+    airdropState.agoraPosts = [];
+
+    if (!State.isConnected || !State.userAddress) return;
+    try {
+        const agora = addresses?.agora || contractAddresses?.agora || window.contractAddresses?.agora;
+        if (!agora) return;
+        const provider = NetworkManager.getProvider();
+        const contract = new window.ethers.Contract(agora, agoraABI, provider);
+
+        // Query profile + post events in parallel (indexed by user address)
+        const [profileEvents, postEvents] = await Promise.all([
+            contract.queryFilter(contract.filters.ProfileCreated(State.userAddress), EVENTS_LOOKBACK).catch(() => []),
+            contract.queryFilter(contract.filters.PostCreated(null, State.userAddress), EVENTS_LOOKBACK).catch(() => [])
+        ]);
+
+        if (profileEvents.length > 0) {
+            airdropState.agoraHasProfile = true;
+            airdropState.agoraUsername = profileEvents[0].args.username || profileEvents[0].args[1];
+        }
+
+        // Filter out replies (replyTo > 0) and reposts, keep original posts only
+        const originalPosts = postEvents.filter(ev => {
+            const contentHash = ev.args.contentHash || ev.args[4];
+            return contentHash && contentHash.length > 0;
+        });
+
+        airdropState.agoraPosts = originalPosts.slice(-5).reverse().map(ev => ({
+            postId: Number(ev.args.postId || ev.args[0]),
+            contentHash: ev.args.contentHash || ev.args[4],
+            contentType: Number(ev.args.contentType || ev.args[3]),
+            tag: Number(ev.args.tag || ev.args[2])
+        }));
+    } catch (e) {
+        console.warn('[Airdrop] Agora data:', e.message);
+    }
+}
+
 // =======================================================
 //  4. COMPONENTES DE RENDERIZACAO (UI) — V6.0 REDESIGN
 // =======================================================
@@ -618,75 +673,161 @@ function renderYourRankSnippet() {
     `;
 }
 
-// --- POST SECTION ---
+// --- POST SECTION (Agora-Integrated) ---
+function _getPostPreview(post) {
+    const ct = post.contentType;
+    if (ct === 1) return { icon: 'fa-image', text: 'Image post', color: 'text-blue-400' };
+    if (ct === 2) return { icon: 'fa-video', text: 'Video post', color: 'text-purple-400' };
+    if (ct === 3) return { icon: 'fa-link', text: 'Link post', color: 'text-cyan-400' };
+    // Text post — show first 80 chars
+    const raw = post.contentHash || '';
+    const preview = raw.length > 80 ? raw.slice(0, 77) + '...' : raw;
+    return { icon: 'fa-quote-left', text: preview || 'Text post', color: 'text-zinc-300' };
+}
+
+function _buildAgoraShareUrl(postId) {
+    const username = airdropState.agoraUsername;
+    const myAddress = State.userAddress || '';
+    const postParam = username ? `@${username}/${postId}` : `post=${postId}`;
+    const refParam = myAddress ? `&ref=${myAddress}` : '';
+    return `${window.location.origin}/#agora?${postParam}${refParam}`;
+}
+
+function _buildTweetIntent(postId, preview) {
+    const url = _buildAgoraShareUrl(postId);
+    const text = `${preview.length > 60 ? preview.slice(0, 57) + '...' : preview}\n\n${url}\n\n${DEFAULT_HASHTAGS}`;
+    return `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
+}
+
 function renderPostSection() {
-    const { user } = airdropState;
-    const refCode = user?.referralCode || 'CODE';
-    const shortLink = `https://backcoin.org/?ref=${refCode}`;
+    const { agoraHasProfile, agoraUsername, agoraPosts } = airdropState;
 
-    return `
-        <div class="bg-zinc-900/80 border border-zinc-800 rounded-2xl overflow-hidden">
-            <!-- Section Header -->
-            <div class="px-4 pt-4 pb-2">
-                <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                    <i class="fa-solid fa-share-nodes text-amber-400"></i> Post & Earn
-                </h2>
-                <p class="text-zinc-500 text-[10px] mt-0.5">Share on social media to climb the ranking</p>
-            </div>
-
-            <!-- Zone A: Share -->
-            <div class="px-4 pb-3">
-                <div class="bg-black/40 p-2.5 rounded-lg border border-zinc-700/50 mb-2.5">
-                    <p class="text-xs font-mono text-amber-400 break-all">${shortLink}</p>
-                    <p class="text-xs font-mono text-zinc-600 mt-0.5">${DEFAULT_HASHTAGS}</p>
+    // --- State 1: No Agora profile ---
+    if (!agoraHasProfile) {
+        return `
+            <div class="bg-gradient-to-br from-indigo-900/30 to-zinc-900/80 border border-indigo-500/30 rounded-2xl overflow-hidden">
+                <div class="px-4 pt-4 pb-2">
+                    <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-rocket text-indigo-400"></i> Share to Earn
+                    </h2>
+                    <p class="text-zinc-500 text-[10px] mt-0.5">Create posts on Agora, share on social media, earn points</p>
                 </div>
-
-                <div class="flex gap-2 items-center">
-                    <button id="copy-viral-btn" class="cta-mega text-black font-bold py-2 px-4 rounded-xl text-xs flex items-center gap-1.5 shrink-0">
-                        <i class="fa-solid fa-copy"></i> Copy
-                    </button>
-                    <div class="flex gap-1.5 flex-1 justify-end">
-                        <a href="https://twitter.com/intent/tweet?text=${encodeURIComponent(shortLink + ' ' + DEFAULT_HASHTAGS)}" target="_blank"
-                           class="social-btn w-9 h-9 rounded-lg bg-black/60 border border-zinc-700 hover:border-zinc-500 flex items-center justify-center">
-                            <i class="fa-brands fa-x-twitter text-white text-sm"></i>
-                        </a>
-                        <a href="https://www.tiktok.com" target="_blank"
-                           class="social-btn w-9 h-9 rounded-lg bg-black/60 border border-zinc-700 hover:border-zinc-500 flex items-center justify-center">
-                            <i class="fa-brands fa-tiktok text-white text-sm"></i>
-                        </a>
-                        <a href="https://www.instagram.com" target="_blank"
-                           class="social-btn w-9 h-9 rounded-lg bg-black/60 border border-zinc-700 hover:border-zinc-500 flex items-center justify-center">
-                            <i class="fa-brands fa-instagram text-pink-400 text-sm"></i>
-                        </a>
-                        <a href="https://www.youtube.com" target="_blank"
-                           class="social-btn w-9 h-9 rounded-lg bg-black/60 border border-zinc-700 hover:border-zinc-500 flex items-center justify-center">
-                            <i class="fa-brands fa-youtube text-red-500 text-sm"></i>
-                        </a>
+                <div class="px-4 pb-4 text-center">
+                    <div class="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-5 mb-3">
+                        <div class="text-3xl mb-2"><i class="fa-solid fa-user-plus text-indigo-400"></i></div>
+                        <p class="text-white font-bold text-sm mb-1">Create Your Agora Profile</p>
+                        <p class="text-zinc-400 text-xs mb-3">Join the decentralized social network to start earning points by sharing your posts.</p>
+                        <button class="agora-nav-btn cta-mega text-black font-bold py-2.5 px-6 rounded-xl text-sm" data-target="agora">
+                            <i class="fa-solid fa-arrow-right mr-1"></i> Go to Agora
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-3 text-zinc-500 text-[10px]">
+                        <div class="flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Create posts</div>
+                        <div class="text-zinc-700">→</div>
+                        <div class="flex items-center gap-1"><i class="fa-brands fa-x-twitter"></i> Share on X</div>
+                        <div class="text-zinc-700">→</div>
+                        <div class="flex items-center gap-1"><i class="fa-solid fa-coins"></i> Earn points</div>
                     </div>
                 </div>
+            </div>
+        `;
+    }
+
+    // --- State 2: Has profile but no recent posts ---
+    if (agoraPosts.length === 0) {
+        const profileLink = `${window.location.origin}/#agora?@${agoraUsername || ''}`;
+        return `
+            <div class="bg-zinc-900/80 border border-zinc-800 rounded-2xl overflow-hidden">
+                <div class="px-4 pt-4 pb-2">
+                    <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-share-nodes text-amber-400"></i> Share to Earn
+                    </h2>
+                    <p class="text-zinc-500 text-[10px] mt-0.5">Post on Agora → Share on social media → Submit link → Earn points</p>
+                </div>
+                <div class="px-4 pb-3 text-center">
+                    <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 mb-3">
+                        <p class="text-amber-400 font-bold text-sm mb-1"><i class="fa-solid fa-pen-fancy mr-1"></i> Create Your First Post</p>
+                        <p class="text-zinc-400 text-xs mb-3">Write something on Agora, then share it on social media to earn airdrop points!</p>
+                        <button class="agora-nav-btn cta-mega text-black font-bold py-2 px-5 rounded-xl text-sm" data-target="agora">
+                            <i class="fa-solid fa-plus mr-1"></i> Post on Agora
+                        </button>
+                    </div>
+                </div>
+                ${_renderSubmitSection()}
+            </div>
+        `;
+    }
+
+    // --- State 3: Has posts — show them with share buttons ---
+    return `
+        <div class="bg-zinc-900/80 border border-zinc-800 rounded-2xl overflow-hidden">
+            <div class="px-4 pt-4 pb-2 flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-share-nodes text-amber-400"></i> Share to Earn
+                    </h2>
+                    <p class="text-zinc-500 text-[10px] mt-0.5">Share your Agora posts on social media to earn points</p>
+                </div>
+                <button class="agora-nav-btn text-amber-400 hover:text-amber-300 text-xs font-medium transition-colors" data-target="agora">
+                    <i class="fa-solid fa-plus mr-1"></i>New Post
+                </button>
+            </div>
+
+            <!-- Posts to Share -->
+            <div class="px-4 pb-3 space-y-2">
+                ${agoraPosts.map(post => {
+                    const preview = _getPostPreview(post);
+                    const shareUrl = _buildAgoraShareUrl(post.postId);
+                    const tweetUrl = _buildTweetIntent(post.postId, preview.text);
+
+                    return `
+                        <div class="bg-black/40 border border-zinc-700/50 rounded-xl p-3 flex items-center gap-3">
+                            <div class="flex-1 min-w-0">
+                                <p class="text-xs ${preview.color} truncate">
+                                    <i class="fa-solid ${preview.icon} mr-1 text-[10px]"></i>${preview.text}
+                                </p>
+                                <p class="text-zinc-600 text-[9px] mt-0.5">#${post.postId}</p>
+                            </div>
+                            <div class="flex items-center gap-1.5 shrink-0">
+                                <a href="${tweetUrl}" target="_blank"
+                                   class="social-btn w-8 h-8 rounded-lg bg-black/60 border border-zinc-700 hover:border-blue-500/50 flex items-center justify-center" title="Share on X">
+                                    <i class="fa-brands fa-x-twitter text-white text-xs"></i>
+                                </a>
+                                <button class="social-btn copy-agora-link w-8 h-8 rounded-lg bg-black/60 border border-zinc-700 hover:border-amber-500/50 flex items-center justify-center" title="Copy link" data-url="${shareUrl}">
+                                    <i class="fa-solid fa-copy text-zinc-400 text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
             </div>
 
             <!-- Divider -->
             <div class="border-t border-zinc-800 mx-4"></div>
 
-            <!-- Zone B: Submit -->
-            <div class="px-4 py-3">
-                <p class="text-zinc-400 text-[10px] uppercase tracking-wider mb-2 flex items-center gap-1">
-                    <i class="fa-solid fa-link text-[8px]"></i> Submit your post link
-                </p>
-                <div class="relative">
-                    <input type="url" id="content-url-input"
-                           placeholder="Paste your post URL here..."
-                           class="w-full bg-black/50 border border-zinc-600 rounded-xl pl-3 pr-20 py-2.5 text-white text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none transition-all placeholder:text-zinc-600">
-                    <button id="submit-content-btn"
-                            class="absolute right-1.5 top-1.5 bottom-1.5 bg-green-600 hover:bg-green-500 text-white font-bold px-3 rounded-lg transition-all text-sm">
-                        Submit
-                    </button>
-                </div>
-                <p class="text-amber-400/60 text-[9px] mt-1.5 flex items-center gap-1">
-                    <i class="fa-solid fa-exclamation-circle"></i> Post must be PUBLIC • 2h audit before earning
-                </p>
+            ${_renderSubmitSection()}
+        </div>
+    `;
+}
+
+function _renderSubmitSection() {
+    return `
+        <div class="px-4 py-3">
+            <p class="text-zinc-400 text-[10px] uppercase tracking-wider mb-2 flex items-center gap-1">
+                <i class="fa-solid fa-link text-[8px]"></i> Submit your social media post link
+            </p>
+            <div class="relative">
+                <input type="url" id="content-url-input"
+                       placeholder="Paste your X / TikTok / Instagram post URL..."
+                       class="w-full bg-black/50 border border-zinc-600 rounded-xl pl-3 pr-20 py-2.5 text-white text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none transition-all placeholder:text-zinc-600">
+                <button id="submit-content-btn"
+                        class="absolute right-1.5 top-1.5 bottom-1.5 bg-green-600 hover:bg-green-500 text-white font-bold px-3 rounded-lg transition-all text-sm">
+                    Submit
+                </button>
             </div>
+            <p class="text-amber-400/60 text-[9px] mt-1.5 flex items-center gap-1">
+                <i class="fa-solid fa-exclamation-circle"></i> Share an Agora post on social media, then paste the link here • 2h audit
+            </p>
         </div>
     `;
 }
@@ -1422,7 +1563,7 @@ export const AirdropPage = {
         try {
             const minLoadingTime = new Promise(resolve => setTimeout(resolve, 1500));
 
-            await Promise.all([loadAirdropData(), minLoadingTime]);
+            await Promise.all([loadAirdropData(), loadAgoraData(), minLoadingTime]);
 
             const loader = document.getElementById('loading-state');
             const mainArea = document.getElementById('airdrop-main');
@@ -1457,12 +1598,30 @@ export const AirdropPage = {
             if(e.target.closest('#submit-content-btn')) handleSubmitUgc(e);
             if(e.target.closest('.task-card')) handleTaskClick(e);
             if(e.target.closest('.action-btn')) handleSubmissionAction(e);
-            if(e.target.closest('#copy-viral-btn')) handleCopySmartLink();
+            // copy-viral-btn removed — now uses per-post copy-agora-link
             if(e.target.closest('.ranking-tab-btn')) handleRankingSwitch(e);
             if(e.target.closest('.nav-pill-btn')) handleTabSwitch(e);
             if(e.target.closest('#history-toggle-btn')) handleHistoryToggle();
             if(e.target.closest('#action-required-btn')) handleActionRequiredClick();
             if(e.target.closest('#rank-snippet-btn')) { airdropState.activeTab = 'ranking'; updateContent(); }
+
+            // Navigate to Agora
+            const agoraBtn = e.target.closest('.agora-nav-btn');
+            if (agoraBtn) { handlePlatformCardClick(agoraBtn.dataset.target || 'agora'); return; }
+
+            // Copy Agora post share link
+            const copyLink = e.target.closest('.copy-agora-link');
+            if (copyLink) {
+                const url = copyLink.dataset.url;
+                if (url) {
+                    navigator.clipboard.writeText(url).then(() => {
+                        showToast('Link copied! Paste it on social media.', 'success');
+                        const icon = copyLink.querySelector('i');
+                        if (icon) { icon.className = 'fa-solid fa-check text-green-400 text-xs'; setTimeout(() => { icon.className = 'fa-solid fa-copy text-zinc-400 text-xs'; }, 2000); }
+                    }).catch(() => showToast('Failed to copy.', 'error'));
+                }
+                return;
+            }
 
             const platformCard = e.target.closest('.platform-action-card');
             if (platformCard && !platformCard.classList.contains('completed')) {
