@@ -417,38 +417,44 @@ async function setupSignerAndLoadData(provider, address) {
                 if (chainId !== ARBITRUM_SEPOLIA_ID_DECIMAL) {
                     console.log(`[Wallet] Embedded wallet on chain ${chainId}, switching to Arbitrum Sepolia...`);
                     await web3modal.switchNetwork(ARBITRUM_SEPOLIA_ID_DECIMAL);
-                    // Re-create provider after network switch
-                    const newWalletProvider = web3modal.getWalletProvider();
-                    if (newWalletProvider) {
-                        provider = new ethers.BrowserProvider(newWalletProvider);
-                    }
                     console.log('[Wallet] Embedded wallet switched to Arbitrum Sepolia');
                 }
             } catch (e) {
                 console.warn('[Wallet] Embedded wallet network switch:', e.message);
             }
+
+            // Patch the raw EIP-1193 wallet provider to intercept eth_requestAccounts.
+            // ethers v6 BrowserProvider.getSigner() calls _send() → #request() → rawProvider.request()
+            // via a private closure, so patching BrowserProvider.send is NOT sufficient.
+            // We must patch at the raw provider level.
+            if (address) {
+                const rawWP = web3modal.getWalletProvider() || State.web3Provider;
+                if (rawWP && rawWP.request && !rawWP._bkcPatched) {
+                    const origRequest = rawWP.request.bind(rawWP);
+                    rawWP.request = async function(args) {
+                        if (args?.method === 'eth_requestAccounts') {
+                            console.log('[Wallet] Intercepted eth_requestAccounts → returning known address');
+                            return [address];
+                        }
+                        return origRequest(args);
+                    };
+                    rawWP._bkcPatched = true;
+                }
+                // Re-create BrowserProvider from patched raw provider
+                provider = new ethers.BrowserProvider(rawWP);
+            }
         } else {
             await ensureNetwork(provider);
-        }
-
-        // For embedded wallets: patch BrowserProvider.send to handle eth_requestAccounts
-        // ethers v6 getSigner() always calls eth_requestAccounts internally,
-        // but embedded wallets block this method. Intercept and return known address.
-        if (isEmbedded && address) {
-            const origSend = provider.send.bind(provider);
-            provider.send = async function(method, params) {
-                if (method === 'eth_requestAccounts') return [address];
-                return origSend(method, params);
-            };
         }
 
         State.provider = provider;
 
         try {
             State.signer = await provider.getSigner(address);
+            console.log('[Wallet] Signer obtained successfully for', address.slice(0, 10) + '...');
         } catch(signerError) {
             State.signer = provider;
-            console.warn(`Could not get Signer. Using Provider as read-only.`);
+            console.warn(`Could not get Signer. Using Provider as read-only.`, signerError.message);
         }
         
         State.userAddress = address;

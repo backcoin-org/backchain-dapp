@@ -33,6 +33,7 @@
 // ============================================================================
 
 import { ErrorHandler, ErrorTypes } from './error-handler.js';
+import { State } from '../../state.js';
 
 // ============================================================================
 // 1. NETWORK CONFIGURATION
@@ -359,20 +360,28 @@ export const NetworkManager = {
      * @returns {Promise<boolean>} true if on correct network
      */
     async isCorrectNetwork() {
-        if (!window.ethereum) {
-            return false;
+        // Try window.ethereum first (extension wallets like MetaMask)
+        if (window.ethereum) {
+            try {
+                const chainIdHex = await window.ethereum.request({
+                    method: 'eth_chainId'
+                });
+                const chainId = parseInt(chainIdHex, 16);
+                return chainId === NETWORK_CONFIG.chainId;
+            } catch (error) {
+                // Fall through to State.provider fallback
+            }
         }
 
-        try {
-            const chainIdHex = await window.ethereum.request({ 
-                method: 'eth_chainId' 
-            });
-            const chainId = parseInt(chainIdHex, 16);
-            return chainId === NETWORK_CONFIG.chainId;
-        } catch (error) {
-            console.error('[Network] Error checking network:', error);
-            return false;
+        // Fallback for embedded/social wallets: check via State.provider
+        if (State.provider) {
+            try {
+                const network = await State.provider.getNetwork();
+                return Number(network.chainId) === NETWORK_CONFIG.chainId;
+            } catch (e) { /* fall through */ }
         }
+
+        return false;
     },
 
     /**
@@ -380,16 +389,25 @@ export const NetworkManager = {
      * @returns {Promise<number|null>} Chain ID or null
      */
     async getCurrentChainId() {
-        if (!window.ethereum) return null;
-
-        try {
-            const chainIdHex = await window.ethereum.request({ 
-                method: 'eth_chainId' 
-            });
-            return parseInt(chainIdHex, 16);
-        } catch {
-            return null;
+        // Try window.ethereum first (extension wallets)
+        if (window.ethereum) {
+            try {
+                const chainIdHex = await window.ethereum.request({
+                    method: 'eth_chainId'
+                });
+                return parseInt(chainIdHex, 16);
+            } catch { /* fall through */ }
         }
+
+        // Fallback for embedded/social wallets
+        if (State.provider) {
+            try {
+                const network = await State.provider.getNetwork();
+                return Number(network.chainId);
+            } catch { /* fall through */ }
+        }
+
+        return null;
     },
 
     // =========================================================================
@@ -728,16 +746,20 @@ export const NetworkManager = {
      * @returns {Promise<string|null>} Address or null
      */
     async getConnectedAddress() {
-        if (!window.ethereum) return null;
-
-        try {
-            const accounts = await window.ethereum.request({
-                method: 'eth_accounts'
-            });
-            return accounts[0] || null;
-        } catch {
-            return null;
+        // Try window.ethereum first (extension wallets)
+        if (window.ethereum) {
+            try {
+                const accounts = await window.ethereum.request({
+                    method: 'eth_accounts'
+                });
+                if (accounts[0]) return accounts[0];
+            } catch { /* fall through */ }
         }
+
+        // Fallback for embedded/social wallets
+        if (State.userAddress) return State.userAddress;
+
+        return null;
     },
 
     /**
