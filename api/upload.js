@@ -2,11 +2,12 @@
 // ✅ VERSION V3.0: Migrated from Pinata to Lighthouse (IPFS+Filecoin permanent storage)
 // Used by: Notary document upload with signature verification
 
-import lighthouse from '@lighthouse-web3/sdk';
 import { Formidable } from 'formidable';
 import fs from 'fs';
 import { ethers } from 'ethers';
 import crypto from 'crypto';
+
+const LIGHTHOUSE_UPLOAD_URL = 'https://node.lighthouse.storage/api/v0/add';
 
 export const config = {
     api: {
@@ -108,14 +109,28 @@ export default async function handler(req, res) {
         hashSum.update(fileBuffer);
         const contentHash = '0x' + hashSum.digest('hex');
 
-        // Upload to IPFS+Filecoin via Lighthouse (permanent storage)
-        const result = await lighthouse.upload(file.filepath, API_KEY);
+        // Upload to IPFS+Filecoin via Lighthouse REST API (permanent storage)
+        const blob = new Blob([fileBuffer], { type: fileMime });
+        const formData = new FormData();
+        formData.append('file', blob, fileName);
 
-        if (!result?.data?.Hash) {
-            throw new Error('Lighthouse upload returned no hash');
+        const lhResponse = await fetch(LIGHTHOUSE_UPLOAD_URL, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${API_KEY}` },
+            body: formData
+        });
+
+        if (!lhResponse.ok) {
+            const errText = await lhResponse.text().catch(() => '');
+            throw new Error(`Lighthouse HTTP ${lhResponse.status}: ${errText.slice(0, 200)}`);
         }
 
-        const ipfsHash = result.data.Hash;
+        const lhData = await lhResponse.json();
+        const ipfsHash = lhData?.Hash;
+
+        if (!ipfsHash) {
+            throw new Error('Lighthouse returned no hash: ' + JSON.stringify(lhData).slice(0, 200));
+        }
         const ipfsUri = `ipfs://${ipfsHash}`;
 
         console.log('Uploaded (Lighthouse):', ipfsUri);

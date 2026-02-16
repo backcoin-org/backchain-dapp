@@ -1,11 +1,11 @@
 // api/upload-media.js
-// V3.0: Unified media upload via Lighthouse (IPFS + Filecoin permanent storage)
+// V3.1: Unified media upload via Lighthouse REST API (IPFS + Filecoin permanent storage)
+// Uses direct REST API instead of SDK for reliable serverless operation.
 // Used by: Agora posts, avatars, Charity campaigns, general media
-// Supports: images, videos, audio — permanently stored, ~$0.005/GB
 
-import lighthouse from '@lighthouse-web3/sdk';
 import { Formidable } from 'formidable';
 import fs from 'fs';
+import path from 'path';
 
 export const config = {
     api: {
@@ -14,6 +14,7 @@ export const config = {
     },
 };
 
+const LIGHTHOUSE_UPLOAD_URL = 'https://node.lighthouse.storage/api/v0/add';
 const IPFS_GATEWAY = 'https://gateway.lighthouse.storage/ipfs/';
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const ALLOWED_TYPES = [
@@ -69,15 +70,9 @@ export default async function handler(req, res) {
         });
 
         file = (files.file && Array.isArray(files.file)) ? files.file[0] : files.file;
-        if (!file) {
-            file = (files.image && Array.isArray(files.image)) ? files.image[0] : files.image;
-        }
-        if (!file) {
-            file = (files.video && Array.isArray(files.video)) ? files.video[0] : files.video;
-        }
-        if (!file) {
-            file = (files.media && Array.isArray(files.media)) ? files.media[0] : files.media;
-        }
+        if (!file) file = (files.image && Array.isArray(files.image)) ? files.image[0] : files.image;
+        if (!file) file = (files.video && Array.isArray(files.video)) ? files.video[0] : files.video;
+        if (!file) file = (files.media && Array.isArray(files.media)) ? files.media[0] : files.media;
 
         if (!file) {
             return res.status(400).json({ error: 'No file received.' });
@@ -93,16 +88,32 @@ export default async function handler(req, res) {
         const sizeMB = (fileSize / (1024 * 1024)).toFixed(1);
         console.log(`Media: ${fileName} | Size: ${sizeMB} MB | Type: ${fileMime}`);
 
-        // Upload to IPFS + Filecoin via Lighthouse (permanent storage)
-        const result = await lighthouse.upload(file.filepath, API_KEY);
+        // Read file buffer and upload via Lighthouse REST API
+        const fileBuffer = fs.readFileSync(file.filepath);
+        const blob = new Blob([fileBuffer], { type: fileMime });
 
-        if (!result?.data?.Hash) {
-            throw new Error('Lighthouse upload returned no hash');
+        const formData = new FormData();
+        formData.append('file', blob, fileName);
+
+        const lhResponse = await fetch(LIGHTHOUSE_UPLOAD_URL, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${API_KEY}` },
+            body: formData
+        });
+
+        if (!lhResponse.ok) {
+            const errText = await lhResponse.text().catch(() => '');
+            throw new Error(`Lighthouse HTTP ${lhResponse.status}: ${errText.slice(0, 200)}`);
         }
 
-        const ipfsHash = result.data.Hash;
-        const mediaUrl = `${IPFS_GATEWAY}${ipfsHash}`;
+        const lhData = await lhResponse.json();
+        const ipfsHash = lhData?.Hash;
 
+        if (!ipfsHash) {
+            throw new Error('Lighthouse returned no hash: ' + JSON.stringify(lhData).slice(0, 200));
+        }
+
+        const mediaUrl = `${IPFS_GATEWAY}${ipfsHash}`;
         console.log('Media uploaded (Lighthouse):', mediaUrl);
 
         return res.status(200).json({
@@ -121,7 +132,7 @@ export default async function handler(req, res) {
             return res.status(413).json({ error: 'File too large. Maximum 100MB for media.' });
         }
 
-        return res.status(500).json({ error: 'Upload failed', details: error.message });
+        return res.status(500).json({ error: 'Upload failed: ' + error.message });
 
     } finally {
         if (file && file.filepath && fs.existsSync(file.filepath)) {

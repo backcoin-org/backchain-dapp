@@ -44,7 +44,6 @@
     "node": "20.x"
   },
   "dependencies": {
-    "@lighthouse-web3/sdk": "^0.4.4",
     "@openzeppelin/contracts": "^4.9.3",
     "@openzeppelin/contracts-upgradeable": "4.9.3",
     "@vercel/analytics": "^1.5.0",
