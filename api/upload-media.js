@@ -5,7 +5,7 @@
 
 import { Formidable } from 'formidable';
 import fs from 'fs';
-import path from 'path';
+import crypto from 'crypto';
 
 export const config = {
     api: {
@@ -88,17 +88,22 @@ export default async function handler(req, res) {
         const sizeMB = (fileSize / (1024 * 1024)).toFixed(1);
         console.log(`Media: ${fileName} | Size: ${sizeMB} MB | Type: ${fileMime}`);
 
-        // Read file buffer and upload via Lighthouse REST API
+        // Read file buffer and upload via Lighthouse REST API (manual multipart)
         const fileBuffer = fs.readFileSync(file.filepath);
-        const blob = new Blob([fileBuffer], { type: fileMime });
-
-        const formData = new FormData();
-        formData.append('file', blob, fileName);
+        const boundary = '----LH' + crypto.randomBytes(16).toString('hex');
+        const body = Buffer.concat([
+            Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: ${fileMime}\r\n\r\n`),
+            fileBuffer,
+            Buffer.from(`\r\n--${boundary}--\r\n`)
+        ]);
 
         const lhResponse = await fetch(LIGHTHOUSE_UPLOAD_URL, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${API_KEY}` },
-            body: formData
+            headers: {
+                'Authorization': `Bearer ${API_KEY}`,
+                'Content-Type': `multipart/form-data; boundary=${boundary}`
+            },
+            body
         });
 
         if (!lhResponse.ok) {

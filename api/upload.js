@@ -109,15 +109,21 @@ export default async function handler(req, res) {
         hashSum.update(fileBuffer);
         const contentHash = '0x' + hashSum.digest('hex');
 
-        // Upload to IPFS+Filecoin via Lighthouse REST API (permanent storage)
-        const blob = new Blob([fileBuffer], { type: fileMime });
-        const formData = new FormData();
-        formData.append('file', blob, fileName);
+        // Upload to IPFS+Filecoin via Lighthouse REST API (manual multipart)
+        const boundary = '----LH' + crypto.randomBytes(16).toString('hex');
+        const body = Buffer.concat([
+            Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: ${fileMime}\r\n\r\n`),
+            fileBuffer,
+            Buffer.from(`\r\n--${boundary}--\r\n`)
+        ]);
 
         const lhResponse = await fetch(LIGHTHOUSE_UPLOAD_URL, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${API_KEY}` },
-            body: formData
+            headers: {
+                'Authorization': `Bearer ${API_KEY}`,
+                'Content-Type': `multipart/form-data; boundary=${boundary}`
+            },
+            body
         });
 
         if (!lhResponse.ok) {
