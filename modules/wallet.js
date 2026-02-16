@@ -49,7 +49,6 @@ let balancePollingInterval = null;
 // 🔥 V6.9: Variáveis para controle de throttle
 let lastBalanceUpdate = 0;
 let balanceErrorCount = 0;
-let balancePollingLogCount = 0;
 const BALANCE_UPDATE_THROTTLE_MS = 5000;  // Mínimo 5s entre updates de UI
 const MAX_BALANCE_ERRORS = 3;              // Para de tentar após 3 erros
 const POLLING_INTERVAL_MS = 60000;         // 60s entre checks (otimizado: 30s→60s para reduzir RPC Alchemy)
@@ -294,34 +293,39 @@ function instantiateContracts(signerOrProvider) {
     } catch (e) { console.warn("Contract init partial failure"); }
 }
 
-// 🔥 V7.0: Balance polling com fallback de RPC
+// Balance polling — aggressive initially (5s × 5), then slows to 60s
+let _fastPollCount = 0;
+const FAST_POLL_INTERVAL = 5000;   // 5s for first polls
+const FAST_POLL_MAX = 5;           // 5 fast polls after connect
+
 function startBalancePolling() {
-    // Limpa interval existente
     if (balancePollingInterval) {
         clearInterval(balancePollingInterval);
         balancePollingInterval = null;
     }
-    
-    // Valida requisitos
+
     if (!State.bkcTokenContractPublic || !State.userAddress) {
         console.warn("Cannot start balance polling: missing contract or address");
         return;
     }
-    
-    // Reset contadores
+
     balanceErrorCount = 0;
-    balancePollingLogCount = 0;
     rpcRetryCount = 0;
-    
-    // Check inicial com delay para UI estabilizar
-    setTimeout(() => {
+    _fastPollCount = 0;
+
+    // Fast polling phase: 5s intervals for first 5 checks (catches post-claim balance quickly)
+    balancePollingInterval = setInterval(() => {
         checkBalance();
-    }, 1000);
-    
-    // Inicia polling com intervalo de 10s
-    balancePollingInterval = setInterval(checkBalance, POLLING_INTERVAL_MS);
-    
-    console.log("✅ Balance polling started (60s interval)");
+        _fastPollCount++;
+        if (_fastPollCount >= FAST_POLL_MAX) {
+            // Switch to slow polling
+            clearInterval(balancePollingInterval);
+            balancePollingInterval = setInterval(checkBalance, POLLING_INTERVAL_MS);
+            console.log('✅ Balance polling: switched to 60s interval');
+        }
+    }, FAST_POLL_INTERVAL);
+
+    console.log("✅ Balance polling started (5s fast → 60s normal)");
 }
 
 // 🔥 V7.0: Check balance com suporte a multi-RPC
@@ -346,25 +350,27 @@ async function checkBalance() {
         // Reset contador de erros em sucesso
         balanceErrorCount = 0;
 
-        // Debug: log polling result (first 3 polls only)
-        if (balanceErrorCount === 0 && balancePollingLogCount < 3) {
-            console.log('[Poll] BKC balance:', ethers.formatEther(newBalance), 'for', State.userAddress?.slice(0, 10) + '...');
-            balancePollingLogCount++;
-        }
-
         // Compara saldos corretamente (BigInt comparison)
         const currentBalance = State.currentUserBalance || 0n;
         const hasChanged = newBalance.toString() !== currentBalance.toString();
-        
+
         if (hasChanged) {
+            console.log('[Poll] Balance changed:', ethers.formatEther(currentBalance), '→', ethers.formatEther(newBalance), 'BKC');
             State.currentUserBalance = newBalance;
             localStorage.setItem(`balance_${State.userAddress.toLowerCase()}`, newBalance.toString());
-            
-            // THROTTLE: Só atualiza UI se passou tempo suficiente
-            if (now - lastBalanceUpdate > BALANCE_UPDATE_THROTTLE_MS) {
-                lastBalanceUpdate = now;
-                if (window.updateUIState) window.updateUIState(false);
-            }
+
+            // Update UI immediately on balance change (no throttle for actual changes)
+            if (window.updateUIState) window.updateUIState(false);
+        }
+
+        // Also read ETH balance during fast poll phase
+        if (_fastPollCount < FAST_POLL_MAX && State.publicProvider) {
+            try {
+                const ethBal = await State.publicProvider.getBalance(State.userAddress);
+                if (ethBal !== State.currentUserNativeBalance) {
+                    State.currentUserNativeBalance = ethBal;
+                }
+            } catch (_) { /* ignore */ }
         }
         
     } catch (error) {
@@ -414,41 +420,39 @@ async function ensureNetwork(provider) {
 }
 
 let _setupInProgress = false;
+let _pendingSetupAddress = null; // Queue re-setup if blocked by _setupInProgress
+
 async function setupSignerAndLoadData(provider, address) {
-    if (_setupInProgress) return true; // Prevent concurrent calls during social login flow
+    if (_setupInProgress) {
+        // Queue this address for data reload after current setup finishes
+        _pendingSetupAddress = address;
+        console.log('[Wallet] Setup in progress, queued reload for', address?.slice(0, 10));
+        return true;
+    }
     _setupInProgress = true;
     try {
         if (!validateEthereumAddress(address)) { _setupInProgress = false; return false; }
 
         const rawProvider = provider?.provider || State.web3Provider;
         const isEmbedded = !isExtensionWallet(rawProvider);
-        console.log(`[Wallet] Setup: isEmbedded=${isEmbedded}, address=${address?.slice(0,10)}...`);
 
         // Network: extension wallets use RPC, embedded wallets use Web3Modal API
         if (isEmbedded) {
             try {
                 const chainId = web3modal.getChainId();
-                console.log(`[Wallet] Embedded wallet chainId: ${chainId} (need: ${ARBITRUM_SEPOLIA_ID_DECIMAL})`);
                 if (chainId !== ARBITRUM_SEPOLIA_ID_DECIMAL) {
-                    console.log(`[Wallet] Switching embedded wallet to Arbitrum Sepolia...`);
+                    console.log(`[Wallet] Embedded wallet on chain ${chainId}, switching...`);
                     await web3modal.switchNetwork(ARBITRUM_SEPOLIA_ID_DECIMAL);
-                    // Dismiss the "wrong network" banner/modal
                     try { web3modal.close(); } catch(_) {}
-                    const newChainId = web3modal.getChainId();
-                    console.log(`[Wallet] After switch, chainId: ${newChainId}`);
-                } else {
-                    console.log('[Wallet] Embedded wallet already on Arbitrum Sepolia');
                 }
             } catch (e) {
-                console.warn('[Wallet] Embedded wallet network switch error:', e.message);
+                console.warn('[Wallet] Network switch error:', e.message);
             }
 
             // Get fresh wallet provider after any potential network switch
             if (address) {
                 const rawWP = web3modal.getWalletProvider() || State.web3Provider;
                 if (rawWP) {
-                    // Patch raw provider for any future eth_requestAccounts calls
-                    // (needed by other code that might call getSigner later)
                     if (rawWP.request && !rawWP._bkcPatched) {
                         const origRequest = rawWP.request.bind(rawWP);
                         rawWP.request = async function(args) {
@@ -458,9 +462,6 @@ async function setupSignerAndLoadData(provider, address) {
                         rawWP._bkcPatched = true;
                     }
                     provider = new ethers.BrowserProvider(rawWP);
-                    console.log('[Wallet] BrowserProvider created from raw wallet provider');
-                } else {
-                    console.warn('[Wallet] No raw wallet provider available!');
                 }
             }
         } else {
@@ -471,53 +472,28 @@ async function setupSignerAndLoadData(provider, address) {
 
         try {
             if (isEmbedded && address) {
-                // Construct JsonRpcSigner directly — bypasses eth_requestAccounts entirely.
-                // getSigner() always calls eth_requestAccounts internally which embedded
-                // wallets block. Direct construction just stores provider + address.
                 State.signer = new ethers.JsonRpcSigner(provider, address);
                 console.log('[Wallet] Embedded signer created for', address.slice(0, 10) + '...');
             } else {
                 State.signer = await provider.getSigner(address);
-                console.log('[Wallet] Signer obtained for', address.slice(0, 10) + '...');
             }
         } catch(signerError) {
             State.signer = provider;
-            console.warn(`Could not get Signer. Using Provider as read-only.`, signerError.message);
+            console.warn('Could not get Signer. Read-only mode.', signerError.message);
         }
-        
+
         State.userAddress = address;
-        State.isConnected = true; 
+        State.isConnected = true;
 
         // Cache + Contratos
         loadCachedBalance(address);
         instantiateContracts(State.signer);
 
-        // Debug: verify public contract and chain state
-        console.log('[Wallet] State check — publicProvider:', !!State.publicProvider, 'bkcPublic:', !!State.bkcTokenContractPublic, 'signer:', !!State.signer);
-        if (State.bkcTokenContractPublic && address) {
-            State.bkcTokenContractPublic.balanceOf(address).then(bal => {
-                console.log('[Wallet] Direct BKC balance (via Alchemy):', ethers.formatEther(bal), 'BKC for', address.slice(0, 10) + '...');
-            }).catch(e => console.warn('[Wallet] Direct balance check FAILED:', e.message));
-            // Also check ETH via public provider
-            if (State.publicProvider) {
-                State.publicProvider.getBalance(address).then(eth => {
-                    console.log('[Wallet] Direct ETH balance (via Alchemy):', ethers.formatEther(eth), 'ETH');
-                }).catch(e => console.warn('[Wallet] Direct ETH check FAILED:', e.message));
-            }
-        } else {
-            console.warn('[Wallet] Cannot check balance — publicContract:', !!State.bkcTokenContractPublic, 'address:', !!address);
-        }
-
         // Login Firebase
         try { signIn(State.userAddress); } catch (e) { }
 
-        // Carregamento Assíncrono - usa false para não forçar re-render
-        loadUserData().then(() => {
-            console.log('[Wallet] loadUserData OK — BKC:', State.currentUserBalance?.toString(), 'ETH:', State.currentUserNativeBalance?.toString());
-            if (window.updateUIState) window.updateUIState(false);
-        }).catch(e => {
-            console.warn('[Wallet] loadUserData FAILED:', e.message);
-        });
+        // Load balance data — ALWAYS force refresh on initial setup to bypass stale cache
+        await loadAndDisplayBalance(address, true);
 
         startBalancePolling();
 
@@ -529,6 +505,38 @@ async function setupSignerAndLoadData(provider, address) {
         return false;
     } finally {
         _setupInProgress = false;
+        // Process queued re-setup (from subscribeProvider events during switchNetwork)
+        if (_pendingSetupAddress) {
+            const pendingAddr = _pendingSetupAddress;
+            _pendingSetupAddress = null;
+            // Just reload data, no need to re-create signer
+            loadAndDisplayBalance(pendingAddr, true);
+        }
+    }
+}
+
+/**
+ * Load balance from Alchemy (public provider) and update UI.
+ * Falls back to direct contract call if loadUserData fails.
+ */
+async function loadAndDisplayBalance(address, forceRefresh = false) {
+    try {
+        await loadUserData(forceRefresh);
+        if (window.updateUIState) window.updateUIState(false);
+    } catch (e) {
+        console.warn('[Wallet] loadUserData failed:', e.message);
+    }
+
+    // Safety net: if balance is still 0/undefined, try direct Alchemy read
+    if (!State.currentUserBalance && State.bkcTokenContractPublic && address) {
+        try {
+            const bal = await State.bkcTokenContractPublic.balanceOf(address);
+            if (bal > 0n) {
+                State.currentUserBalance = bal;
+                console.log('[Wallet] Direct balance read:', ethers.formatEther(bal), 'BKC');
+                if (window.updateUIState) window.updateUIState(false);
+            }
+        } catch (e) { /* Alchemy read failed, polling will catch it later */ }
     }
 }
 

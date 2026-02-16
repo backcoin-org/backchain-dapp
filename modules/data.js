@@ -279,16 +279,14 @@ export async function loadUserData(forceRefresh = false) {
 
         if (balance.status === 'fulfilled') {
             State.currentUserBalance = balance.value;
-            console.log('[Data] BKC balance loaded:', balance.value?.toString());
         } else {
-            console.warn('[Data] BKC balance FAILED:', balance.reason?.message);
+            console.warn('[Data] BKC balance read failed:', balance.reason?.message);
         }
 
         if (nativeBalance.status === 'fulfilled') {
             State.currentUserNativeBalance = nativeBalance.value;
-            console.log('[Data] ETH balance loaded:', nativeBalance.value?.toString());
         } else {
-            console.warn('[Data] ETH balance FAILED:', nativeBalance.reason?.message);
+            console.warn('[Data] ETH balance read failed:', nativeBalance.reason?.message);
         }
 
         await loadMyBoostersFromAPI(forceRefresh);
