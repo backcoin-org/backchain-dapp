@@ -8,8 +8,8 @@ import { irysUploadFile } from '../../modules/core/index.js';
 import { showToast } from '../../ui-feedback.js';
 import { addresses } from '../../config.js';
 import { NT, EXPLORER_ADDR } from './state.js';
-import { resolveStorageUrl } from './utils.js';
-import { showOverlay, hideOverlay } from './overlay.js';
+import { resolveStorageUrl, getFileTypeInfo } from './utils.js';
+import { showOverlay, hideOverlay, showNftCard } from './overlay.js';
 import { loadFees, loadCertificates } from './data-loader.js';
 
 // ============================================================================
@@ -192,6 +192,23 @@ export async function handleMint() {
             showToast(e.message || 'Certification failed', 'error');
         }
     }
+}
+
+// ============================================================================
+// NFT CARD OVERLAY
+// ============================================================================
+
+export function showCertCard() {
+    const cert = NT.selectedCert;
+    if (!cert) return;
+
+    const imageUrl = resolveStorageUrl(cert.ipfs);
+    const fileInfo = getFileTypeInfo(cert.mimeType || '', cert.description || '');
+    showNftCard(cert, imageUrl, fileInfo);
+}
+
+export function hideNftCard() {
+    hideOverlay();
 }
 
 // ============================================================================
