@@ -132,7 +132,7 @@ export async function handleMint() {
         showOverlay('minting');
 
         const meta = JSON.stringify({
-            uri: `ar://${uploadResult.id}`,
+            uri: `ipfs://${uploadResult.id}`,
             name: NT.wizFile.name,
             size: NT.wizFile.size,
             type: NT.wizFile.type,

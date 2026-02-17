@@ -168,8 +168,12 @@ export function resolveContentUrl(uri) {
     }
 
     // ar://txId → Arweave gateway (for existing Arweave content)
+    // Detect IPFS CIDs stored with wrong ar:// prefix (legacy bug)
     if (trimmed.startsWith('ar://')) {
         const txId = trimmed.slice(5);
+        if (txId.startsWith('Qm') || txId.startsWith('bafy')) {
+            return `${IPFS_GATEWAYS[0]}${txId}`;
+        }
         return `https://gateway.irys.xyz/${txId}`;
     }
 
