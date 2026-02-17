@@ -109,8 +109,8 @@ export function showNftCard(cert, imageUrl, fileInfo) {
 
                     <!-- Actions -->
                     <div style="display:flex;gap:8px">
-                        <button onclick="NotaryPage.addToWallet('${cert.id}')" style="flex:1;padding:12px;border:none;border-radius:12px;background:linear-gradient(135deg,var(--nt-accent),#f59e0b);color:#000;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
-                            <i class="fa-solid fa-share-nodes"></i>Share
+                        <button onclick="NotaryPage.importToWallet('${cert.id}')" style="flex:1;padding:12px;border:none;border-radius:12px;background:linear-gradient(135deg,var(--nt-accent),#f59e0b);color:#000;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+                            <i class="fa-brands fa-ethereum"></i>Import to Wallet
                         </button>
                         ${imageUrl ? `
                             <a href="${imageUrl}" target="_blank" style="flex:1;padding:12px;border:none;border-radius:12px;background:rgba(255,255,255,0.1);color:#fff;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none">
