@@ -116,16 +116,16 @@ function isValidBytes32(hash) {
 }
 
 /**
- * Compute per-docType action ID for fee calculation
- * Must match contract: keccak256(abi.encode("NOTARY_CERTIFY_T", docType))
+ * Action ID for certification fee.
+ * Ecosystem contract uses flat fee: ethers.id("NOTARY_CERTIFY")
+ * (per-docType IDs were planned but never configured on-chain)
  */
-function getCertifyActionId(docType) {
-    const ethers = window.ethers;
-    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
-    return ethers.keccak256(
-        abiCoder.encode(['string', 'uint8'], ['NOTARY_CERTIFY_T', docType])
-    );
+function getCertifyActionId() {
+    return window.ethers.id('NOTARY_CERTIFY');
 }
+
+// Minimum fee ~$1 at ~$2500/ETH — prevents $0 fee on low-gas testnets
+const MIN_CERTIFY_FEE = 400000000000000n; // 0.0004 ETH
 
 function formatHash(hash) {
     return hash.startsWith('0x') ? hash : `0x${hash}`;
@@ -180,12 +180,11 @@ export async function certify({
                 throw new Error('This document hash has already been certified');
             }
 
-            // Calculate per-type fee client-side (gas-based)
-            const actionId = getCertifyActionId(docType);
+            // Calculate fee client-side (gas-based)
+            const actionId = getCertifyActionId();
             ethFee = await calculateFeeClientSide(actionId);
-            console.log(`[NotaryTx] Certify fee (type ${DOC_TYPE_NAMES[docType]}):`, ethers.formatEther(ethFee), 'ETH');
-
-            if (ethFee === 0n) throw new Error('Could not calculate certification fee');
+            if (ethFee < MIN_CERTIFY_FEE) ethFee = MIN_CERTIFY_FEE;
+            console.log(`[NotaryTx] Certify fee:`, ethers.formatEther(ethFee), 'ETH');
 
             // Check ETH balance
             const { NetworkManager } = await import('../core/index.js');
@@ -439,8 +438,9 @@ export async function getCertificatesBatch(start, count) {
  */
 export async function getCertifyFee(docType = 0) {
     const ethers = window.ethers;
-    const actionId = getCertifyActionId(docType);
-    const fee = await calculateFeeClientSide(actionId);
+    const actionId = getCertifyActionId();
+    let fee = await calculateFeeClientSide(actionId);
+    if (fee < MIN_CERTIFY_FEE) fee = MIN_CERTIFY_FEE;
     return {
         fee,
         formatted: ethers.formatEther(fee) + ' ETH',
