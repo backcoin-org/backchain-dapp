@@ -19,6 +19,8 @@ export function renderCertDetail(el) {
 
     const ipfsUrl = resolveStorageUrl(cert.ipfs);
     const fileInfo = getFileTypeInfo(cert.mimeType || '', cert.description || '');
+    const isOwner = cert.owner && State.userAddress &&
+        cert.owner.toLowerCase() === State.userAddress.toLowerCase();
 
     el.innerHTML = `
         <div class="nt-detail" style="margin-top:8px">
@@ -47,10 +49,39 @@ export function renderCertDetail(el) {
                 </div>
             `}
 
-            <!-- Share Certificate — Primary Action -->
-            <button class="nt-btn-primary" style="width:100%;padding:14px;font-size:15px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:8px" onclick="NotaryPage.addToWallet('${cert.id}')">
-                <i class="fa-solid fa-share-nodes"></i>Copy Certificate Link
-            </button>
+            <!-- Primary Actions -->
+            <div style="display:flex;gap:8px;margin-bottom:16px">
+                <button class="nt-btn-primary" style="flex:1;padding:14px;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px" onclick="NotaryPage.addToWallet('${cert.id}')">
+                    <i class="fa-solid fa-share-nodes"></i>Share Link
+                </button>
+                ${isOwner ? `
+                    <button class="nt-btn-primary" style="flex:1;padding:14px;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(135deg,#3b82f6,#6366f1)" onclick="NotaryPage.toggleTransferForm()">
+                        <i class="fa-solid fa-paper-plane"></i>Transfer
+                    </button>
+                ` : ''}
+            </div>
+
+            <!-- Transfer Form (hidden by default) -->
+            ${isOwner ? `
+                <div id="nt-transfer-form" class="nt-card" style="display:none;margin-bottom:12px;padding:16px">
+                    <div style="font-size:11px;font-weight:600;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px">
+                        <i class="fa-solid fa-paper-plane" style="color:#6366f1;margin-right:4px"></i>Transfer Certificate
+                    </div>
+                    <div style="font-size:12px;color:var(--nt-text-2);margin-bottom:12px">
+                        Transfer ownership of this certificate to another wallet. This action is permanent and requires a small fee.
+                    </div>
+                    <input id="nt-transfer-addr" type="text" placeholder="Recipient address (0x...)"
+                        style="width:100%;padding:12px 14px;background:var(--nt-bg);border:1px solid var(--nt-border);border-radius:10px;color:var(--nt-text);font-size:13px;font-family:monospace;outline:none;box-sizing:border-box;margin-bottom:10px;transition:border-color var(--nt-transition)"
+                        onfocus="this.style.borderColor='rgba(99,102,241,0.5)'" onblur="this.style.borderColor='var(--nt-border)'"
+                    >
+                    <div style="display:flex;gap:8px">
+                        <button id="nt-btn-transfer" class="nt-btn-primary" style="flex:1;padding:12px;font-size:13px;background:linear-gradient(135deg,#3b82f6,#6366f1);display:flex;align-items:center;justify-content:center;gap:6px" onclick="NotaryPage.handleTransfer()">
+                            <i class="fa-solid fa-paper-plane"></i>Transfer
+                        </button>
+                        <button class="nt-btn-secondary" style="padding:12px 16px;font-size:13px" onclick="NotaryPage.toggleTransferForm()">Cancel</button>
+                    </div>
+                </div>
+            ` : ''}
 
             <!-- Description -->
             <div class="nt-card" style="margin-bottom:12px">

@@ -194,6 +194,73 @@ export async function handleMint() {
 }
 
 // ============================================================================
+// TRANSFER
+// ============================================================================
+
+export function toggleTransferForm() {
+    const form = document.getElementById('nt-transfer-form');
+    if (!form) return;
+    const isHidden = form.style.display === 'none';
+    form.style.display = isHidden ? 'block' : 'none';
+    if (isHidden) {
+        const input = document.getElementById('nt-transfer-addr');
+        if (input) { input.value = ''; input.focus(); }
+    }
+}
+
+export async function handleTransfer() {
+    const input = document.getElementById('nt-transfer-addr');
+    const btn = document.getElementById('nt-btn-transfer');
+    const newOwner = input?.value?.trim();
+    const ethers = window.ethers;
+
+    if (!newOwner || !ethers.isAddress(newOwner)) {
+        showToast('Enter a valid wallet address', 'error');
+        return;
+    }
+
+    const cert = NT.selectedCert;
+    if (!cert?.hash) {
+        showToast('Certificate not found', 'error');
+        return;
+    }
+
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>Transferring...'; }
+
+    try {
+        await NotaryTx.transferCertificate({
+            documentHash: cert.hash,
+            newOwner,
+            operator: resolveOperator(),
+            button: btn,
+
+            onSuccess: (receipt) => {
+                showToast(`Certificate #${cert.id} transferred!`, 'success');
+                // Update local state
+                cert.owner = newOwner;
+                NT.selectedCert = cert;
+                loadCertificates();
+                NT._render();
+            },
+
+            onError: (error) => {
+                if (error.cancelled || error.type === 'user_rejected') {
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-paper-plane" style="margin-right:6px"></i>Transfer'; }
+                    return;
+                }
+                throw error;
+            }
+        });
+    } catch (e) {
+        console.error('[NotaryPage] Transfer error:', e);
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-paper-plane" style="margin-right:6px"></i>Transfer'; }
+        if (e.code !== 4001 && e.code !== 'ACTION_REJECTED') {
+            showToast(e.message || 'Transfer failed', 'error');
+        }
+    }
+}
+
+// ============================================================================
 // CLIPBOARD / SHARE
 // ============================================================================
 

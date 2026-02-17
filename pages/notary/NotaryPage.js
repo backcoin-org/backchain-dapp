@@ -5,7 +5,7 @@
 import { NT } from './state.js';
 import { injectStyles } from './styles.js';
 import { loadFees, loadCertificates, loadStats } from './data-loader.js';
-import { navigateView, goBack, setTab, viewCert, handleMint, wizNext, wizBack, wizToStep3, wizRemoveFile, onDocTypeChange, addToWallet, copyHash } from './actions.js';
+import { navigateView, goBack, setTab, viewCert, handleMint, wizNext, wizBack, wizToStep3, wizRemoveFile, onDocTypeChange, addToWallet, copyHash, toggleTransferForm, handleTransfer } from './actions.js';
 import { renderDocuments } from './documents.js';
 import { renderNotarize, renderWizStep2 } from './wizard.js';
 import { renderVerify } from './verify.js';
@@ -159,6 +159,10 @@ export const NotaryPage = {
     wizRemoveFile,
     onDocTypeChange,
     handleMint,
+
+    // Transfer
+    toggleTransferForm,
+    handleTransfer,
 
     // Clipboard
     addToWallet,
