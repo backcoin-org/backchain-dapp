@@ -298,60 +298,41 @@ export async function handleTransfer() {
 }
 
 // ============================================================================
-// IMPORT TO WALLET
-// ============================================================================
-
-export async function importToWallet(certId) {
-    if (!window.ethereum) {
-        _copyShareLink(certId);
-        return;
-    }
-
-    const wrapperAddr = addresses?.notaryCertNFT;
-    if (!wrapperAddr) {
-        showToast('NFT wrapper not available', 'info');
-        _copyShareLink(certId);
-        return;
-    }
-
-    try {
-        const wasAdded = await window.ethereum.request({
-            method: 'wallet_watchAsset',
-            params: {
-                type: 'ERC721',
-                options: {
-                    address: wrapperAddr,
-                    tokenId: String(certId),
-                },
-            },
-        });
-
-        if (wasAdded) {
-            showToast(`Certificate #${certId} added to wallet!`, 'success');
-        }
-    } catch (error) {
-        console.error('[NotaryPage] Import to wallet error:', error);
-        _copyShareLink(certId);
-    }
-}
-
-// ============================================================================
 // CLIPBOARD / SHARE
 // ============================================================================
 
-export function shareLink(certId) {
-    _copyShareLink(certId);
-}
+export async function addToWallet(tokenId) {
+    // Try wallet_watchAsset via ERC-721 wrapper first
+    if (window.ethereum && addresses?.notaryCertNFT) {
+        try {
+            const wasAdded = await window.ethereum.request({
+                method: 'wallet_watchAsset',
+                params: {
+                    type: 'ERC721',
+                    options: {
+                        address: addresses.notaryCertNFT,
+                        tokenId: String(tokenId),
+                    },
+                },
+            });
+            if (wasAdded) {
+                showToast(`Certificate #${tokenId} added to wallet!`, 'success');
+                return;
+            }
+        } catch (error) {
+            console.warn('[NotaryPage] wallet_watchAsset fallback:', error.message);
+        }
+    }
 
-function _copyShareLink(certId) {
+    // Fallback: copy share link
     const contractAddress = addresses?.notary;
     if (!contractAddress) {
         showToast('Contract address not found', 'error');
         return;
     }
-    const url = `${EXPLORER_ADDR}${contractAddress}?a=${certId}`;
+    const url = `${EXPLORER_ADDR}${contractAddress}?a=${tokenId}`;
     navigator.clipboard.writeText(url).then(() => {
-        showToast(`Certificate #${certId} link copied!`, 'success');
+        showToast(`Certificate #${tokenId} link copied!`, 'success');
     }).catch(() => {
         window.open(url, '_blank');
     });
