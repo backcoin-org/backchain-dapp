@@ -4,40 +4,37 @@ pragma solidity ^0.8.28;
 import "./IBackchain.sol";
 
 // ============================================================================
-// NOTARY V3 — IMMUTABLE (Tier 1: ETH only)
+// NOTARY V4 — IMMUTABLE ERC-721 CERTIFICATE NFTs (Tier 1: ETH only)
 // ============================================================================
 //
-// On-chain document certification. Hash a file, store proof forever.
+// On-chain document certification with native ERC-721 NFT minting.
+// Each certified document becomes a real, transferable NFT.
 //
-// V3 Changes:
-//   - Per-docType fees (10 action IDs, different pricing per category)
-//   - Certificate boost (1-30 days, additive expiry, pay-per-day)
-//   - Transfer fee (ETH fee for ownership transfer)
-//   - getCertificatesBatch for efficient batch reads
-//   - Enhanced stats (totalBoostRevenue, totalTransfers)
+// V4 Changes (over V3):
+//   - Native ERC-721 compliance (ownerOf, balanceOf, tokenURI, transferFrom, etc.)
+//   - certify() mints an NFT (emits Transfer + Certified)
+//   - transferCertificate() emits ERC-721 Transfer event (with fee)
+//   - Standard transferFrom/safeTransferFrom (free, no ecosystem fee)
+//   - tokenURI() returns metadata API URL
+//   - supportsInterface for ERC165 + ERC721 + ERC721Metadata
+//   - Reverse mapping certIdByHash for efficient lookups
 //
-// Features:
-//   - Single or batch notarization (multiple docs in one tx)
-//   - Document type classification (10 categories)
-//   - Certificate ownership transfer (with fee)
-//   - Certificate visibility boost (additive, stackable)
-//   - Hash-based verification (anyone can verify, no account needed)
-//   - Operator commissions on every action
-//
-// Economics:
-//   - Per-docType ETH fee on certification → ecosystem
-//   - ETH fee × days on boost → ecosystem
-//   - Small ETH fee on transfer → ecosystem
-//   - General/Other: cheapest; Legal/Property/Medical: premium
-//
-// Storage:
-//   - 1 slot per certificate (31 bytes packed)
-//   - Metadata stored separately (only if provided)
-//   - Hash is the primary key (no duplication)
+// Preserved from V3:
+//   - Per-docType fees (10 action IDs)
+//   - Certificate boost (1-30 days)
+//   - transferCertificate with fee + operator
+//   - getCertificatesBatch, verify, getStats
 //
 // No admin. No pause. Fully immutable and permissionless.
 //
 // ============================================================================
+
+/// @dev ERC721 receiver interface for safeTransferFrom
+interface IERC721Receiver {
+    function onERC721Received(
+        address operator, address from, uint256 tokenId, bytes calldata data
+    ) external returns (bytes4);
+}
 
 contract Notary {
 
@@ -45,8 +42,11 @@ contract Notary {
     // CONSTANTS
     // ════════════════════════════════════════════════════════════════════════
 
+    string  public constant name   = "Backchain Notary Certificate";
+    string  public constant symbol = "BKCN";
+
     bytes32 public constant MODULE_ID        = keccak256("NOTARY");
-    bytes32 public constant ACTION_CERTIFY   = keccak256("NOTARY_CERTIFY"); // backward-compat (unused in V3 logic)
+    bytes32 public constant ACTION_CERTIFY   = keccak256("NOTARY_CERTIFY");
     bytes32 public constant ACTION_BOOST     = keccak256("NOTARY_BOOST");
     bytes32 public constant ACTION_TRANSFER  = keccak256("NOTARY_TRANSFER");
 
@@ -58,17 +58,22 @@ contract Notary {
 
     // Document types
     uint8 public constant DOC_GENERAL     = 0;
-    uint8 public constant DOC_CONTRACT    = 1;  // contracts, agreements
-    uint8 public constant DOC_IDENTITY    = 2;  // ID, passport, KYC
-    uint8 public constant DOC_DIPLOMA     = 3;  // diplomas, certificates
-    uint8 public constant DOC_PROPERTY    = 4;  // deeds, titles
-    uint8 public constant DOC_FINANCIAL   = 5;  // invoices, receipts
-    uint8 public constant DOC_LEGAL       = 6;  // court documents, patents
-    uint8 public constant DOC_MEDICAL     = 7;  // records, prescriptions
-    uint8 public constant DOC_IP          = 8;  // intellectual property, copyright
+    uint8 public constant DOC_CONTRACT    = 1;
+    uint8 public constant DOC_IDENTITY    = 2;
+    uint8 public constant DOC_DIPLOMA     = 3;
+    uint8 public constant DOC_PROPERTY    = 4;
+    uint8 public constant DOC_FINANCIAL   = 5;
+    uint8 public constant DOC_LEGAL       = 6;
+    uint8 public constant DOC_MEDICAL     = 7;
+    uint8 public constant DOC_IP          = 8;
     uint8 public constant DOC_OTHER       = 9;
 
     uint8 private constant MAX_DOC_TYPE = 9;
+
+    // ERC165 interface IDs
+    bytes4 private constant ERC165_ID          = 0x01ffc9a7;
+    bytes4 private constant ERC721_ID          = 0x80ac58cd;
+    bytes4 private constant ERC721_METADATA_ID = 0x5b5e139f;
 
     // ════════════════════════════════════════════════════════════════════════
     // IMMUTABLE
@@ -77,11 +82,10 @@ contract Notary {
     IBackchainEcosystem public immutable ecosystem;
 
     // ════════════════════════════════════════════════════════════════════════
-    // STATE
+    // STATE — NOTARY
     // ════════════════════════════════════════════════════════════════════════
 
     /// @dev Certificate data — packed in 1 storage slot (31 bytes)
-    ///      owner(20) + timestamp(6) + docType(1) + boostExpiry(4) = 31 bytes
     struct Certificate {
         address owner;
         uint48  timestamp;
@@ -89,31 +93,28 @@ contract Notary {
         uint32  boostExpiry;
     }
 
-    /// @notice Primary storage: document hash → certificate data (1 slot)
     mapping(bytes32 => Certificate) public certs;
-
-    /// @notice Metadata storage: document hash → IPFS CID or description
-    ///         Stored separately to save gas when metadata is empty
     mapping(bytes32 => string) public metadata;
-
-    /// @notice Sequential index: cert ID → document hash
-    ///         Allows iterating certificates by order of creation
     mapping(uint256 => bytes32) public certById;
+    mapping(bytes32 => uint256) public certIdByHash;
 
-    /// @notice Total certificates issued
     uint256 public certCount;
-
-    /// @notice Lifetime ETH collected from fees
     uint256 public totalEthCollected;
-
-    /// @notice Lifetime ETH collected from boosts
     uint256 public totalBoostRevenue;
-
-    /// @notice Lifetime certificate transfers
     uint256 public totalTransfers;
 
     // ════════════════════════════════════════════════════════════════════════
-    // EVENTS
+    // STATE — ERC-721
+    // ════════════════════════════════════════════════════════════════════════
+
+    mapping(address => uint256) private _balances;
+    mapping(uint256 => address) private _tokenApprovals;
+    mapping(address => mapping(address => bool)) private _operatorApprovals;
+
+    string private _baseTokenURI;
+
+    // ════════════════════════════════════════════════════════════════════════
+    // EVENTS — NOTARY
     // ════════════════════════════════════════════════════════════════════════
 
     event Certified(
@@ -145,6 +146,14 @@ contract Notary {
     );
 
     // ════════════════════════════════════════════════════════════════════════
+    // EVENTS — ERC-721
+    // ════════════════════════════════════════════════════════════════════════
+
+    event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
+    event Approval(address indexed owner, address indexed approved, uint256 indexed tokenId);
+    event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
+
+    // ════════════════════════════════════════════════════════════════════════
     // ERRORS
     // ════════════════════════════════════════════════════════════════════════
 
@@ -159,41 +168,31 @@ contract Notary {
     error ZeroDays();
     error TooManyDays();
     error NotCertified();
+    error TokenNotFound();
+    error NotOwnerOrApproved();
+    error NonERC721Receiver();
 
     // ════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
     // ════════════════════════════════════════════════════════════════════════
 
-    constructor(address _ecosystem) {
+    constructor(address _ecosystem, string memory baseTokenURI_) {
         ecosystem = IBackchainEcosystem(_ecosystem);
+        _baseTokenURI = baseTokenURI_;
     }
 
     // ════════════════════════════════════════════════════════════════════════
     // INTERNAL: PER-DOCTYPE ACTION ID
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @dev Compute per-docType action ID for fee lookup.
-    ///      Pattern: keccak256(abi.encode("NOTARY_CERTIFY_T", docType))
-    ///      Each doc type can have its own fee config in ecosystem.
     function _getCertifyAction(uint8 docType) internal pure returns (bytes32) {
         return keccak256(abi.encode("NOTARY_CERTIFY_T", docType));
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // CERTIFY
+    // CERTIFY (mints ERC-721 NFT)
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Notarize a document on-chain.
-    ///
-    ///         The documentHash is the SHA-256 (or keccak256) of the file content.
-    ///         Once certified, the hash can never be re-certified — proof is permanent.
-    ///         Fee depends on document type (Legal/Property > General).
-    ///
-    /// @param documentHash Hash of the document content
-    /// @param meta         IPFS CID or description (can be empty to save gas)
-    /// @param docType      Document category (0-9, see DOC_* constants)
-    /// @param operator     Frontend operator earning commission
-    /// @return certId      Sequential certificate ID
     function certify(
         bytes32 documentHash,
         string calldata meta,
@@ -204,11 +203,9 @@ contract Notary {
         if (certs[documentHash].timestamp != 0) revert AlreadyCertified();
         if (docType > MAX_DOC_TYPE) revert InvalidDocType();
 
-        // V3: Per-docType fee
         uint256 fee = ecosystem.calculateFee(_getCertifyAction(docType), 0);
         if (msg.value < fee) revert InsufficientFee();
 
-        // Store certificate (1 slot)
         certs[documentHash] = Certificate({
             owner: msg.sender,
             timestamp: uint48(block.timestamp),
@@ -216,37 +213,30 @@ contract Notary {
             boostExpiry: 0
         });
 
-        // Store metadata only if provided
         if (bytes(meta).length > 0) {
             metadata[documentHash] = meta;
         }
 
-        // Sequential index
         certId = ++certCount;
         certById[certId] = documentHash;
+        certIdByHash[documentHash] = certId;
 
-        // ETH fee → ecosystem
+        // ERC-721 mint
+        _balances[msg.sender]++;
+
         totalEthCollected += msg.value;
         ecosystem.collectFee{value: msg.value}(
             msg.sender, operator, address(0), MODULE_ID, 0
         );
 
+        emit Transfer(address(0), msg.sender, certId);
         emit Certified(certId, msg.sender, documentHash, docType, operator);
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // BATCH CERTIFY
+    // BATCH CERTIFY (mints ERC-721 NFTs)
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Notarize multiple documents in one transaction.
-    ///         Gas efficient: one ecosystem.collectFee() call for the entire batch.
-    ///         V3: ETH fee = sum of per-docType fees for each document.
-    ///
-    /// @param documentHashes Array of document hashes
-    /// @param metas          Array of metadata strings (same length as hashes)
-    /// @param docTypes       Array of document types (same length as hashes)
-    /// @param operator       Frontend operator
-    /// @return startId       First certificate ID in the batch
     function batchCertify(
         bytes32[] calldata documentHashes,
         string[] calldata metas,
@@ -258,7 +248,6 @@ contract Notary {
         if (count > MAX_BATCH_SIZE) revert BatchTooLarge();
         if (metas.length != count || docTypes.length != count) revert EmptyBatch();
 
-        // V3: Sum per-docType fees
         uint256 totalFee;
         for (uint256 i; i < count;) {
             if (docTypes[i] > MAX_DOC_TYPE) revert InvalidDocType();
@@ -288,13 +277,17 @@ contract Notary {
 
             uint256 certId = ++certCount;
             certById[certId] = hash;
+            certIdByHash[hash] = certId;
 
+            emit Transfer(address(0), msg.sender, certId);
             emit Certified(certId, msg.sender, hash, docTypes[i], operator);
 
             unchecked { ++i; }
         }
 
-        // Single fee call for entire batch
+        // ERC-721 balance update (batch)
+        _balances[msg.sender] += count;
+
         totalEthCollected += msg.value;
         ecosystem.collectFee{value: msg.value}(
             msg.sender, operator, address(0), MODULE_ID, 0
@@ -307,24 +300,16 @@ contract Notary {
     // BOOST
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Boost a certificate's visibility for X days. Pays ETH fee per day.
-    ///         Anyone can boost any certificate. Stacks with existing boost.
-    ///
-    /// @param documentHash Certificate to boost
-    /// @param days_        Number of days to boost (1-30)
-    /// @param operator     Frontend operator
     function boostCertificate(bytes32 documentHash, uint256 days_, address operator) external payable {
         Certificate storage cert = certs[documentHash];
         if (cert.timestamp == 0) revert NotCertified();
         if (days_ == 0) revert ZeroDays();
         if (days_ > MAX_BOOST_DAYS) revert TooManyDays();
 
-        // Fee = ecosystem fee per boost action × days
         uint256 feePerDay = ecosystem.calculateFee(ACTION_BOOST, 0);
         uint256 totalFee = feePerDay * days_;
         if (msg.value < totalFee) revert InsufficientFee();
 
-        // Additive expiry: extend from current expiry if still active
         uint256 baseTime = block.timestamp;
         if (cert.boostExpiry > block.timestamp) {
             baseTime = uint256(cert.boostExpiry);
@@ -340,29 +325,26 @@ contract Notary {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // TRANSFER
+    // TRANSFER CERTIFICATE (with fee + operator)
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Transfer certificate ownership to another address.
-    ///         V3: Charges a small ETH fee for the transfer.
-    ///
-    /// @param documentHash The certified document hash
-    /// @param newOwner     New owner address
-    /// @param operator     Frontend operator
     function transferCertificate(bytes32 documentHash, address newOwner, address operator) external payable {
         Certificate storage cert = certs[documentHash];
         if (cert.owner != msg.sender) revert NotCertOwner();
         if (newOwner == address(0)) revert ZeroAddress();
 
-        // V3: Transfer fee
         uint256 fee = ecosystem.calculateFee(ACTION_TRANSFER, 0);
         if (msg.value < fee) revert InsufficientFee();
 
         address oldOwner = cert.owner;
+        uint256 certId = certIdByHash[documentHash];
+
         cert.owner = newOwner;
+        _balances[oldOwner]--;
+        _balances[newOwner]++;
+        delete _tokenApprovals[certId];
         ++totalTransfers;
 
-        // Fee → ecosystem
         if (msg.value > 0) {
             totalEthCollected += msg.value;
             ecosystem.collectFee{value: msg.value}(
@@ -370,15 +352,84 @@ contract Notary {
             );
         }
 
+        emit Transfer(oldOwner, newOwner, certId);
         emit CertificateTransferred(documentHash, oldOwner, newOwner);
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // VIEWS
+    // ERC-721 — VIEWS
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Verify a document hash — anyone can check, no account needed.
-    ///         V3: Returns isBoosted and boostExpiry.
+    function totalSupply() external view returns (uint256) {
+        return certCount;
+    }
+
+    function ownerOf(uint256 tokenId) public view returns (address owner) {
+        bytes32 hash = certById[tokenId];
+        if (hash == bytes32(0)) revert TokenNotFound();
+        owner = certs[hash].owner;
+        if (owner == address(0)) revert TokenNotFound();
+    }
+
+    function balanceOf(address owner) public view returns (uint256) {
+        if (owner == address(0)) revert ZeroAddress();
+        return _balances[owner];
+    }
+
+    function tokenURI(uint256 tokenId) external view returns (string memory) {
+        bytes32 hash = certById[tokenId];
+        if (hash == bytes32(0)) revert TokenNotFound();
+        return string(abi.encodePacked(_baseTokenURI, _toString(tokenId)));
+    }
+
+    function getApproved(uint256 tokenId) public view returns (address) {
+        bytes32 hash = certById[tokenId];
+        if (hash == bytes32(0)) revert TokenNotFound();
+        return _tokenApprovals[tokenId];
+    }
+
+    function isApprovedForAll(address owner, address operator) public view returns (bool) {
+        return _operatorApprovals[owner][operator];
+    }
+
+    function supportsInterface(bytes4 id) external pure returns (bool) {
+        return id == ERC165_ID || id == ERC721_ID || id == ERC721_METADATA_ID;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // ERC-721 — MUTATIONS (free, no ecosystem fee)
+    // ════════════════════════════════════════════════════════════════════════
+
+    function approve(address to, uint256 tokenId) external {
+        address owner = ownerOf(tokenId);
+        if (msg.sender != owner && !isApprovedForAll(owner, msg.sender))
+            revert NotOwnerOrApproved();
+        _tokenApprovals[tokenId] = to;
+        emit Approval(owner, to, tokenId);
+    }
+
+    function setApprovalForAll(address operator, bool approved) external {
+        _operatorApprovals[msg.sender][operator] = approved;
+        emit ApprovalForAll(msg.sender, operator, approved);
+    }
+
+    function transferFrom(address from, address to, uint256 tokenId) public {
+        if (!_isApprovedOrOwner(msg.sender, tokenId)) revert NotOwnerOrApproved();
+        _transferNFT(from, to, tokenId);
+    }
+
+    function safeTransferFrom(address from, address to, uint256 tokenId) external {
+        _safeTransfer(from, to, tokenId, "");
+    }
+
+    function safeTransferFrom(address from, address to, uint256 tokenId, bytes calldata data) external {
+        _safeTransfer(from, to, tokenId, data);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // NOTARY — VIEWS
+    // ════════════════════════════════════════════════════════════════════════
+
     function verify(bytes32 documentHash) external view returns (
         bool    exists,
         address owner,
@@ -399,7 +450,6 @@ contract Notary {
         );
     }
 
-    /// @notice Get certificate by sequential ID. V3: includes boost data.
     function getCertificate(uint256 certId) external view returns (
         bytes32 documentHash,
         address owner,
@@ -421,9 +471,6 @@ contract Notary {
         );
     }
 
-    /// @notice Batch read certificate data (no strings — too expensive)
-    /// @param start First cert ID (1-based)
-    /// @param count Number of certificates to read
     function getCertificatesBatch(uint256 start, uint256 count) external view returns (
         bytes32[] memory hashes,
         address[] memory owners,
@@ -455,17 +502,14 @@ contract Notary {
         }
     }
 
-    /// @notice Get the ETH fee for certifying a General document (backward compat)
     function getFee() external view returns (uint256) {
         return ecosystem.calculateFee(_getCertifyAction(0), 0);
     }
 
-    /// @notice Check if certificate is currently boosted
     function isBoosted(bytes32 documentHash) external view returns (bool) {
         return block.timestamp < certs[documentHash].boostExpiry;
     }
 
-    /// @notice Protocol statistics (V3: includes boost revenue + transfers)
     function getStats() external view returns (
         uint256 _certCount,
         uint256 _totalEthCollected,
@@ -475,8 +519,64 @@ contract Notary {
         return (certCount, totalEthCollected, totalBoostRevenue, totalTransfers);
     }
 
-    /// @notice Contract version
     function version() external pure returns (string memory) {
-        return "3.0.0";
+        return "4.0.0";
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // INTERNAL — ERC-721
+    // ════════════════════════════════════════════════════════════════════════
+
+    function _transferNFT(address from, address to, uint256 tokenId) internal {
+        if (to == address(0)) revert ZeroAddress();
+        bytes32 hash = certById[tokenId];
+        if (hash == bytes32(0)) revert TokenNotFound();
+        Certificate storage cert = certs[hash];
+        if (cert.owner != from) revert NotOwnerOrApproved();
+
+        cert.owner = to;
+        _balances[from]--;
+        _balances[to]++;
+        delete _tokenApprovals[tokenId];
+        ++totalTransfers;
+
+        emit Transfer(from, to, tokenId);
+    }
+
+    function _safeTransfer(address from, address to, uint256 tokenId, bytes memory data) internal {
+        transferFrom(from, to, tokenId);
+        if (to.code.length > 0) {
+            try IERC721Receiver(to).onERC721Received(msg.sender, from, tokenId, data)
+            returns (bytes4 retval) {
+                if (retval != IERC721Receiver.onERC721Received.selector)
+                    revert NonERC721Receiver();
+            } catch {
+                revert NonERC721Receiver();
+            }
+        }
+    }
+
+    function _isApprovedOrOwner(address spender, uint256 tokenId) internal view returns (bool) {
+        address owner = ownerOf(tokenId);
+        return spender == owner
+            || _tokenApprovals[tokenId] == spender
+            || _operatorApprovals[owner][spender];
+    }
+
+    function _toString(uint256 value) internal pure returns (string memory) {
+        if (value == 0) return "0";
+        uint256 temp = value;
+        uint256 digits;
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
+        }
+        bytes memory buffer = new bytes(digits);
+        while (value != 0) {
+            digits--;
+            buffer[digits] = bytes1(uint8(48 + value % 10));
+            value /= 10;
+        }
+        return string(buffer);
     }
 }

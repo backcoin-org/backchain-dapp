@@ -130,7 +130,7 @@ async function deployAllFixture() {
 
   // ── 11. Notary ──
   const Notary = await ethers.getContractFactory("contracts/Notary.sol:Notary");
-  const notary = await Notary.deploy(ecosystemAddr);
+  const notary = await Notary.deploy(ecosystemAddr, "https://backcoin.org/api/cert-metadata/");
   await notary.waitForDeployment();
   const notaryAddr = await notary.getAddress();
 

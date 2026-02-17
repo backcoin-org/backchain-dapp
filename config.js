@@ -283,7 +283,6 @@ export const contractAddresses = {
     liquidityPool: null,
     faucet: null,
     backchainGovernance: null,
-    notaryCertNFT: null,
     treasuryWallet: null
 };
 
@@ -325,7 +324,6 @@ export async function loadAddresses() {
         addresses.faucet = json.faucet || json.simpleBkcFaucet;
         addresses.backchainGovernance = json.backchainGovernance;
         addresses.nftFusion = json.nftFusion;
-        addresses.notaryCertNFT = json.notaryCertNFT;
         addresses.treasuryWallet = json.treasuryWallet;
 
         // Pool address (single Bronze pool — V3 on-demand minting)

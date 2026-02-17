@@ -1,5 +1,5 @@
 // modules/js/transactions/notary-tx.js
-// ✅ V3.0 - Updated for Notary V3 (per-docType fees, boost, transfer fee, batch reads)
+// ✅ V4.0 - Updated for Notary V4 (native ERC-721 NFTs + all V3 features)
 //
 // CHANGES V3.0:
 // - Per-docType fee: keccak256(abi.encode("NOTARY_CERTIFY_T", docType)) for 10 types
@@ -49,6 +49,12 @@ const NOTARY_ABI = [
     'function boostCertificate(bytes32 documentHash, uint256 days_, address operator) external payable',
     'function transferCertificate(bytes32 documentHash, address newOwner, address operator) external payable',
 
+    // ERC-721 write functions
+    'function approve(address to, uint256 tokenId) external',
+    'function setApprovalForAll(address operator, bool approved) external',
+    'function transferFrom(address from, address to, uint256 tokenId) external',
+    'function safeTransferFrom(address from, address to, uint256 tokenId) external',
+
     // Read functions
     'function verify(bytes32 documentHash) view returns (bool exists, address owner, uint48 timestamp, uint8 docType, string memory meta, bool boosted, uint32 boostExpiry)',
     'function getCertificate(uint256 certId) view returns (bytes32 documentHash, address owner, uint48 timestamp, uint8 docType, string memory meta, bool boosted, uint32 boostExpiry)',
@@ -61,11 +67,25 @@ const NOTARY_ABI = [
     'function MAX_BATCH_SIZE() view returns (uint8)',
     'function MAX_BOOST_DAYS() view returns (uint8)',
 
-    // Events
+    // ERC-721 read functions
+    'function ownerOf(uint256 tokenId) view returns (address)',
+    'function balanceOf(address owner) view returns (uint256)',
+    'function tokenURI(uint256 tokenId) view returns (string)',
+    'function totalSupply() view returns (uint256)',
+    'function name() view returns (string)',
+    'function symbol() view returns (string)',
+    'function supportsInterface(bytes4 interfaceId) view returns (bool)',
+
+    // Notary events
     'event Certified(uint256 indexed certId, address indexed owner, bytes32 indexed documentHash, uint8 docType, address operator)',
     'event BatchCertified(address indexed owner, uint256 startId, uint256 count, address operator)',
     'event CertificateBoosted(bytes32 indexed documentHash, address indexed booster, uint32 boostExpiry, address operator)',
-    'event CertificateTransferred(bytes32 indexed documentHash, address indexed from, address indexed to)'
+    'event CertificateTransferred(bytes32 indexed documentHash, address indexed from, address indexed to)',
+
+    // ERC-721 events
+    'event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)',
+    'event Approval(address indexed owner, address indexed approved, uint256 indexed tokenId)',
+    'event ApprovalForAll(address indexed owner, address indexed operator, bool approved)'
 ];
 
 // Document types

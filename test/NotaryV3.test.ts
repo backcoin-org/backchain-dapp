@@ -78,7 +78,7 @@ async function deployNotaryFixture() {
 
   // Notary V3
   const Notary = await ethers.getContractFactory("contracts/Notary.sol:Notary");
-  const notary = await Notary.deploy(ecosystemAddr);
+  const notary = await Notary.deploy(ecosystemAddr, "https://backcoin.org/api/cert-metadata/");
   await notary.waitForDeployment();
   const notaryAddr = await notary.getAddress();
 
@@ -188,7 +188,7 @@ describe("Notary V3 — Exhaustive Tests", function () {
   describe("1. Deployment & Constants", function () {
     it("deploys with correct version", async function () {
       const f = await loadFixture(deployNotaryFixture);
-      expect(await f.notary.version()).to.equal("3.0.0");
+      expect(await f.notary.version()).to.equal("4.0.0");
     });
 
     it("ecosystem is set correctly", async function () {
@@ -1201,7 +1201,7 @@ describe("Notary V3 — Exhaustive Tests", function () {
       const eco2Addr = await eco2.getAddress();
 
       const Notary = await ethers.getContractFactory("contracts/Notary.sol:Notary");
-      const notary2 = await Notary.deploy(eco2Addr);
+      const notary2 = await Notary.deploy(eco2Addr, "https://backcoin.org/api/cert-metadata/");
       await notary2.waitForDeployment();
       const notary2Addr = await notary2.getAddress();
 

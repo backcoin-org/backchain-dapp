@@ -1,12 +1,21 @@
 // api/cert-metadata/[id].js
-// ERC-721 Metadata endpoint for NotaryCertNFT
+// ERC-721 Metadata endpoint for Notary V4 (native ERC-721)
 //
 // GET /api/cert-metadata/42
 // Returns: { name, description, image, external_url, attributes }
 
 import { ethers } from 'ethers';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
-const NOTARY_ADDRESS = '0x34C2541D4196B681C6DA5D4cE30BB4597BC3774A';
+let NOTARY_ADDRESS;
+try {
+    const addresses = JSON.parse(readFileSync(join(process.cwd(), 'deployment-addresses.json'), 'utf8'));
+    NOTARY_ADDRESS = addresses.notary;
+} catch {
+    NOTARY_ADDRESS = '0xafa1f6DE1a379336c9Ce4e4128cf175c11a1FAc4';
+}
+
 const NOTARY_ABI = [
     'function getCertificate(uint256 certId) view returns (bytes32 documentHash, address owner, uint48 timestamp, uint8 docType, string memory meta, bool boosted, uint32 boostExpiry)',
     'function certCount() view returns (uint256)'

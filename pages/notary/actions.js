@@ -302,15 +302,15 @@ export async function handleTransfer() {
 // ============================================================================
 
 export async function addToWallet(tokenId) {
-    // Try wallet_watchAsset via ERC-721 wrapper first
-    if (window.ethereum && addresses?.notaryCertNFT) {
+    // Try wallet_watchAsset — Notary V4 IS an ERC-721 natively
+    if (window.ethereum && addresses?.notary) {
         try {
             const wasAdded = await window.ethereum.request({
                 method: 'wallet_watchAsset',
                 params: {
                     type: 'ERC721',
                     options: {
-                        address: addresses.notaryCertNFT,
+                        address: addresses.notary,
                         tokenId: String(tokenId),
                     },
                 },
