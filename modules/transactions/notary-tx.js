@@ -263,7 +263,7 @@ export async function boostCertificate({
             const feePerDay = await calculateFeeClientSide(ethers.id('NOTARY_BOOST'));
             totalFee = feePerDay * BigInt(days);
 
-            if (totalFee === 0n) throw new Error('Could not calculate boost fee');
+            // Boost fee may be 0 if not configured on-chain
 
             const { NetworkManager } = await import('../core/index.js');
             const provider = NetworkManager.getProvider();
@@ -320,17 +320,16 @@ export async function transferCertificate({
                 throw new Error('Cannot transfer to yourself');
             }
 
-            // Calculate transfer fee client-side
+            // Calculate transfer fee client-side (may be 0 if not configured)
             ethFee = await calculateFeeClientSide(ethers.id('NOTARY_TRANSFER'));
             console.log('[NotaryTx] Transfer fee:', ethers.formatEther(ethFee), 'ETH');
-
-            if (ethFee === 0n) throw new Error('Could not calculate transfer fee');
 
             const { NetworkManager } = await import('../core/index.js');
             const provider = NetworkManager.getProvider();
             const ethBalance = await provider.getBalance(userAddress);
-            if (ethBalance < ethFee + ethers.parseEther('0.001')) {
-                throw new Error(`Insufficient ETH. Need ~${ethers.formatEther(ethFee)} ETH for transfer fee + gas`);
+            const minNeeded = ethFee + ethers.parseEther('0.001');
+            if (ethBalance < minNeeded) {
+                throw new Error(`Insufficient ETH. Need ~${ethers.formatEther(minNeeded)} ETH for transfer + gas`);
             }
         },
 

@@ -8,6 +8,7 @@ import { irysUploadFile } from '../../modules/core/index.js';
 import { showToast } from '../../ui-feedback.js';
 import { addresses } from '../../config.js';
 import { NT, EXPLORER_ADDR } from './state.js';
+import { resolveStorageUrl } from './utils.js';
 import { showOverlay, hideOverlay } from './overlay.js';
 import { loadFees, loadCertificates } from './data-loader.js';
 
@@ -194,46 +195,21 @@ export async function handleMint() {
 }
 
 // ============================================================================
-// ADD TO WALLET
+// VIEW DOCUMENT
 // ============================================================================
 
-export async function addCertToWallet() {
+export function viewDocument() {
     const cert = NT.selectedCert;
     if (!cert) return;
 
-    const contractAddress = addresses?.notary;
-    if (!contractAddress) {
-        showToast('Contract address not found', 'error');
-        return;
-    }
-
-    // Try MetaMask wallet_watchAsset (ERC721)
-    if (window.ethereum) {
-        try {
-            await window.ethereum.request({
-                method: 'wallet_watchAsset',
-                params: {
-                    type: 'ERC721',
-                    options: {
-                        address: contractAddress,
-                        tokenId: String(cert.id)
-                    }
-                }
-            });
-            showToast(`Certificate #${cert.id} added to wallet!`, 'success');
-            return;
-        } catch (e) {
-            console.log('[NotaryPage] wallet_watchAsset not supported, using fallback');
-        }
-    }
-
-    // Fallback: copy Arbiscan link
-    const url = `${EXPLORER_ADDR}${contractAddress}?a=${cert.id}`;
-    try {
-        await navigator.clipboard.writeText(url);
-        showToast(`Certificate #${cert.id} link copied to clipboard!`, 'success');
-    } catch {
+    const url = resolveStorageUrl(cert.ipfs);
+    if (url) {
         window.open(url, '_blank');
+    } else {
+        const contractAddress = addresses?.notary;
+        if (contractAddress) {
+            window.open(`${EXPLORER_ADDR}${contractAddress}?a=${cert.id}`, '_blank');
+        }
     }
 }
 

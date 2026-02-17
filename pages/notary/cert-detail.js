@@ -25,8 +25,8 @@ export function renderCertDetail(el) {
 
     el.innerHTML = `
         <div class="nt-detail" style="margin-top:8px">
-            <!-- Image Preview (clickable → add to wallet) -->
-            <div onclick="NotaryPage.addCertToWallet()" style="display:block;margin-bottom:16px;cursor:pointer">
+            <!-- Image Preview (clickable → view document) -->
+            <div onclick="NotaryPage.viewDocument()" style="display:block;margin-bottom:16px;cursor:pointer">
                 <div style="min-height:240px;max-height:400px;background:var(--nt-bg3);border-radius:var(--nt-radius);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;border:1px solid var(--nt-border);transition:border-color var(--nt-transition)" onmouseover="this.style.borderColor='rgba(245,158,11,0.3)'" onmouseout="this.style.borderColor='var(--nt-border)'">
                     ${ipfsUrl ? `
                         <img src="${ipfsUrl}" style="width:100%;height:100%;object-fit:contain;max-height:400px" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" alt="Certificate #${cert.id}">
@@ -47,7 +47,7 @@ export function renderCertDetail(el) {
                         </div>
                     ` : ''}
                     <div style="position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.75);padding:4px 10px;border-radius:8px;font-size:10px;color:var(--nt-text-2)">
-                        <i class="fa-solid fa-wallet" style="margin-right:4px"></i>Tap to add to wallet
+                        <i class="fa-solid fa-expand" style="margin-right:4px"></i>Tap to view document
                     </div>
                 </div>
             </div>
