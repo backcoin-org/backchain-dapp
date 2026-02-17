@@ -28,7 +28,7 @@ import { AboutPage } from './pages/AboutPage.js';
 import { AirdropPage } from './pages/AirdropPage.js';
 import { AdminPage } from './pages/AdminPage.js';
 import { TokenomicsPage } from './pages/TokenomicsPage.js';
-import { NotaryPage } from './pages/NotaryPage.js';
+import { NotaryPage } from './pages/notary/NotaryPage.js';
 import { RentalPage } from './pages/RentalPage.js';
 import { SocialMediaPage } from './pages/SocialMedia.js';
 // CreditCardPage, DexPage, DaoPage removed (were demo placeholders)
