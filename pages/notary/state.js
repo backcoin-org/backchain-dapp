@@ -13,7 +13,8 @@ export const EXPLORER_TOKEN = `${EXPLORER_BASE}/token/`;
 
 // V9: Certified event replaces DocumentNotarized
 export const NOTARY_ABI_EVENTS = [
-    'event Certified(uint256 indexed certId, address indexed owner, bytes32 documentHash, uint8 docType, address operator)'
+    'event Certified(uint256 indexed certId, address indexed owner, bytes32 documentHash, uint8 docType, address operator)',
+    'event CertificateTransferred(bytes32 indexed documentHash, address indexed from, address indexed to)'
 ];
 
 export const FILE_TYPES = {

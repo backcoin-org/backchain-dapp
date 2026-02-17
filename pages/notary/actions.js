@@ -194,6 +194,50 @@ export async function handleMint() {
 }
 
 // ============================================================================
+// ADD TO WALLET
+// ============================================================================
+
+export async function addCertToWallet() {
+    const cert = NT.selectedCert;
+    if (!cert) return;
+
+    const contractAddress = addresses?.notary;
+    if (!contractAddress) {
+        showToast('Contract address not found', 'error');
+        return;
+    }
+
+    // Try MetaMask wallet_watchAsset (ERC721)
+    if (window.ethereum) {
+        try {
+            await window.ethereum.request({
+                method: 'wallet_watchAsset',
+                params: {
+                    type: 'ERC721',
+                    options: {
+                        address: contractAddress,
+                        tokenId: String(cert.id)
+                    }
+                }
+            });
+            showToast(`Certificate #${cert.id} added to wallet!`, 'success');
+            return;
+        } catch (e) {
+            console.log('[NotaryPage] wallet_watchAsset not supported, using fallback');
+        }
+    }
+
+    // Fallback: copy Arbiscan link
+    const url = `${EXPLORER_ADDR}${contractAddress}?a=${cert.id}`;
+    try {
+        await navigator.clipboard.writeText(url);
+        showToast(`Certificate #${cert.id} link copied to clipboard!`, 'success');
+    } catch {
+        window.open(url, '_blank');
+    }
+}
+
+// ============================================================================
 // TRANSFER
 // ============================================================================
 

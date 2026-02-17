@@ -90,7 +90,8 @@ function renderCertCard(cert) {
                     <i class="${fileInfo.icon}" style="font-size:28px;color:${fileInfo.color}"></i>
                 `}
                 <span style="position:absolute;top:8px;right:8px;font-size:10px;font-family:monospace;color:var(--nt-accent);background:rgba(0,0,0,0.8);padding:2px 8px;border-radius:20px;font-weight:700">#${cert.id}</span>
-                ${timeAgo ? `<span style="position:absolute;top:8px;left:8px;font-size:10px;color:var(--nt-text-3);background:rgba(0,0,0,0.8);padding:2px 8px;border-radius:20px"><i class="fa-regular fa-clock" style="margin-right:4px"></i>${timeAgo}</span>` : ''}
+                ${cert.received ? `<span style="position:absolute;top:8px;left:8px;font-size:10px;font-weight:600;color:#fff;background:rgba(99,102,241,0.9);padding:2px 8px;border-radius:20px;display:flex;align-items:center;gap:3px"><i class="fa-solid fa-inbox" style="font-size:8px"></i>Received</span>` :
+                 timeAgo ? `<span style="position:absolute;top:8px;left:8px;font-size:10px;color:var(--nt-text-3);background:rgba(0,0,0,0.8);padding:2px 8px;border-radius:20px"><i class="fa-regular fa-clock" style="margin-right:4px"></i>${timeAgo}</span>` : ''}
             </div>
             <div class="nt-cert-info">
                 <div style="font-size:13px;font-weight:600;color:var(--nt-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px">${desc}</div>

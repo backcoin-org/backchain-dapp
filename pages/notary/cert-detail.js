@@ -21,33 +21,36 @@ export function renderCertDetail(el) {
     const fileInfo = getFileTypeInfo(cert.mimeType || '', cert.description || '');
     const isOwner = cert.owner && State.userAddress &&
         cert.owner.toLowerCase() === State.userAddress.toLowerCase();
+    const isReceived = cert.received === true;
 
     el.innerHTML = `
         <div class="nt-detail" style="margin-top:8px">
-            <!-- Image Preview (large, clickable) -->
-            ${ipfsUrl ? `
-                <a href="${ipfsUrl}" target="_blank" style="display:block;text-decoration:none;margin-bottom:16px">
-                    <div style="min-height:240px;max-height:400px;background:var(--nt-bg3);border-radius:var(--nt-radius);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;border:1px solid var(--nt-border);cursor:pointer;transition:border-color var(--nt-transition)" onmouseover="this.style.borderColor='rgba(245,158,11,0.3)'" onmouseout="this.style.borderColor='var(--nt-border)'">
+            <!-- Image Preview (clickable → add to wallet) -->
+            <div onclick="NotaryPage.addCertToWallet()" style="display:block;margin-bottom:16px;cursor:pointer">
+                <div style="min-height:240px;max-height:400px;background:var(--nt-bg3);border-radius:var(--nt-radius);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;border:1px solid var(--nt-border);transition:border-color var(--nt-transition)" onmouseover="this.style.borderColor='rgba(245,158,11,0.3)'" onmouseout="this.style.borderColor='var(--nt-border)'">
+                    ${ipfsUrl ? `
                         <img src="${ipfsUrl}" style="width:100%;height:100%;object-fit:contain;max-height:400px" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" alt="Certificate #${cert.id}">
                         <div style="display:none;flex-direction:column;align-items:center;justify-content:center;width:100%;height:240px;position:absolute;inset:0;background:var(--nt-bg3)">
                             <i class="${fileInfo.icon}" style="font-size:48px;color:${fileInfo.color};margin-bottom:8px"></i>
                             <span style="font-size:12px;color:var(--nt-text-3)">${fileInfo.label} file</span>
                         </div>
-                        <div style="position:absolute;top:12px;right:12px;background:rgba(0,0,0,0.85);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;color:var(--nt-accent);font-family:monospace">#${cert.id}</div>
-                        <div style="position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.75);padding:4px 10px;border-radius:8px;font-size:10px;color:var(--nt-text-2)">
-                            <i class="fa-solid fa-expand" style="margin-right:4px"></i>Click to view full size
+                    ` : `
+                        <div style="text-align:center">
+                            <i class="${fileInfo.icon}" style="font-size:48px;color:${fileInfo.color};margin-bottom:8px"></i>
+                            <div style="font-size:12px;color:var(--nt-text-3)">${fileInfo.label} file</div>
                         </div>
-                    </div>
-                </a>
-            ` : `
-                <div style="height:200px;background:var(--nt-bg3);border-radius:var(--nt-radius);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;margin-bottom:16px;border:1px solid var(--nt-border)">
-                    <div style="text-align:center">
-                        <i class="${fileInfo.icon}" style="font-size:48px;color:${fileInfo.color};margin-bottom:8px"></i>
-                        <div style="font-size:12px;color:var(--nt-text-3)">${fileInfo.label} file</div>
-                    </div>
+                    `}
                     <div style="position:absolute;top:12px;right:12px;background:rgba(0,0,0,0.85);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;color:var(--nt-accent);font-family:monospace">#${cert.id}</div>
+                    ${isReceived ? `
+                        <div style="position:absolute;top:12px;left:12px;background:rgba(99,102,241,0.9);padding:4px 10px;border-radius:20px;font-size:10px;font-weight:600;color:#fff;display:flex;align-items:center;gap:4px">
+                            <i class="fa-solid fa-inbox"></i>Received
+                        </div>
+                    ` : ''}
+                    <div style="position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.75);padding:4px 10px;border-radius:8px;font-size:10px;color:var(--nt-text-2)">
+                        <i class="fa-solid fa-wallet" style="margin-right:4px"></i>Tap to add to wallet
+                    </div>
                 </div>
-            `}
+            </div>
 
             <!-- Primary Actions -->
             <div style="display:flex;gap:8px;margin-bottom:16px">
@@ -124,11 +127,11 @@ export function renderCertDetail(el) {
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
                 ${ipfsUrl ? `
                     <a href="${ipfsUrl}" target="_blank" class="nt-btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:12px">
-                        <i class="fa-solid fa-download"></i>Download
+                        <i class="fa-solid fa-eye"></i>View Original
                     </a>
                 ` : ''}
                 <a href="${EXPLORER_ADDR}${addresses?.notary}?a=${cert.id}" target="_blank" class="nt-btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:12px">
-                    <i class="fa-solid fa-arrow-up-right-from-square"></i>View on Arbiscan
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i>Arbiscan
                 </a>
                 ${cert.txHash ? `
                     <a href="${EXPLORER_TX}${cert.txHash}" target="_blank" class="nt-btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:12px">

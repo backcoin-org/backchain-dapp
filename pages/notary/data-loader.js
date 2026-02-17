@@ -106,6 +106,35 @@ async function loadCertificatesFromContract() {
         }
     }
 
+    // Detect received certificates via CertificateTransferred events
+    if (enriched.length > 0) {
+        try {
+            const { NetworkManager } = await import('../../modules/core/index.js');
+            const provider = NetworkManager.getProvider();
+            if (provider && addresses?.notary) {
+                const contract = new ethers.Contract(addresses.notary, NOTARY_ABI_EVENTS, provider);
+                const currentBlock = await provider.getBlockNumber();
+                const fromBlock = Math.max(0, currentBlock - 10_000_000);
+
+                // Query transfers TO current user
+                const transferFilter = contract.filters.CertificateTransferred(null, null, State.userAddress);
+                const transferEvents = await contract.queryFilter(transferFilter, fromBlock, currentBlock);
+
+                // Build set of received document hashes
+                const receivedHashes = new Set(transferEvents.map(ev => ev.args.documentHash.toLowerCase()));
+
+                // Mark enriched certs as received
+                for (const cert of enriched) {
+                    if (receivedHashes.has(cert.hash?.toLowerCase())) {
+                        cert.received = true;
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('[NotaryPage] Could not check transfer events:', e.message);
+        }
+    }
+
     return enriched.sort((a, b) => b.id - a.id);
 }
 
