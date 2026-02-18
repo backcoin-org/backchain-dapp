@@ -1647,8 +1647,8 @@ async function updateBkcPriceMetric() {
             if (price.bkcUsd > 0) {
                 el.innerHTML = `${formatUsd(price.bkcUsd)}`;
             } else if (price.bkcEth > 0) {
-                const ethStr = price.bkcEth < 0.001 ? price.bkcEth.toExponential(2) : price.bkcEth.toFixed(6);
-                el.innerHTML = `${ethStr} <span style="font-size:10px;color:var(--dash-text-3)">BNB</span>`;
+                const ethStr = price.bkcEth < 0.001 ? price.bkcEth.toFixed(8).replace(/0+$/, '') : price.bkcEth.toFixed(6);
+                el.innerHTML = `${ethStr} <span style="font-size:10px;color:var(--dash-text-3)">ETH</span>`;
             } else {
                 el.innerHTML = `<span style="color:var(--dash-text-3)">--</span>`;
             }

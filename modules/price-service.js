@@ -120,6 +120,7 @@ export function formatUsd(value) {
     if (!value || value === 0) return '$0.00';
     if (value >= 1) return `$${value.toFixed(2)}`;
     if (value >= 0.01) return `$${value.toFixed(4)}`;
-    if (value >= 0.0001) return `$${value.toFixed(6)}`;
-    return `$${value.toExponential(2)}`;
+    // Small prices: show full decimals (no scientific notation)
+    const s = value.toFixed(8).replace(/0+$/, '');
+    return `$${s}`;
 }

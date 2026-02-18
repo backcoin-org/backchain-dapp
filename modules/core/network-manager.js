@@ -102,6 +102,11 @@ const RPC_TIMEOUT = 5000; // 5 seconds
 const METAMASK_UPDATE_COOLDOWN = 60000; // 60 seconds cooldown
 const ALCHEMY_RETRY_DELAY = 2000; // V1.3: Wait before retrying Alchemy
 
+/** Helper: returns Alchemy RPC URL or null if no key configured */
+function getAlchemyUrl() {
+    return RPC_ENDPOINTS[0].getUrl();
+}
+
 // ============================================================================
 // 3. NETWORK MANAGER
 // ============================================================================
