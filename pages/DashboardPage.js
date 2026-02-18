@@ -63,7 +63,7 @@ const DashboardState = {
 // ============================================================================
 // CONFIG
 // ============================================================================
-const EXPLORER_BASE_URL = "https://testnet.opbnbscan.com/tx/";
+const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/tx/";
 const FAUCET_API_URL = "/api/faucet";
 const NETWORK_ACTIVITY_API = "https://getrecentactivity-4wvdcuoouq-uc.a.run.app";
 const SYSTEM_DATA_API = "https://getsystemdata-4wvdcuoouq-uc.a.run.app";

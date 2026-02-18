@@ -12,8 +12,8 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 //
 //   - Name: "Backcoin", Symbol: "BKC", 18 decimals
 //   - Max supply: 200,000,000 BKC (hard cap, enforced on-chain)
-//   - TGE (Token Generation Event): 40,000,000 BKC minted to treasury
-//   - Remaining 160,000,000 BKC minted via BuybackMiner scarcity curve
+//   - TGE (Token Generation Event): 20,000,000 BKC minted to treasury
+//   - Remaining 180,000,000 BKC minted via BuybackMiner scarcity curve
 //   - EIP-2612 Permit: gasless approvals via off-chain signatures
 //   - Public burn: anyone can burn their own tokens
 //   - Authorized minters: deployer adds minters (BuybackMiner), then
@@ -33,7 +33,7 @@ contract BKCToken is ERC20, ERC20Permit {
     uint256 public constant MAX_SUPPLY = 200_000_000 ether; // 200M
 
     /// @notice Initial supply minted to treasury at deployment.
-    uint256 public constant TGE_AMOUNT = 40_000_000 ether;  // 40M
+    uint256 public constant TGE_AMOUNT = 20_000_000 ether;  // 20M
 
     // ════════════════════════════════════════════════════════════════════════
     // STATE
@@ -100,7 +100,7 @@ contract BKCToken is ERC20, ERC20Permit {
     // ════════════════════════════════════════════════════════════════════════
 
     /// @notice Deploy BKC token with TGE mint to treasury.
-    /// @param _treasury Address receiving the initial 40M BKC supply.
+    /// @param _treasury Address receiving the initial 20M BKC supply.
     constructor(address _treasury)
         ERC20("Backcoin", "BKC")
         ERC20Permit("Backcoin")

@@ -24,16 +24,16 @@ import "./IBackchain.sol";
 // The execution fee is ADDED to the buyback amount, amplifying the purchase.
 // Caller receives 5% of the total (ecosystem + fee), so net cost is 95% of fee.
 //
-// MINING SCARCITY CURVE (linear decrease):
-//   rate = (MAX_SUPPLY - currentSupply) / MAX_MINTABLE
+// MINING SCARCITY CURVE (linear decrease, 50% cap):
+//   rate = min(50%, (MAX_SUPPLY - currentSupply) × MAX_RATE / MAX_MINTABLE)
 //
-//   Supply  40M (start) → mining rate 100% (1:1 with purchased)
-//   Supply 120M          → mining rate  50%
-//   Supply 160M          → mining rate  25%
+//   Supply  20M (start) → mining rate  50% (capped at MAX_RATE_BPS)
+//   Supply 110M          → mining rate  25%
+//   Supply 155M          → mining rate  12.5%
 //   Supply 200M (cap)    → mining rate   0% (pure real yield, no inflation)
 //
 // Owner can change: swap target (liquidity pool), execution fee.
-// Owner CANNOT change: caller reward, mining curve, burn rate.
+// Owner CANNOT change: caller reward, mining curve, burn rate, max rate.
 //
 // ============================================================================
 
@@ -46,8 +46,11 @@ contract BuybackMiner is IBuybackMiner {
     /// @notice Absolute max BKC supply (matches BKCToken)
     uint256 public constant MAX_SUPPLY = 200_000_000 ether; // 200M
 
-    /// @notice Maximum BKC that can ever be minted via mining (200M - 40M TGE)
-    uint256 public constant MAX_MINTABLE = 160_000_000 ether; // 160M
+    /// @notice Maximum BKC that can ever be minted via mining (200M - 20M TGE)
+    uint256 public constant MAX_MINTABLE = 180_000_000 ether; // 180M
+
+    /// @notice Maximum mining rate cap (5000 = 50%). Halves inflation vs 100%.
+    uint256 public constant MAX_RATE_BPS = 5000; // 50%
 
     /// @notice Caller incentive: 5% of ETH goes to whoever calls executeBuyback()
     uint256 public constant CALLER_BPS = 500; // 5%
@@ -247,17 +250,16 @@ contract BuybackMiner is IBuybackMiner {
     // MINING: SCARCITY CURVE
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Calculate new BKC to mint based on linear scarcity.
+    /// @notice Calculate new BKC to mint based on linear scarcity (50% cap).
     ///
-    ///         rate = (MAX_SUPPLY - currentSupply) / MAX_MINTABLE
+    ///         rate = min(MAX_RATE_BPS, (remaining × MAX_RATE_BPS) / MAX_MINTABLE)
     ///
-    ///         At 40M supply (start): rate = 160M/160M = 100%
-    ///         At 80M supply:         rate = 120M/160M = 75%
-    ///         At 120M supply:        rate = 80M/160M  = 50%
-    ///         At 160M supply:        rate = 40M/160M  = 25%
-    ///         At 200M supply (cap):  rate = 0/160M    = 0%
+    ///         At  20M supply (start): remaining=180M → rate = 50% (capped)
+    ///         At 110M supply:         remaining= 90M → rate = 25%
+    ///         At 155M supply:         remaining= 45M → rate = 12.5%
+    ///         At 200M supply (cap):   remaining=  0  → rate = 0%
     ///
-    ///         mintAmount = bkcPurchased × rate
+    ///         mintAmount = bkcPurchased × rateBps / BPS
     ///
     /// @param bkcPurchased Amount of BKC bought from pool (basis for mining calc)
     /// @return mintAmount  New BKC to mint (0 if cap reached)
@@ -269,26 +271,26 @@ contract BuybackMiner is IBuybackMiner {
 
         uint256 remaining = MAX_SUPPLY - currentSupply;
 
-        // Early stage: if remaining >= MAX_MINTABLE, cap rate at 100%
-        if (remaining >= MAX_MINTABLE) return bkcPurchased;
+        // Early stage: if remaining >= MAX_MINTABLE, cap rate at MAX_RATE_BPS (50%)
+        if (remaining >= MAX_MINTABLE) return (bkcPurchased * MAX_RATE_BPS) / BPS;
 
-        // Linear decrease: mint proportionally to remaining capacity
-        return (bkcPurchased * remaining) / MAX_MINTABLE;
+        // Linear decrease: rate = remaining × MAX_RATE_BPS / MAX_MINTABLE
+        return (bkcPurchased * remaining * MAX_RATE_BPS) / (MAX_MINTABLE * BPS);
     }
 
     // ════════════════════════════════════════════════════════════════════════
     // VIEWS: MINING & SUPPLY
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Current mining rate in basis points (10000 = 100%, 0 = no mining)
+    /// @notice Current mining rate in basis points (5000 = 50% max, 0 = no mining)
     function currentMiningRate() public view override returns (uint256 rateBps) {
         uint256 currentSupply = bkcToken.totalSupply();
         if (currentSupply >= MAX_SUPPLY) return 0;
 
         uint256 remaining = MAX_SUPPLY - currentSupply;
-        if (remaining >= MAX_MINTABLE) return BPS; // 100%
+        if (remaining >= MAX_MINTABLE) return MAX_RATE_BPS; // 50%
 
-        return (remaining * BPS) / MAX_MINTABLE;
+        return (remaining * MAX_RATE_BPS) / MAX_MINTABLE;
     }
 
     /// @notice How much ETH is waiting for buyback in the ecosystem
@@ -329,11 +331,13 @@ contract BuybackMiner is IBuybackMiner {
         uint256 remaining = MAX_SUPPLY - supplyLevel;
 
         if (remaining >= MAX_MINTABLE) {
-            return (purchaseAmount, BPS); // 100%
+            rateBps = MAX_RATE_BPS; // 50%
+            miningAmount = (purchaseAmount * MAX_RATE_BPS) / BPS;
+            return (miningAmount, rateBps);
         }
 
-        rateBps = (remaining * BPS) / MAX_MINTABLE;
-        miningAmount = (purchaseAmount * remaining) / MAX_MINTABLE;
+        rateBps = (remaining * MAX_RATE_BPS) / MAX_MINTABLE;
+        miningAmount = (purchaseAmount * remaining * MAX_RATE_BPS) / (MAX_MINTABLE * BPS);
     }
 
     // ════════════════════════════════════════════════════════════════════════

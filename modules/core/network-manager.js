@@ -44,38 +44,41 @@ import { State } from '../../state.js';
  * Currently: opBNB Testnet
  */
 export const NETWORK_CONFIG = {
-    chainId: 5611,
-    chainIdHex: '0x15EB',
-    name: 'opBNB Testnet',
+    chainId: 421614,
+    chainIdHex: '0x66eee',
+    name: 'Arbitrum Sepolia',
     nativeCurrency: {
-        name: 'BNB',
-        symbol: 'tBNB',
+        name: 'ETH',
+        symbol: 'ETH',
         decimals: 18
     },
-    blockExplorer: 'https://testnet.opbnbscan.com'
+    blockExplorer: 'https://sepolia.arbiscan.io'
 };
 
 /**
- * RPC endpoints in priority order (opBNB Testnet)
+ * RPC endpoints in priority order (Arbitrum Sepolia — runtime)
  */
 const RPC_ENDPOINTS = [
     {
-        name: 'opBNB Official',
-        getUrl: () => 'https://opbnb-testnet-rpc.bnbchain.org',
+        name: 'Alchemy',
+        getUrl: () => {
+            const key = import.meta.env?.VITE_ALCHEMY_API_KEY;
+            return key ? `https://arb-sepolia.g.alchemy.com/v2/${key}` : null;
+        },
         priority: 1,
-        isPublic: true,
-        isPaid: false
+        isPublic: false,
+        isPaid: true
     },
     {
-        name: 'NodeReal',
-        getUrl: () => 'https://opbnb-testnet.nodereal.io/v1/64a9df0874fb4a93b9d0a3849de012d3',
+        name: 'Arbitrum Official',
+        getUrl: () => 'https://sepolia-rollup.arbitrum.io/rpc',
         priority: 2,
         isPublic: true,
         isPaid: false
     },
     {
         name: 'PublicNode',
-        getUrl: () => 'https://opbnb-testnet.publicnode.com',
+        getUrl: () => 'https://arbitrum-sepolia.publicnode.com',
         priority: 3,
         isPublic: true,
         isPaid: false

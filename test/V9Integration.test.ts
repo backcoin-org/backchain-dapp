@@ -35,7 +35,7 @@ function nftActionId(prefix: string, tier: number): string {
 // Constants matching V10 contracts
 // ---------------------------------------------------------------------------
 const MAX_SUPPLY = ethers.parseEther("200000000"); // 200M
-const TGE_AMOUNT = ethers.parseEther("40000000"); // 40M
+const TGE_AMOUNT = ethers.parseEther("20000000"); // 20M
 const BPS = 10_000n;
 
 // Module IDs (must match contracts)
@@ -394,9 +394,9 @@ describe("Backchain V10 — Integration Tests", function () {
       expect(await f.liquidityPool.bkcReserve()).to.be.gt(0);
     });
 
-    it("TGE minted 40M to treasury", async function () {
+    it("TGE minted 20M to treasury", async function () {
       const f = await loadFixture(deployAllFixture);
-      // Treasury started with 40M, then distributed tokens, so total supply includes TGE
+      // Treasury started with 20M, then distributed tokens, so total supply includes TGE
       expect(await f.bkcToken.totalSupply()).to.be.gte(TGE_AMOUNT);
     });
   });
@@ -1075,11 +1075,11 @@ describe("Backchain V10 — Integration Tests", function () {
   // ══════════════════════════════════════════════════════════════════════════
 
   describe("6. BuybackMiner", function () {
-    it("currentMiningRate returns 100% at TGE supply", async function () {
+    it("currentMiningRate returns 50% at TGE supply (MAX_RATE_BPS cap)", async function () {
       const f = await loadFixture(deployAllFixture);
-      // At TGE (40M supply), mining rate should be 10000 (100%)
+      // At TGE (20M supply), remaining=180M >= MAX_MINTABLE=180M → capped at 50%
       const rate = await f.buybackMiner.currentMiningRate();
-      expect(rate).to.equal(10000);
+      expect(rate).to.equal(5000);
     });
 
     it("executeBuyback: reverts when nothing accumulated", async function () {

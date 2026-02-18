@@ -41,8 +41,8 @@ const ethers = window.ethers;
 // ============================================================================
 // 1. CONFIGURAÇÃO
 // ============================================================================
-const OPBNB_TESTNET_ID_DECIMAL = 5611;
-const OPBNB_TESTNET_ID_HEX = '0x15EB';
+const OPBNB_TESTNET_ID_DECIMAL = 421614;
+const OPBNB_TESTNET_ID_HEX = '0x66eee';
 
 let balancePollingInterval = null;
 

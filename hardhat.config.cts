@@ -20,12 +20,19 @@ const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
 // ========================================
 
 const RPC_URLS = {
-  // Testnet - opBNB Testnet
+  // Arbitrum Sepolia (active runtime)
+  arbitrumSepolia: {
+    primary: ALCHEMY_API_KEY
+      ? `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}`
+      : "https://sepolia-rollup.arbitrum.io/rpc",
+    fallback: "https://arbitrum-sepolia.publicnode.com",
+  },
+  // opBNB Testnet (future target)
   opbnbTestnet: {
     primary: "https://opbnb-testnet-rpc.bnbchain.org",
     fallback: "https://opbnb-testnet.publicnode.com",
   },
-  // Mainnet - opBNB Mainnet
+  // opBNB Mainnet (future target)
   opbnbMainnet: {
     primary: "https://opbnb-mainnet-rpc.bnbchain.org",
     fallback: "https://opbnb.publicnode.com",
@@ -43,7 +50,7 @@ if (!ETHERSCAN_API_KEY) {
   console.warn("⚠️ AVISO: ETHERSCAN_API_KEY não encontrada. Verificação impossível.");
 }
 // Log da RPC sendo usada
-console.log(`🌐 opBNB Testnet RPC: ${RPC_URLS.opbnbTestnet.primary}`);
+console.log(`🌐 Arbitrum Sepolia RPC: ${RPC_URLS.arbitrumSepolia.primary}`);
 
 // ========================================
 // ⚙️ CONFIGURAÇÃO DO HARDHAT
@@ -97,7 +104,15 @@ const config: HardhatUserConfig = {
       chainId: 31337,
     },
 
-    // 🟢 TESTNET: opBNB Testnet
+    // 🟢 TESTNET: Arbitrum Sepolia (active runtime)
+    arbitrumSepolia: {
+      url: RPC_URLS.arbitrumSepolia.primary,
+      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
+      chainId: 421614,
+      timeout: 60000,
+    },
+
+    // 🟡 TESTNET: opBNB Testnet (future target)
     opbnbTestnet: {
       url: RPC_URLS.opbnbTestnet.primary,
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
@@ -105,7 +120,7 @@ const config: HardhatUserConfig = {
       timeout: 60000,
     },
 
-    // 🔴 MAINNET: opBNB Mainnet
+    // 🔴 MAINNET: opBNB Mainnet (future target)
     opbnbMainnet: {
       url: RPC_URLS.opbnbMainnet.primary,
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
@@ -120,6 +135,14 @@ const config: HardhatUserConfig = {
   etherscan: {
     apiKey: ETHERSCAN_API_KEY,
     customChains: [
+      {
+        network: "arbitrumSepolia",
+        chainId: 421614,
+        urls: {
+          apiURL: "https://api-sepolia.arbiscan.io/api",
+          browserURL: "https://sepolia.arbiscan.io",
+        },
+      },
       {
         network: "opbnbTestnet",
         chainId: 5611,

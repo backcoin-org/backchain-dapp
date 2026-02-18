@@ -203,25 +203,30 @@ interface INFTFusion {
         external payable returns (uint256[] memory newTokenIds);
 }
 
-// ─── Airdrop Vesting ───────────────────────────────────────────────────────
+// ─── Airdrop Claim (Merkle-based, auto-stake) ─────────────────────────────
 
-interface IAirdropVesting {
-    /// @notice Claim airdrop with instant release (auto-stakes for 6 months)
-    function claimAndStake(address operator) external payable;
+interface IAirdropClaim {
+    /// @notice Claim airdrop tokens. Auto-delegates to StakingPool.
+    /// @param amount     User's total allocation (must match merkle leaf)
+    /// @param merkleProof Proof path from leaf to root
+    /// @param operator   Frontend operator earning commission on claim fee
+    function claim(uint256 amount, bytes32[] calldata merkleProof, address operator) external payable;
 
-    /// @notice Claim airdrop with vested release (10% per month, 10 months)
-    function claimVested() external;
+    /// @notice Check if an address has already claimed
+    function hasClaimed(address user) external view returns (bool);
 
-    /// @notice Withdraw available vested tokens
-    function withdrawVested() external;
+    /// @notice Current phase number (increments when new merkle root is set)
+    function currentPhase() external view returns (uint256);
 
-    /// @notice Check claimable amount for a beneficiary
-    function getClaimInfo(address beneficiary) external view returns (
-        uint256 totalAllocation,
+    /// @notice Total BKC claimed across all phases
+    function totalClaimed() external view returns (uint256);
+
+    /// @notice Get claim info for a user
+    function getClaimInfo(address user) external view returns (
         bool claimed,
-        bool stakedOption,
-        uint256 vestedWithdrawn,
-        uint256 withdrawableNow
+        uint256 claimFee,
+        uint256 lockDays,
+        uint256 phase
     );
 }
 

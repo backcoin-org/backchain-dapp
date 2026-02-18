@@ -28,59 +28,62 @@ export const CONFIG = {
 // Resolve o problema de RPC ruim sem intervenção do usuário
 
 export const METAMASK_NETWORK_CONFIG = {
-    chainId: '0x15EB', // 5611 in hex (opBNB Testnet)
-    chainIdDecimal: 5611,
-    chainName: 'opBNB Testnet',
+    chainId: '0x66eee', // 421614 in hex (Arbitrum Sepolia)
+    chainIdDecimal: 421614,
+    chainName: 'Arbitrum Sepolia',
     nativeCurrency: {
-        name: 'BNB',
-        symbol: 'tBNB',
+        name: 'ETH',
+        symbol: 'ETH',
         decimals: 18
     },
-    blockExplorerUrls: ['https://testnet.opbnbscan.com'],
-    // RPCs em ordem de prioridade para o MetaMask
+    blockExplorerUrls: ['https://sepolia.arbiscan.io'],
     rpcUrls: [
-        'https://opbnb-testnet-rpc.bnbchain.org',
-        'https://opbnb-testnet.nodereal.io/v1/64a9df0874fb4a93b9d0a3849de012d3',
-        'https://opbnb-testnet.publicnode.com'
-    ]
+        'https://sepolia-rollup.arbitrum.io/rpc',
+        'https://arbitrum-sepolia.publicnode.com',
+        `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`
+    ].filter(url => !url.includes('undefined'))
 };
 
 // ============================================================================
 // 2. NETWORK CONFIGURATION - MULTI-RPC SYSTEM
 // ============================================================================
 
-// Lista de RPCs em ordem de prioridade (opBNB Testnet)
+// Lista de RPCs em ordem de prioridade (Arbitrum Sepolia — runtime)
 export const RPC_ENDPOINTS = [
     {
-        name: "opBNB Official",
-        url: "https://opbnb-testnet-rpc.bnbchain.org",
+        name: "Alchemy",
+        url: ALCHEMY_KEY ? `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}` : null,
         priority: 1,
-        isPublic: true,
+        isPublic: false,
         corsCompatible: true
     },
     {
-        name: "NodeReal",
-        url: "https://opbnb-testnet.nodereal.io/v1/64a9df0874fb4a93b9d0a3849de012d3",
+        name: "Arbitrum Official",
+        url: "https://sepolia-rollup.arbitrum.io/rpc",
         priority: 2,
         isPublic: true,
         corsCompatible: true
     },
     {
         name: "PublicNode",
-        url: "https://opbnb-testnet.publicnode.com",
+        url: "https://arbitrum-sepolia.publicnode.com",
         priority: 3,
         isPublic: true,
         corsCompatible: true
     }
 ].filter(rpc => rpc.url !== null);
 
-// RPC Principal (opBNB Testnet)
-export const sepoliaRpcUrl = "https://opbnb-testnet-rpc.bnbchain.org";
+// RPC Principal (Arbitrum Sepolia — runtime)
+export const sepoliaRpcUrl = ALCHEMY_KEY
+    ? `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`
+    : "https://sepolia-rollup.arbitrum.io/rpc";
 
-// WebSocket (opBNB Testnet - se disponível)
-export const sepoliaWssUrl = null;
+// WebSocket
+export const sepoliaWssUrl = ALCHEMY_KEY
+    ? `wss://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`
+    : null;
 
-export const sepoliaChainId = 5611n;
+export const sepoliaChainId = 421614n;
 
 // ============================================================================
 // 3. RPC FALLBACK SYSTEM
