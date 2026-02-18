@@ -28,78 +28,59 @@ export const CONFIG = {
 // Resolve o problema de RPC ruim sem intervenção do usuário
 
 export const METAMASK_NETWORK_CONFIG = {
-    chainId: '0x66eee', // 421614 in hex
-    chainIdDecimal: 421614,
-    chainName: 'Arbitrum Sepolia',
+    chainId: '0x15EB', // 5611 in hex (opBNB Testnet)
+    chainIdDecimal: 5611,
+    chainName: 'opBNB Testnet',
     nativeCurrency: {
-        name: 'Ethereum',
-        symbol: 'ETH',
+        name: 'BNB',
+        symbol: 'tBNB',
         decimals: 18
     },
-    blockExplorerUrls: ['https://sepolia.arbiscan.io'],
-    // 🔥 RPCs em ordem de prioridade para o MetaMask
-    rpcUrls: ALCHEMY_KEY 
-        ? [
-            `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`,
-            'https://arbitrum-sepolia.blockpi.network/v1/rpc/public',
-            'https://arbitrum-sepolia-rpc.publicnode.com'
-          ]
-        : [
-            'https://arbitrum-sepolia.blockpi.network/v1/rpc/public',
-            'https://arbitrum-sepolia-rpc.publicnode.com',
-            'https://sepolia-rollup.arbitrum.io/rpc'
-          ]
+    blockExplorerUrls: ['https://testnet.opbnbscan.com'],
+    // RPCs em ordem de prioridade para o MetaMask
+    rpcUrls: [
+        'https://opbnb-testnet-rpc.bnbchain.org',
+        'https://opbnb-testnet.nodereal.io/v1/64a9df0874fb4a93b9d0a3849de012d3',
+        'https://opbnb-testnet.publicnode.com'
+    ]
 };
 
 // ============================================================================
 // 2. NETWORK CONFIGURATION - MULTI-RPC SYSTEM
 // ============================================================================
 
-// 🔥 Lista de RPCs em ordem de prioridade
-// ⚠️ IMPORTANTE: Alchemy como primário porque Arbitrum Official tem problemas de CORS
-// O header "Access-Control-Allow-Origin: *,*" (duplicado) é rejeitado pelos browsers
+// Lista de RPCs em ordem de prioridade (opBNB Testnet)
 export const RPC_ENDPOINTS = [
     {
-        name: "Alchemy",
-        url: ALCHEMY_KEY ? `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}` : null,
+        name: "opBNB Official",
+        url: "https://opbnb-testnet-rpc.bnbchain.org",
         priority: 1,
-        isPublic: false,
-        corsCompatible: true  // ✅ Funciona em browsers
+        isPublic: true,
+        corsCompatible: true
     },
     {
-        name: "BlockPI",
-        url: "https://arbitrum-sepolia.blockpi.network/v1/rpc/public",
+        name: "NodeReal",
+        url: "https://opbnb-testnet.nodereal.io/v1/64a9df0874fb4a93b9d0a3849de012d3",
         priority: 2,
         isPublic: true,
-        corsCompatible: true  // ✅ Funciona em browsers
+        corsCompatible: true
     },
     {
         name: "PublicNode",
-        url: "https://arbitrum-sepolia-rpc.publicnode.com",
+        url: "https://opbnb-testnet.publicnode.com",
         priority: 3,
         isPublic: true,
-        corsCompatible: true  // ✅ Funciona em browsers
-    },
-    {
-        name: "Arbitrum Official",
-        url: "https://sepolia-rollup.arbitrum.io/rpc",
-        priority: 4,
-        isPublic: true,
-        corsCompatible: false  // ❌ CORS header duplicado (*,*)
+        corsCompatible: true
     }
-].filter(rpc => rpc.url !== null); // Remove RPCs sem URL (ex: Alchemy sem key)
+].filter(rpc => rpc.url !== null);
 
-// 🔥 RPC Principal - Alchemy (compatível com CORS)
-export const sepoliaRpcUrl = ALCHEMY_KEY 
-    ? `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`
-    : "https://arbitrum-sepolia.blockpi.network/v1/rpc/public";
+// RPC Principal (opBNB Testnet)
+export const sepoliaRpcUrl = "https://opbnb-testnet-rpc.bnbchain.org";
 
-// WebSocket - Alchemy (para eventos em tempo real, se disponível)
-export const sepoliaWssUrl = ALCHEMY_KEY 
-    ? `wss://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`
-    : null;
+// WebSocket (opBNB Testnet - se disponível)
+export const sepoliaWssUrl = null;
 
-export const sepoliaChainId = 421614n;
+export const sepoliaChainId = 5611n;
 
 // ============================================================================
 // 3. RPC FALLBACK SYSTEM
@@ -967,7 +948,7 @@ export async function isCorrectNetwork() {
 }
 
 /**
- * Adiciona/Atualiza a rede Arbitrum Sepolia no MetaMask com RPCs confiáveis
+ * Adiciona/Atualiza a rede opBNB Testnet no MetaMask com RPCs confiáveis
  * Esta função também ATUALIZA os RPCs se a rede já existir!
  */
 export async function updateMetaMaskNetwork() {
@@ -1001,7 +982,7 @@ export async function updateMetaMaskNetwork() {
 }
 
 /**
- * Troca para a rede Arbitrum Sepolia
+ * Troca para a rede opBNB Testnet
  * Se a rede não existir, adiciona automaticamente
  */
 export async function switchToCorrectNetwork() {
@@ -1016,7 +997,7 @@ export async function switchToCorrectNetwork() {
             params: [{ chainId: METAMASK_NETWORK_CONFIG.chainId }]
         });
         
-        console.log('✅ Switched to Arbitrum Sepolia');
+        console.log('✅ Switched to opBNB Testnet');
         return true;
         
     } catch (switchError) {
@@ -1098,7 +1079,7 @@ export async function ensureCorrectNetworkConfig() {
             const switched = await switchToCorrectNetwork();
             
             if (!switched) {
-                return { success: false, error: 'Please switch to Arbitrum Sepolia network' };
+                return { success: false, error: 'Please switch to opBNB Testnet' };
             }
         }
 

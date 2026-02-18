@@ -8,7 +8,7 @@
 // V69.1 Changes:
 // - Removed sidebar (Network Status, AirBNFT, Portfolio Stats)
 // - Activity feed now full-width
-// - Faucet always visible with prominent design (BKC + ETH)
+// - Faucet always visible with prominent design (BKC + BNB)
 // - Enhanced mobile experience (filter chips scroll, better breakpoints)
 // - Visual polish (hero gradient border, claim shimmer, faucet glow)
 //
@@ -63,7 +63,7 @@ const DashboardState = {
 // ============================================================================
 // CONFIG
 // ============================================================================
-const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/tx/";
+const EXPLORER_BASE_URL = "https://testnet.opbnbscan.com/tx/";
 const FAUCET_API_URL = "/api/faucet";
 const NETWORK_ACTIVITY_API = "https://getrecentactivity-4wvdcuoouq-uc.a.run.app";
 const SYSTEM_DATA_API = "https://getsystemdata-4wvdcuoouq-uc.a.run.app";
@@ -104,7 +104,7 @@ const ACTIVITY_ICONS = {
     BACKCHAT_BOOST: { icon: 'fa-rocket', color: '#f97316', bg: 'rgba(249,115,22,0.15)', label: '🚀 Profile Boosted', emoji: '🚀' },
     BACKCHAT_BADGE: { icon: 'fa-circle-check', color: '#10b981', bg: 'rgba(16,185,129,0.15)', label: '✅ Badge Activated', emoji: '✅' },
     BACKCHAT_TIP: { icon: 'fa-coins', color: '#fbbf24', bg: 'rgba(251,191,36,0.15)', label: '💰 Tipped BKC', emoji: '💰' },
-    BACKCHAT_WITHDRAW: { icon: 'fa-wallet', color: '#8b5cf6', bg: 'rgba(139,92,246,0.15)', label: '💸 ETH Withdrawn', emoji: '💸' },
+    BACKCHAT_WITHDRAW: { icon: 'fa-wallet', color: '#8b5cf6', bg: 'rgba(139,92,246,0.15)', label: '💸 BNB Withdrawn', emoji: '💸' },
     CHARITY_DONATE: { icon: 'fa-heart', color: '#ec4899', bg: 'rgba(236,72,153,0.15)', label: '💝 Donated', emoji: '💝' },
     CHARITY_CREATE: { icon: 'fa-hand-holding-heart', color: '#10b981', bg: 'rgba(16,185,129,0.15)', label: '🌱 Campaign Created', emoji: '🌱' },
     CHARITY_CANCEL: { icon: 'fa-heart-crack', color: '#ef4444', bg: 'rgba(239,68,68,0.15)', label: '💔 Campaign Cancelled', emoji: '💔' },
@@ -294,7 +294,7 @@ async function requestSmartFaucet(btnElement) {
             apiSuccess = true;
             const bkcAmt = data.bkcAmount || FAUCET_BKC_AMOUNT;
             const ethAmt = data.ethAmount || FAUCET_ETH_AMOUNT;
-            showToast(`Faucet: ${bkcAmt} BKC + ${ethAmt} ETH sent to your wallet!`, "success");
+            showToast(`Faucet: ${bkcAmt} BKC + ${ethAmt} BNB sent to your wallet!`, "success");
             DashboardState.faucet.canClaim = false;
             try { localStorage.setItem('bkc_faucet_' + State.userAddress.toLowerCase(), '1'); } catch(e) {}
             updateFaucetWidget();
@@ -356,7 +356,7 @@ function updateFaucetWidget() {
     if (!State.isConnected) {
         widget.style.opacity = '0.5';
         if (titleEl) titleEl.innerText = "Get Free Testnet Tokens";
-        if (descEl) descEl.innerText = "Connect your wallet to claim BKC + ETH for gas";
+        if (descEl) descEl.innerText = "Connect your wallet to claim BKC + BNB for gas";
         if (statusEl) statusEl.classList.add('hidden');
         if (btn) { btn.className = 'dash-btn-secondary'; btn.innerHTML = '<i class="fa-solid fa-wallet"></i> Connect Wallet'; btn.disabled = true; }
         return;
@@ -366,12 +366,12 @@ function updateFaucetWidget() {
     if (!DashboardState.faucet.canClaim) {
         // Already claimed (one-time per wallet)
         if (titleEl) titleEl.innerText = "Testnet Tokens Received";
-        if (descEl) descEl.innerText = `Already received ${FAUCET_BKC_AMOUNT} BKC + ${FAUCET_ETH_AMOUNT} ETH for testing on this wallet`;
+        if (descEl) descEl.innerText = `Already received ${FAUCET_BKC_AMOUNT} BKC + ${FAUCET_ETH_AMOUNT} BNB for testing on this wallet`;
         if (statusEl) { statusEl.classList.remove('hidden'); statusEl.innerHTML = `<i class="fa-solid fa-circle-check" style="margin-right:4px;color:#4ade80"></i>One-time claim used`; }
         if (btn) { btn.className = 'dash-btn-secondary'; btn.innerHTML = '<i class="fa-solid fa-check"></i> Already Claimed'; btn.disabled = true; }
     } else {
         if (titleEl) titleEl.innerText = "Get Free Testnet Tokens";
-        if (descEl) descEl.innerText = "Claim BKC tokens and ETH for gas — one-time per wallet";
+        if (descEl) descEl.innerText = "Claim BKC tokens and BNB for gas — one-time per wallet";
         if (statusEl) statusEl.classList.add('hidden');
         if (btn) { btn.className = 'dash-btn-primary dash-btn-cyan'; btn.innerHTML = '<i class="fa-solid fa-faucet"></i> Claim Free Tokens'; btn.disabled = false; }
     }
@@ -484,7 +484,7 @@ async function updateTutorWidget() {
 
     if (data.count > 0) {
         if (titleEl) titleEl.innerText = `${data.count} Student${data.count > 1 ? 's' : ''} Earning for You`;
-        if (descEl) descEl.innerText = "You earn 10% ETH on all fees + 5% BKC on staking rewards. Keep sharing!";
+        if (descEl) descEl.innerText = "You earn 10% BNB on all fees + 5% BKC on staking rewards. Keep sharing!";
     } else {
         if (titleEl) titleEl.innerText = "Be Someone's Tutor";
         if (descEl) descEl.innerText = "Share your link. Earn 10% of all fees + 5% BKC from your students — forever.";
@@ -504,7 +504,7 @@ function copyTutorLink() {
 function shareTutorLink() {
     if (!State.userAddress) return;
     const link = `${window.location.origin}/#dashboard?ref=${State.userAddress}`;
-    const text = `Join Backchain and earn crypto!\n\nStake BKC and earn daily rewards\nBe a tutor — earn 10% ETH + 5% BKC FOREVER\n\n${link}\n\n#Backchain #DeFi #Arbitrum #Web3`;
+    const text = `Join Backchain and earn crypto!\n\nStake BKC and earn daily rewards\nBe a tutor — earn 10% BNB + 5% BKC FOREVER\n\n${link}\n\n#Backchain #DeFi #opBNB #BNBChain #Web3`;
 
     if (navigator.share) {
         navigator.share({ title: 'Backchain — Become a Tutor', text, url: link }).catch(() => {});
@@ -1183,13 +1183,13 @@ function renderDashboardLayout() {
                 </div>
                 <div class="dash-faucet-info">
                     <h3 id="faucet-title">Get Free Testnet Tokens</h3>
-                    <p id="faucet-desc">Claim BKC tokens and ETH for gas — one-time per wallet</p>
+                    <p id="faucet-desc">Claim BKC tokens and BNB for gas — one-time per wallet</p>
                     <div class="dash-faucet-amounts">
                         <span class="dash-faucet-badge" style="color:#22d3ee">
                             <i class="fa-solid fa-coins" style="font-size:10px"></i>${FAUCET_BKC_AMOUNT} BKC
                         </span>
                         <span class="dash-faucet-badge" style="color:#4ade80">
-                            <i class="fa-brands fa-ethereum" style="font-size:10px"></i>${FAUCET_ETH_AMOUNT} ETH
+                            <i class="fa-brands fa-ethereum" style="font-size:10px"></i>${FAUCET_ETH_AMOUNT} BNB
                         </span>
                     </div>
                     <p id="faucet-status" class="faucet-status-text hidden"></p>
@@ -1201,22 +1201,22 @@ function renderDashboardLayout() {
                 </div>
             </div>
 
-            <!-- BUYBACK BANNER — Only visible when pending ETH > 0 -->
+            <!-- BUYBACK BANNER — Only visible when pending BNB > 0 -->
             <div id="dash-buyback-widget" class="dash-buyback-section" style="margin-bottom: 14px; display: none;">
                 <div class="dash-buyback-icon">
                     <i class="fa-solid fa-hammer"></i>
                 </div>
                 <div class="dash-buyback-info">
                     <h3 id="dash-buyback-title">Buyback Ready</h3>
-                    <p id="dash-buyback-desc">Execute buyback to earn 5% of pending ETH as staker rewards</p>
+                    <p id="dash-buyback-desc">Execute buyback to earn 5% of pending BNB as staker rewards</p>
                     <div class="dash-buyback-amounts">
                         <span class="dash-buyback-badge" style="color:#f97316">
                             <i class="fa-brands fa-ethereum" style="font-size:10px"></i>
-                            <span id="dash-buyback-pending">0</span> ETH pending
+                            <span id="dash-buyback-pending">0</span> BNB pending
                         </span>
                         <span class="dash-buyback-badge" style="color:#4ade80">
                             <i class="fa-solid fa-gift" style="font-size:10px"></i>
-                            Earn <span id="dash-buyback-reward">0</span> ETH
+                            Earn <span id="dash-buyback-reward">0</span> BNB
                         </span>
                     </div>
                 </div>
@@ -1242,7 +1242,7 @@ function renderDashboardLayout() {
                         </span>
                         <span class="dash-referral-stat" style="color:#4ade80">
                             <i class="fa-solid fa-coins" style="font-size:10px"></i>
-                            10% ETH + 5% BKC
+                            10% BNB + 5% BKC
                         </span>
                     </div>
                     <div id="tutor-info-area" class="dash-referral-stats" style="display:none"></div>
@@ -1352,7 +1352,7 @@ function renderDashboardLayout() {
                     <div class="dash-metric-pill-label"><i class="fa-solid fa-fire" style="color:#ef4444"></i> Burned</div>
                     <div id="dash-metric-burned" class="dash-metric-pill-value">--</div>
                 </div>
-                <div class="dash-metric-pill" title="Total ETH fees collected by ecosystem">
+                <div class="dash-metric-pill" title="Total BNB fees collected by ecosystem">
                     <div class="dash-metric-pill-label"><i class="fa-brands fa-ethereum" style="color:#fb923c"></i> Fees</div>
                     <div id="dash-metric-fees" class="dash-metric-pill-value">--</div>
                 </div>
@@ -1460,7 +1460,7 @@ function renderGasModal() {
                     <i class="fa-solid fa-gas-pump" style="font-size:18px;color:#ef4444"></i>
                 </div>
                 <h3 style="font-size:16px;font-weight:700;color:var(--dash-text);margin:0 0 4px">No Gas</h3>
-                <p style="font-size:11px;color:var(--dash-text-2);margin-bottom:14px">You need Arbitrum Sepolia ETH</p>
+                <p style="font-size:11px;color:var(--dash-text-2);margin-bottom:14px">You need BNB for gas</p>
                 <button id="emergency-faucet-btn" class="dash-btn-primary dash-btn-green" style="width:100%;justify-content:center;margin-bottom:10px">
                     <i class="fa-solid fa-hand-holding-medical"></i> Get Free Gas + BKC
                 </button>
@@ -1549,8 +1549,8 @@ async function updateGlobalMetrics() {
             ? `<span style="color:#ef4444">${formatCompact(burnedNum)}</span> <span style="font-size:10px;color:var(--dash-text-3)">BKC</span>`
             : `<span style="color:var(--dash-text-3)">0 BKC</span>`);
         setEl('dash-metric-fees', ethFeesNum > 0
-            ? `${ethFeesNum < 1000 ? ethFeesNum.toFixed(3) : formatCompact(ethFeesNum)} <span style="font-size:10px;color:var(--dash-text-3)">ETH</span>`
-            : `<span style="color:var(--dash-text-3)">0.000 ETH</span>`);
+            ? `${ethFeesNum < 1000 ? ethFeesNum.toFixed(3) : formatCompact(ethFeesNum)} <span style="font-size:10px;color:var(--dash-text-3)">BNB</span>`
+            : `<span style="color:var(--dash-text-3)">0.000 BNB</span>`);
 
         setEl('dash-metric-locked', lockedNum > 0
             ? `<span style="color:#60a5fa">${formatCompact(lockedNum)}</span> <span style="font-size:10px;color:var(--dash-text-3)">BKC</span>`
@@ -1605,10 +1605,10 @@ async function loadDashBuybackData() {
         const descEl = document.getElementById('dash-buyback-desc');
         if (pendingEl) pendingEl.textContent = pendingStr;
         if (rewardEl) rewardEl.textContent = rewardStr;
-        if (titleEl) titleEl.textContent = `Buyback Ready — ${pendingStr} ETH`;
+        if (titleEl) titleEl.textContent = `Buyback Ready — ${pendingStr} BNB`;
         if (descEl) descEl.textContent = fee > 0n
-            ? `Pay ${feeStr} ETH fee, earn ${rewardStr} ETH (5%). Fee amplifies buyback.`
-            : `Execute buyback to earn 5% of pending ETH as staker rewards`;
+            ? `Pay ${feeStr} BNB fee, earn ${rewardStr} BNB (5%). Fee amplifies buyback.`
+            : `Execute buyback to earn 5% of pending BNB as staker rewards`;
     } catch (e) {
         console.error('Dashboard buyback load error:', e);
     }
@@ -1621,7 +1621,7 @@ async function handleDashBuyback(btn) {
         await BuybackTx.executeBuyback({
             button: btn,
             onSuccess: async () => {
-                showToast('Buyback executed! You earned 5% ETH reward', 'success');
+                showToast('Buyback executed! You earned 5% BNB reward', 'success');
                 loadDashBuybackData();
             },
             onError: (error) => {
@@ -1648,7 +1648,7 @@ async function updateBkcPriceMetric() {
                 el.innerHTML = `${formatUsd(price.bkcUsd)}`;
             } else if (price.bkcEth > 0) {
                 const ethStr = price.bkcEth < 0.001 ? price.bkcEth.toExponential(2) : price.bkcEth.toFixed(6);
-                el.innerHTML = `${ethStr} <span style="font-size:10px;color:var(--dash-text-3)">ETH</span>`;
+                el.innerHTML = `${ethStr} <span style="font-size:10px;color:var(--dash-text-3)">BNB</span>`;
             } else {
                 el.innerHTML = `<span style="color:var(--dash-text-3)">--</span>`;
             }
@@ -2088,7 +2088,7 @@ function renderActivityItem(item, showAddress = false) {
     const isPromote = t.includes('PROMOT') || t.includes('ADS') || t.includes('ADVERTIS');
     if (isPromote) {
         const promoAmount = details.promotionFee || details.amount || item.amount;
-        if (promoAmount && BigInt(promoAmount) > 0n) extraInfo = `<span style="color:#fbbf24;font-weight:700">${parseFloat(ethers.formatEther(BigInt(promoAmount))).toFixed(4)} ETH</span>`;
+        if (promoAmount && BigInt(promoAmount) > 0n) extraInfo = `<span style="color:#fbbf24;font-weight:700">${parseFloat(ethers.formatEther(BigInt(promoAmount))).toFixed(4)} BNB</span>`;
         const tokenId = details.tokenId || item.tokenId;
         if (tokenId) extraInfo += `<span style="margin-left:4px;font-size:9px;color:var(--dash-text-3)">NFT #${tokenId}</span>`;
     }
@@ -2103,7 +2103,7 @@ function renderActivityItem(item, showAddress = false) {
         const amountNum = formatBigNumber(BigInt(rawAmount));
         amountDisplay = amountNum > 0.001 ? amountNum.toFixed(2) : '';
     }
-    const currencyLabel = isPromote ? 'ETH' : 'BKC';
+    const currencyLabel = isPromote ? 'BNB' : 'BKC';
 
     return `
         <a href="${txLink}" target="_blank" class="dash-activity-item" title="${fullDateTime}">

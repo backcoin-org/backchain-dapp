@@ -436,7 +436,7 @@ export class TransactionEngine {
             const gasLimit = GasManager.addSafetyMargin(gasEstimate);
             const finalTxOptions = { ...txOptions, gasLimit };
 
-            // V1.6: Bump maxFeePerGas to avoid "baseFee exceeds maxFeePerGas" on Arbitrum
+            // V1.6: Bump maxFeePerGas to avoid "baseFee exceeds maxFeePerGas" on opBNB
             // V1.9: Use public provider for fee data (avoid MetaMask RPC rate limits)
             try {
                 const readProvider = NetworkManager.getProvider();

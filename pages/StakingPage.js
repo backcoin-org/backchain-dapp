@@ -608,7 +608,7 @@ function render() {
                 </div>
                 <div class="stk-buyback-grid">
                     <div class="stk-buyback-metric">
-                        <div class="stk-buyback-metric-label">Pending ETH</div>
+                        <div class="stk-buyback-metric-label">Pending BNB</div>
                         <div id="stk-buyback-pending" class="stk-buyback-metric-value" style="color:#f97316">--</div>
                     </div>
                     <div class="stk-buyback-metric">
@@ -626,7 +626,7 @@ function render() {
                 </div>
                 <div class="stk-buyback-footer">
                     <div class="stk-buyback-info" id="stk-buyback-info">
-                        Execute buyback to earn 5% of pending ETH. Remaining converts to BKC staker rewards.
+                        Execute buyback to earn 5% of pending BNB. Remaining converts to BKC staker rewards.
                     </div>
                     <button id="stk-buyback-btn" class="stk-buyback-btn" disabled>
                         <i class="fa-solid fa-hammer"></i> Execute Buyback
@@ -901,8 +901,8 @@ function updateBuybackCard() {
     const rateBps = Number(buybackPreview.currentMiningRateBps || 0n);
     const isReady = buybackPreview.isReady;
 
-    pendingEl.textContent = `${Number(ethers.formatEther(pendingEth)).toFixed(6)} ETH`;
-    rewardEl.textContent = `+${Number(ethers.formatEther(callerReward)).toFixed(6)} ETH`;
+    pendingEl.textContent = `${Number(ethers.formatEther(pendingEth)).toFixed(6)} BNB`;
+    rewardEl.textContent = `+${Number(ethers.formatEther(callerReward)).toFixed(6)} BNB`;
     stakersEl.textContent = `${formatBigNumber(toStakers).toLocaleString('en-US', { maximumFractionDigits: 1 })} BKC`;
     rateEl.textContent = `${(rateBps / 100).toFixed(1)}%`;
 
@@ -911,8 +911,8 @@ function updateBuybackCard() {
     // Info line with fee + last buyback
     const feeStr = buybackFee > 0n ? Number(ethers.formatEther(buybackFee)).toFixed(4) : '0';
     let infoText = buybackFee > 0n
-        ? `Fee: ${feeStr} ETH (added to buyback). Earn 5% of total.`
-        : 'Execute buyback to earn 5% of pending ETH.';
+        ? `Fee: ${feeStr} BNB (added to buyback). Earn 5% of total.`
+        : 'Execute buyback to earn 5% of pending BNB.';
     if (buybackLastInfo && Number(buybackLastInfo.timeSinceLast) > 0) {
         const secsAgo = Number(buybackLastInfo.timeSinceLast);
         const timeAgo = secsAgo < 3600 ? `${Math.floor(secsAgo / 60)}m ago`
@@ -991,7 +991,7 @@ function updateHeroRewards() {
     if (ethFeeEl) {
         if (hasRewards && claimEthFee > 0n) {
             const feeEth = parseFloat(ethers.formatEther(claimEthFee)).toFixed(6);
-            ethFeeEl.innerHTML = `<i class="fa-brands fa-ethereum" style="margin-right:3px"></i>Claim fee: ${feeEth} ETH`;
+            ethFeeEl.innerHTML = `<i class="fa-brands fa-ethereum" style="margin-right:3px"></i>Claim fee: ${feeEth} BNB`;
         } else {
             ethFeeEl.textContent = '';
         }
@@ -1365,7 +1365,7 @@ async function handleStake() {
 
     try {
         const ethBalance = await State.publicProvider.getBalance(State.userAddress);
-        if (ethBalance < ethers.parseEther("0.001")) return showToast('Insufficient ETH for gas', 'error');
+        if (ethBalance < ethers.parseEther("0.001")) return showToast('Insufficient BNB for gas', 'error');
     } catch {}
 
     isProcessing = true;
@@ -1416,7 +1416,7 @@ async function handleUnstake(index, isForce) {
                     previewMsg += `  Recycled: ${recycleAmt} BKC (to all stakers)\n`;
                     if (parseFloat(tutorAmt) > 0) previewMsg += `  Tutor: ${tutorAmt} BKC (5%)\n`;
                     if (parseFloat(burnAmt) > 0) previewMsg += `  Burned: ${burnAmt} BKC${!hasTutor ? ' (no tutor = 10% burn)' : ''}\n`;
-                    previewMsg += `  ETH Fee: ${ethFee} ETH\n`;
+                    previewMsg += `  BNB Fee: ${ethFee} BNB\n`;
                     previewMsg += `\nYou receive: ${userGets} BKC\n`;
                     previewMsg += `\nContinue?`;
                 }
@@ -1485,7 +1485,7 @@ async function handleBuyback() {
             onSuccess: async (receipt) => {
                 const reward = buybackPreview?.estimatedCallerReward || 0n;
                 const rewardStr = Number(ethers.formatEther(reward)).toFixed(6);
-                showToast(`Buyback executed! You earned ${rewardStr} ETH`, 'success');
+                showToast(`Buyback executed! You earned ${rewardStr} BNB`, 'success');
                 isLoading = false; lastFetch = 0;
                 await loadData(true);
             },

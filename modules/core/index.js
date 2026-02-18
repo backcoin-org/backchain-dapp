@@ -98,7 +98,7 @@ export {
 
 // ============================================================================
 // CLIENT-SIDE FEE CALCULATION
-// Arbitrum doesn't support gasPrice override in eth_call, so we replicate
+// opBNB doesn't support gasPrice override in eth_call, so we replicate
 // the Solidity fee formula in JavaScript using ecosystem.getFeeConfig().
 //
 // Solidity formula (BackchainEcosystem.calculateFee):
@@ -144,7 +144,7 @@ export async function calculateFeeClientSide(actionId, txValue = 0n) {
 
         if (Number(cfg.feeType) === 0) {
             // Gas-based: gasEstimate × gasPrice × bps × multiplier / BPS
-            // Use 150% of gasPrice to cover Arbitrum's L1 data cost component
+            // Use 150% of gasPrice to cover opBNB's L1 data cost component
             // (tx.gasprice in Solidity = effective price including L1, but
             //  provider.getFeeData() only returns the L2 base fee)
             const feeData = await provider.getFeeData();
@@ -165,7 +165,7 @@ export async function calculateFeeClientSide(actionId, txValue = 0n) {
     }
 }
 
-// Deprecated: gasPrice override doesn't work on Arbitrum. Use calculateFeeClientSide instead.
+// Deprecated: gasPrice override doesn't work on opBNB. Use calculateFeeClientSide instead.
 export async function getGasPriceOverrides() {
     const feeData = await NetworkManager.getProvider().getFeeData();
     return { gasPrice: feeData.gasPrice || feeData.maxFeePerGas || 100000000n };

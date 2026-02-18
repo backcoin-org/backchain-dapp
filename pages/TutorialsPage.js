@@ -20,11 +20,11 @@ const videos = {
             icon: 'fa-play-circle',
             en: {
                 title: 'What is Backcoin?',
-                description: 'A complete overview of the Backcoin ecosystem. Unstoppable DeFi on Arbitrum: staking, NFTs, games, social network, and more — all without admin keys.'
+                description: 'A complete overview of the Backcoin ecosystem. Unstoppable DeFi on opBNB: staking, NFTs, games, social network, and more — all without admin keys.'
             },
             pt: {
                 title: 'O Que é o Backcoin?',
-                description: 'Uma visão completa do ecossistema Backcoin. DeFi imparável na Arbitrum: staking, NFTs, jogos, rede social e mais — tudo sem chaves de admin.'
+                description: 'Uma visão completa do ecossistema Backcoin. DeFi imparável na opBNB: staking, NFTs, jogos, rede social e mais — tudo sem chaves de admin.'
             }
         },
         {
@@ -84,11 +84,11 @@ const videos = {
             icon: 'fa-wallet',
             en: {
                 title: 'MetaMask Setup (PC & Mobile)',
-                description: 'Install MetaMask, create your wallet, and add the Arbitrum Sepolia network. Your gateway to the Backcoin universe.'
+                description: 'Install MetaMask, create your wallet, and add the opBNB Testnet network. Your gateway to the Backcoin universe.'
             },
             pt: {
                 title: 'Configurando MetaMask (PC & Mobile)',
-                description: 'Instale a MetaMask, crie sua carteira e adicione a rede Arbitrum Sepolia. Sua entrada para o universo Backcoin.'
+                description: 'Instale a MetaMask, crie sua carteira e adicione a rede opBNB Testnet. Sua entrada para o universo Backcoin.'
             }
         },
         {
@@ -99,11 +99,11 @@ const videos = {
             icon: 'fa-plug',
             en: {
                 title: 'Connect Wallet & Claim Free Tokens',
-                description: 'Connect to backcoin.org, use the Faucet to claim free BKC + ETH for gas, and add BKC to MetaMask. Ready in 2 minutes.'
+                description: 'Connect to backcoin.org, use the Faucet to claim free BKC + BNB for gas, and add BKC to MetaMask. Ready in 2 minutes.'
             },
             pt: {
                 title: 'Conectar Carteira e Receber Tokens Grátis',
-                description: 'Conecte no backcoin.org, use o Faucet para receber BKC + ETH grátis pra gas, e adicione o BKC na MetaMask. Pronto em 2 minutos.'
+                description: 'Conecte no backcoin.org, use o Faucet para receber BKC + BNB grátis pra gas, e adicione o BKC na MetaMask. Pronto em 2 minutos.'
             }
         },
         {
@@ -178,11 +178,11 @@ const videos = {
             icon: 'fa-hammer',
             en: {
                 title: 'Buyback Mining — How Protocol Fees Become Rewards',
-                description: 'The Buyback Miner converts ETH fees into BKC rewards. Learn the scarcity curve, the 5% caller incentive, and how to run a mining bot.'
+                description: 'The Buyback Miner converts BNB fees into BKC rewards. Learn the scarcity curve, the 5% caller incentive, and how to run a mining bot.'
             },
             pt: {
                 title: 'Mineração Buyback — Como Taxas Viram Recompensas',
-                description: 'O Buyback Miner converte taxas ETH em recompensas BKC. Aprenda a curva de escassez, o incentivo de 5% e como rodar um bot de mineração.'
+                description: 'O Buyback Miner converte taxas BNB em recompensas BKC. Aprenda a curva de escassez, o incentivo de 5% e como rodar um bot de mineração.'
             }
         }
     ],
@@ -241,12 +241,12 @@ const videos = {
             tag: 'intermediate',
             icon: 'fa-tag',
             en: {
-                title: 'Listing Your NFT for Rent — Earn Passive ETH',
-                description: 'Turn idle NFTs into passive income. How to list on the rental market, set daily price, and collect ETH from tenants.'
+                title: 'Listing Your NFT for Rent — Earn Passive BNB',
+                description: 'Turn idle NFTs into passive income. How to list on the rental market, set daily price, and collect BNB from tenants.'
             },
             pt: {
-                title: 'Listando seu NFT pra Aluguel — Ganhe ETH Passivo',
-                description: 'Transforme NFTs parados em renda passiva. Como listar no mercado de aluguel, definir preço diário e coletar ETH.'
+                title: 'Listando seu NFT pra Aluguel — Ganhe BNB Passivo',
+                description: 'Transforme NFTs parados em renda passiva. Como listar no mercado de aluguel, definir preço diário e coletar BNB.'
             }
         },
         {
@@ -324,12 +324,12 @@ const videos = {
             tag: 'beginner',
             icon: 'fa-heart',
             en: {
-                title: 'SuperLikes — Earn ETH from Your Content',
-                description: 'How SuperLikes send ETH directly to content creators. Build an audience and monetize without algorithms or middlemen.'
+                title: 'SuperLikes — Earn BNB from Your Content',
+                description: 'How SuperLikes send BNB directly to content creators. Build an audience and monetize without algorithms or middlemen.'
             },
             pt: {
-                title: 'SuperLikes — Ganhe ETH com seu Conteúdo',
-                description: 'Como SuperLikes enviam ETH direto para criadores de conteúdo. Construa audiência e monetize sem algoritmos ou intermediários.'
+                title: 'SuperLikes — Ganhe BNB com seu Conteúdo',
+                description: 'Como SuperLikes enviam BNB direto para criadores de conteúdo. Construa audiência e monetize sem algoritmos ou intermediários.'
             }
         },
         {
@@ -389,11 +389,11 @@ const videos = {
             icon: 'fa-circle-dollar-to-slot',
             en: {
                 title: 'How to Donate to a Campaign',
-                description: 'Find campaigns, donate ETH directly to creators, and track donations on-chain. Full transparency, zero hidden fees.'
+                description: 'Find campaigns, donate BNB directly to creators, and track donations on-chain. Full transparency, zero hidden fees.'
             },
             pt: {
                 title: 'Como Doar para uma Campanha',
-                description: 'Encontre campanhas, doe ETH direto para criadores e acompanhe doações on-chain. Transparência total, zero taxas ocultas.'
+                description: 'Encontre campanhas, doe BNB direto para criadores e acompanhe doações on-chain. Transparência total, zero taxas ocultas.'
             }
         },
         {
@@ -403,12 +403,12 @@ const videos = {
             tag: 'intermediate',
             icon: 'fa-arrow-right-arrow-left',
             en: {
-                title: 'Swap ETH/BKC — Trade on the Liquidity Pool',
-                description: 'Swap ETH for BKC and vice-versa on the built-in AMM. Understand the 0.3% fee, price impact, and how the constant product formula works.'
+                title: 'Swap BNB/BKC — Trade on the Liquidity Pool',
+                description: 'Swap BNB for BKC and vice-versa on the built-in AMM. Understand the 0.3% fee, price impact, and how the constant product formula works.'
             },
             pt: {
-                title: 'Swap ETH/BKC — Troque no Pool de Liquidez',
-                description: 'Troque ETH por BKC e vice-versa no AMM integrado. Entenda a taxa de 0.3%, impacto no preço e a fórmula de produto constante.'
+                title: 'Swap BNB/BKC — Troque no Pool de Liquidez',
+                description: 'Troque BNB por BKC e vice-versa no AMM integrado. Entenda a taxa de 0.3%, impacto no preço e a fórmula de produto constante.'
             }
         },
         {
@@ -419,11 +419,11 @@ const videos = {
             icon: 'fa-droplet',
             en: {
                 title: 'Provide Liquidity — Earn 0.3% per Swap',
-                description: 'Add ETH and BKC to the liquidity pool and earn fees on every swap. How to add, remove, and calculate your share.'
+                description: 'Add BNB and BKC to the liquidity pool and earn fees on every swap. How to add, remove, and calculate your share.'
             },
             pt: {
                 title: 'Prover Liquidez — Ganhe 0.3% por Swap',
-                description: 'Adicione ETH e BKC ao pool de liquidez e ganhe taxas em cada swap. Como adicionar, remover e calcular sua fatia.'
+                description: 'Adicione BNB e BKC ao pool de liquidez e ganhe taxas em cada swap. Como adicionar, remover e calcular sua fatia.'
             }
         }
     ],
@@ -453,11 +453,11 @@ const videos = {
             icon: 'fa-sitemap',
             en: {
                 title: 'Fees Explained — Where Every Cent Goes',
-                description: 'Complete breakdown of ETH and BKC fees. How fees flow to operators, referrers, stakers, burn, and treasury. Full transparency.'
+                description: 'Complete breakdown of BNB and BKC fees. How fees flow to operators, referrers, stakers, burn, and treasury. Full transparency.'
             },
             pt: {
                 title: 'Taxas Explicadas — Pra Onde Vai Cada Centavo',
-                description: 'Detalhamento completo das taxas ETH e BKC. Como fluem para operadores, referenciadores, delegadores, burn e tesouro.'
+                description: 'Detalhamento completo das taxas BNB e BKC. Como fluem para operadores, referenciadores, delegadores, burn e tesouro.'
             }
         },
         {

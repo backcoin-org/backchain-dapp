@@ -154,12 +154,12 @@ function render(isActive) {
             <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div class="text-center sm:text-left">
                     <p class="text-emerald-400/80 text-sm font-medium mb-1">Your Pending Earnings</p>
-                    <p class="text-3xl sm:text-4xl font-extrabold text-white" id="op-pending">${pendingFormatted} <span class="text-lg text-zinc-400">ETH</span></p>
+                    <p class="text-3xl sm:text-4xl font-extrabold text-white" id="op-pending">${pendingFormatted} <span class="text-lg text-zinc-400">BNB</span></p>
                 </div>
                 <button id="op-withdraw-btn"
                     class="bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-bold rounded-xl px-6 py-3 text-sm transition-colors flex items-center gap-2"
                     ${OS.pendingEth === 0n ? 'disabled' : ''}>
-                    <i class="fa-solid fa-wallet"></i> Withdraw ETH
+                    <i class="fa-solid fa-wallet"></i> Withdraw BNB
                 </button>
             </div>
         </div>
@@ -217,8 +217,8 @@ function render(isActive) {
                         <i class="fa-solid fa-vault text-xl text-green-400"></i>
                     </div>
                     <div>
-                        <h3 class="text-white font-bold text-sm mb-1">4. ETH Accumulates in Your Balance</h3>
-                        <p class="text-zinc-400 text-xs leading-relaxed">Your operator ETH earnings are stored on-chain in <code class="text-emerald-400 bg-zinc-800/60 px-1 py-0.5 rounded">pendingEth[yourAddress]</code>. Withdraw anytime by calling <code class="text-emerald-400 bg-zinc-800/60 px-1 py-0.5 rounded">withdrawEth()</code> — no minimum, no cooldown, no admin approval.</p>
+                        <h3 class="text-white font-bold text-sm mb-1">4. BNB Accumulates in Your Balance</h3>
+                        <p class="text-zinc-400 text-xs leading-relaxed">Your operator BNB earnings are stored on-chain in <code class="text-emerald-400 bg-zinc-800/60 px-1 py-0.5 rounded">pendingEth[yourAddress]</code>. Withdraw anytime by calling <code class="text-emerald-400 bg-zinc-800/60 px-1 py-0.5 rounded">withdrawEth()</code> — no minimum, no cooldown, no admin approval.</p>
                     </div>
                 </div>
             </div>
@@ -233,7 +233,7 @@ function render(isActive) {
                     <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center shrink-0">
                         <i class="fa-solid fa-user text-blue-400 text-sm"></i>
                     </div>
-                    <div class="flex-1 text-sm text-white font-medium">User pays fee (ETH)</div>
+                    <div class="flex-1 text-sm text-white font-medium">User pays fee (BNB)</div>
                 </div>
                 <div class="ml-5 border-l-2 border-zinc-700 pl-5 py-1 text-xs text-zinc-500">
                     <i class="fa-solid fa-arrow-down mr-1"></i> Fee sent to BackchainEcosystem contract
@@ -276,11 +276,11 @@ function render(isActive) {
                         </div>
                         <div>
                             <p class="text-white text-sm font-medium">User stakes 10,000 BKC</p>
-                            <p class="text-zinc-500 text-xs">Staking fee: ~0.005 ETH</p>
+                            <p class="text-zinc-500 text-xs">Staking fee: ~0.005 BNB</p>
                         </div>
                     </div>
                     <div class="text-right">
-                        <p class="text-emerald-400 font-bold">+0.001 ETH</p>
+                        <p class="text-emerald-400 font-bold">+0.001 BNB</p>
                         <p class="text-zinc-500 text-[10px]">20% operator</p>
                     </div>
                 </div>
@@ -291,11 +291,11 @@ function render(isActive) {
                         </div>
                         <div>
                             <p class="text-white text-sm font-medium">User buys a Gold NFT</p>
-                            <p class="text-zinc-500 text-xs">NFT price: ~0.03 ETH</p>
+                            <p class="text-zinc-500 text-xs">NFT price: ~0.03 BNB</p>
                         </div>
                     </div>
                     <div class="text-right">
-                        <p class="text-emerald-400 font-bold">+0.003 ETH</p>
+                        <p class="text-emerald-400 font-bold">+0.003 BNB</p>
                         <p class="text-zinc-500 text-[10px]">10% operator</p>
                     </div>
                 </div>
@@ -306,11 +306,11 @@ function render(isActive) {
                         </div>
                         <div>
                             <p class="text-white text-sm font-medium">User plays Fortune Pool Tier 2</p>
-                            <p class="text-zinc-500 text-xs">Entry: 0.05 ETH</p>
+                            <p class="text-zinc-500 text-xs">Entry: 0.05 BNB</p>
                         </div>
                     </div>
                     <div class="text-right">
-                        <p class="text-emerald-400 font-bold">+0.005 ETH</p>
+                        <p class="text-emerald-400 font-bold">+0.005 BNB</p>
                         <p class="text-zinc-500 text-[10px]">10% operator</p>
                     </div>
                 </div>
@@ -321,19 +321,19 @@ function render(isActive) {
                         </div>
                         <div>
                             <p class="text-white text-sm font-medium">User certifies a document</p>
-                            <p class="text-zinc-500 text-xs">Notary fee: ~0.002 ETH</p>
+                            <p class="text-zinc-500 text-xs">Notary fee: ~0.002 BNB</p>
                         </div>
                     </div>
                     <div class="text-right">
-                        <p class="text-emerald-400 font-bold">+0.0004 ETH</p>
+                        <p class="text-emerald-400 font-bold">+0.0004 BNB</p>
                         <p class="text-zinc-500 text-[10px]">20% operator</p>
                     </div>
                 </div>
             </div>
             <div class="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 mt-4 text-center">
-                <p class="text-zinc-400 text-xs">If your app processes <strong class="text-white">100 transactions/day</strong> averaging 0.01 ETH in fees:</p>
-                <p class="text-emerald-400 text-2xl font-extrabold mt-1">~0.15 ETH/day</p>
-                <p class="text-zinc-500 text-xs mt-1">~4.5 ETH/month at 15% average operator rate</p>
+                <p class="text-zinc-400 text-xs">If your app processes <strong class="text-white">100 transactions/day</strong> averaging 0.01 BNB in fees:</p>
+                <p class="text-emerald-400 text-2xl font-extrabold mt-1">~0.15 BNB/day</p>
+                <p class="text-zinc-500 text-xs mt-1">~4.5 BNB/month at 15% average operator rate</p>
             </div>
         </div>
 
@@ -439,7 +439,7 @@ function render(isActive) {
                     <i class="fa-solid fa-money-bill-transfer text-emerald-400 text-lg mt-0.5"></i>
                     <div>
                         <h3 class="text-white font-bold text-sm mb-1">Instant Withdrawal</h3>
-                        <p class="text-zinc-500 text-xs leading-relaxed">Withdraw ETH earnings anytime. No minimum amount, no cooldown period, no vesting. One transaction and it's in your wallet.</p>
+                        <p class="text-zinc-500 text-xs leading-relaxed">Withdraw BNB earnings anytime. No minimum amount, no cooldown period, no vesting. One transaction and it's in your wallet.</p>
                     </div>
                 </div>
             </div>
@@ -541,7 +541,7 @@ nftPool.buy(tier, quantity, <span class="op-string">OPERATOR_ADDR</span>, { valu
                 </div>
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4">
                     <h3 class="text-white font-bold text-sm mb-1">How do I track my earnings?</h3>
-                    <p class="text-zinc-500 text-xs leading-relaxed">Connect your wallet on this page to see your pending ETH balance. You can also read <code class="text-emerald-400 bg-zinc-800/60 px-1 py-0.5 rounded">pendingEth(yourAddress)</code> directly from the BackchainEcosystem contract on Arbiscan.</p>
+                    <p class="text-zinc-500 text-xs leading-relaxed">Connect your wallet on this page to see your pending BNB balance. You can also read <code class="text-emerald-400 bg-zinc-800/60 px-1 py-0.5 rounded">pendingEth(yourAddress)</code> directly from the BackchainEcosystem contract on Explorer.</p>
                 </div>
             </div>
         </div>
@@ -578,7 +578,7 @@ nftPool.buy(tier, quantity, <span class="op-string">OPERATOR_ADDR</span>, { valu
         <!-- Bottom CTA -->
         <div class="text-center py-4">
             <p class="text-zinc-500 text-xs">The Backchain Operator system is permissionless, on-chain, and unstoppable.</p>
-            <p class="text-zinc-600 text-xs mt-1">Contracts verified on Arbiscan. Open source.</p>
+            <p class="text-zinc-600 text-xs mt-1">Contracts verified on Explorer. Open source.</p>
         </div>
 
     </div><!-- /max-w-3xl -->
@@ -625,7 +625,7 @@ function updateEarningsUI() {
     const el = document.getElementById('op-pending');
     if (el) {
         const formatted = OS.pendingEth > 0n ? ethers.formatEther(OS.pendingEth) : '0.0';
-        el.innerHTML = `${formatted} <span class="text-lg text-zinc-400">ETH</span>`;
+        el.innerHTML = `${formatted} <span class="text-lg text-zinc-400">BNB</span>`;
     }
     const btn = document.getElementById('op-withdraw-btn');
     if (btn) btn.disabled = OS.pendingEth === 0n;
@@ -685,7 +685,7 @@ async function withdrawEarnings() {
             OS.isWithdrawing = false;
             OS.pendingEth = 0n;
             updateEarningsUI();
-            showToast('ETH withdrawn successfully!', 'success');
+            showToast('BNB withdrawn successfully!', 'success');
         },
         onError: (err) => {
             OS.isWithdrawing = false;

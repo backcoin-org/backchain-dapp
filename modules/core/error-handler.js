@@ -129,7 +129,7 @@ export const ErrorTypes = {
  */
 export const ErrorMessages = {
     // Network
-    [ErrorTypes.WRONG_NETWORK]: 'Please switch to Arbitrum Sepolia network',
+    [ErrorTypes.WRONG_NETWORK]: 'Please switch to opBNB Testnet',
     [ErrorTypes.RPC_UNHEALTHY]: 'Network connection issue. Retrying...',
     [ErrorTypes.RPC_RATE_LIMITED]: 'Network is busy. Please wait a moment...',
     [ErrorTypes.NETWORK_ERROR]: 'Network error. Please check your connection',
@@ -139,7 +139,7 @@ export const ErrorMessages = {
     [ErrorTypes.WALLET_LOCKED]: 'Please unlock your wallet',
     
     // Balances
-    [ErrorTypes.INSUFFICIENT_ETH]: 'Insufficient ETH for gas fees',
+    [ErrorTypes.INSUFFICIENT_ETH]: 'Insufficient BNB for gas fees',
     [ErrorTypes.INSUFFICIENT_TOKEN]: 'Insufficient BKC balance',
     [ErrorTypes.INSUFFICIENT_ALLOWANCE]: 'Token approval required',
     
@@ -162,7 +162,7 @@ export const ErrorMessages = {
     [ErrorTypes.NOT_CAMPAIGN_CREATOR]: 'Only the campaign creator can perform this action',
     [ErrorTypes.DONATION_TOO_SMALL]: 'Donation amount is below the minimum required',
     [ErrorTypes.MAX_CAMPAIGNS_REACHED]: 'You have reached the maximum number of active campaigns',
-    [ErrorTypes.INSUFFICIENT_ETH_FEE]: 'Insufficient ETH for withdrawal fee',
+    [ErrorTypes.INSUFFICIENT_ETH_FEE]: 'Insufficient BNB for withdrawal fee',
     
     // Staking
     [ErrorTypes.LOCK_PERIOD_ACTIVE]: 'Your tokens are still locked',

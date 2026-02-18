@@ -185,7 +185,7 @@ export async function buyNft({
             if (bkcBalance < buyPrice) throw new Error(`Insufficient BKC. Need ${ethers.formatEther(buyPrice)} BKC`);
 
             const ethBalance = await provider.getBalance(userAddress);
-            if (ethBalance < ethFee + ethers.parseEther('0.001')) throw new Error('Insufficient ETH for fee + gas');
+            if (ethBalance < ethFee + ethers.parseEther('0.001')) throw new Error('Insufficient BNB for fee + gas');
         },
 
         onSuccess: async (receipt) => {
@@ -244,7 +244,7 @@ export async function buySpecificNft({
             const provider = NetworkManager.getProvider();
             const bkcContract = new ethers.Contract(contracts.BKC_TOKEN, ['function balanceOf(address) view returns (uint256)'], provider);
             if ((await bkcContract.balanceOf(userAddress)) < buyPrice) throw new Error('Insufficient BKC');
-            if ((await provider.getBalance(userAddress)) < ethFee + ethers.parseEther('0.001')) throw new Error('Insufficient ETH');
+            if ((await provider.getBalance(userAddress)) < ethFee + ethers.parseEther('0.001')) throw new Error('Insufficient BNB');
         },
         onSuccess, onError
     });
@@ -289,7 +289,7 @@ export async function sellNft({
 
             const { NetworkManager } = await import('../core/index.js');
             const ethBalance = await NetworkManager.getProvider().getBalance(userAddress);
-            if (ethBalance < ethFee + ethers.parseEther('0.001')) throw new Error('Insufficient ETH');
+            if (ethBalance < ethFee + ethers.parseEther('0.001')) throw new Error('Insufficient BNB');
 
             if (!(await nftContract.isApprovedForAll(userAddress, targetPool))) {
                 // Get fresh fee data from Alchemy (not MetaMask) with 120% buffer

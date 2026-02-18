@@ -2,7 +2,7 @@
 // ✅ V2.0 - CharityPool V2: Variable Boost + Multi-Media + Viral Sharing
 // ============================================================================
 //   BACKCHAIN PROTOCOL — Charity Pool V2
-//   Support causes with ETH • Make a difference • Share & earn
+//   Support causes with BNB • Make a difference • Share & earn
 // ============================================================================
 //
 // V2.0 Changes:
@@ -45,7 +45,7 @@ const CHARITY_API = {
     uploadMedia: '/api/upload-media'
 };
 
-const EXPLORER_ADDRESS = "https://sepolia.arbiscan.io/address/";
+const EXPLORER_ADDRESS = "https://testnet.opbnbscan.com/address/";
 
 const PLACEHOLDER_IMAGES = {
     animal: 'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?w=800&q=80',
@@ -583,7 +583,7 @@ const renderLoading = () => {
 const renderEmpty = (msg) => `<div class="cp-empty">
     <div style="font-size:4rem;margin-bottom:1rem;opacity:0.5"><i class="fa-solid fa-hand-holding-heart"></i></div>
     <h3 style="font-size:1.25rem;margin-bottom:0.5rem">${msg}</h3>
-    <p class="text-zinc-500 text-sm" style="max-width:360px;margin:0 auto 1.5rem">Create a campaign to raise ETH for a cause you care about. Share it and earn referral rewards!</p>
+    <p class="text-zinc-500 text-sm" style="max-width:360px;margin:0 auto 1.5rem">Create a campaign to raise BNB for a cause you care about. Share it and earn referral rewards!</p>
     <button class="cp-btn cp-btn-primary" onclick="CharityPage.openCreate()" style="margin:0 auto">
         <i class="fa-solid fa-plus"></i> Create Campaign
     </button>
@@ -622,7 +622,7 @@ const renderCard = (c) => {
                     <div class="cp-progress-fill" style="width:${prog}%;background:linear-gradient(90deg,${CATEGORIES[cat]?.color || '#f59e0b'},${CATEGORIES[cat]?.color || '#d97706'}88)"></div>
                 </div>
                 <div class="flex justify-between text-xs mb-3">
-                    <span class="text-white font-semibold"><i class="fa-brands fa-ethereum text-zinc-500 mr-1"></i>${fmt(c.raisedAmount)} ETH</span>
+                    <span class="text-white font-semibold"><i class="fa-brands fa-ethereum text-zinc-500 mr-1"></i>${fmt(c.raisedAmount)} BNB</span>
                     <span class="text-zinc-500">${prog}% of ${fmt(c.goalAmount)}</span>
                 </div>
                 <div class="flex justify-between text-xs text-zinc-500 pt-2 border-t border-zinc-800">
@@ -665,7 +665,7 @@ const renderMain = () => {
                     </div>
                     <div>
                         <h1 class="text-2xl font-bold text-white">Charity Pool</h1>
-                        <p class="text-sm text-zinc-500">Support causes with ETH &bull; Share & earn referral rewards</p>
+                        <p class="text-sm text-zinc-500">Support causes with BNB &bull; Share & earn referral rewards</p>
                     </div>
                 </div>
                 <div class="flex gap-2">
@@ -690,7 +690,7 @@ const renderMain = () => {
                 </div>
                 <div class="cp-stat-card">
                     <p class="text-2xl font-bold text-blue-400 font-mono"><i class="fa-brands fa-ethereum text-lg mr-1"></i>${CS.stats ? fmt(CS.stats.fees) : '--'}</p>
-                    <p class="text-[10px] text-zinc-500 uppercase mt-1">ETH Fees</p>
+                    <p class="text-[10px] text-zinc-500 uppercase mt-1">BNB Fees</p>
                 </div>
                 <div class="cp-stat-card">
                     <p class="text-2xl font-bold text-purple-400 font-mono"><i class="fa-brands fa-ethereum text-lg mr-1"></i>${CS.stats ? fmt(CS.stats.withdrawn) : '--'}</p>
@@ -807,8 +807,8 @@ const renderDetail = (c) => {
                             <div class="cp-progress h-3 mb-3">
                                 <div class="cp-progress-fill" style="width:${prog}%"></div>
                             </div>
-                            <p class="text-3xl font-bold text-white mb-1"><i class="fa-brands fa-ethereum text-zinc-500"></i> ${fmt(c.raisedAmount)} ETH</p>
-                            <p class="text-sm text-zinc-500 mb-4">raised of ${fmt(c.goalAmount)} ETH goal (${prog}%)</p>
+                            <p class="text-3xl font-bold text-white mb-1"><i class="fa-brands fa-ethereum text-zinc-500"></i> ${fmt(c.raisedAmount)} BNB</p>
+                            <p class="text-sm text-zinc-500 mb-4">raised of ${fmt(c.goalAmount)} BNB goal (${prog}%)</p>
                             <div class="grid grid-cols-2 gap-3">
                                 <div class="text-center p-3 bg-zinc-800/50 rounded-xl">
                                     <p class="text-lg font-bold text-white">${c.donationCount || 0}</p>
@@ -828,10 +828,10 @@ const renderDetail = (c) => {
                                 <i class="fa-solid fa-heart text-emerald-500"></i> Make a Donation
                             </h4>
                             <div class="cp-balance-row">
-                                <span class="bal">Balance: <span id="detail-bal">${State?.ethBalance ? Number(ethers.formatEther(State.ethBalance)).toFixed(4) : '--'}</span> ETH</span>
+                                <span class="bal">Balance: <span id="detail-bal">${State?.ethBalance ? Number(ethers.formatEther(State.ethBalance)).toFixed(4) : '--'}</span> BNB</span>
                                 <button class="max-btn" onclick="CharityPage.setMax('detail-amount')">MAX</button>
                             </div>
-                            <input type="number" id="detail-amount" placeholder="Amount in ETH" min="0.001" step="0.001"
+                            <input type="number" id="detail-amount" placeholder="Amount in BNB" min="0.001" step="0.001"
                                    class="cp-form-input text-center text-lg font-bold mb-2"
                                    oninput="CharityPage.updateDonatePreview('detail-amount','detail-fee-preview')">
                             <div class="cp-donate-presets mb-3" id="detail-presets">
@@ -904,15 +904,15 @@ const renderDonateModal = () => `
             <div class="cp-modal-body">
                 <div id="donate-campaign-info"></div>
                 <div class="cp-form-group">
-                    <label class="cp-form-label">Amount (ETH)</label>
+                    <label class="cp-form-label">Amount (BNB)</label>
                     <div class="cp-balance-row">
-                        <span class="bal">Balance: <span id="donate-bal">${State?.ethBalance ? Number(ethers.formatEther(State.ethBalance)).toFixed(4) : '--'}</span> ETH</span>
+                        <span class="bal">Balance: <span id="donate-bal">${State?.ethBalance ? Number(ethers.formatEther(State.ethBalance)).toFixed(4) : '--'}</span> BNB</span>
                         <button class="max-btn" onclick="CharityPage.setMax('donate-amount')">MAX</button>
                     </div>
                     <div class="cp-donate-input-wrap">
                         <input type="number" id="donate-amount" class="cp-donate-input" placeholder="0.1" min="0.001" step="0.001"
                                oninput="CharityPage.updateDonatePreview('donate-amount','donate-fee-preview')">
-                        <span class="cp-donate-currency">ETH</span>
+                        <span class="cp-donate-currency">BNB</span>
                     </div>
                     <div class="cp-donate-presets" id="donate-presets">
                         <button class="cp-preset" onclick="CharityPage.setAmt(0.01,'donate-amount')">0.01</button>
@@ -950,7 +950,7 @@ const renderBoostModal = () => `
                 <div class="text-center p-4 bg-zinc-800/50 rounded-xl mb-4">
                     <p class="text-xs text-zinc-500 mb-1">Estimated cost</p>
                     <p class="text-2xl font-bold text-amber-400" id="boost-cost-display">
-                        <i class="fa-brands fa-ethereum mr-1"></i><span id="boost-cost-value">...</span> ETH
+                        <i class="fa-brands fa-ethereum mr-1"></i><span id="boost-cost-value">...</span> BNB
                     </p>
                     <p class="text-[10px] text-zinc-600 mt-1" id="boost-per-day-display"></p>
                 </div>
@@ -1098,7 +1098,7 @@ function renderCreateStep4(panel) {
         <p class="text-sm text-zinc-500 mb-6">Set your goal, duration and review before launching</p>
         <div class="cp-form-row mb-4">
             <div class="cp-form-group">
-                <label class="cp-form-label">Goal (ETH) *</label>
+                <label class="cp-form-label">Goal (BNB) *</label>
                 <input type="number" id="wiz-goal" class="cp-form-input" placeholder="1.0" min="0.01" step="0.01" value="${CS.createGoal}">
             </div>
             <div class="cp-form-group">
@@ -1115,7 +1115,7 @@ function renderCreateStep4(panel) {
         </div>
         <div class="text-center text-xs text-zinc-500 p-3 bg-zinc-800/50 rounded-xl mb-4">
             <i class="fa-brands fa-ethereum text-amber-400 mr-1"></i>
-            Campaign creation requires a small <strong class="text-amber-400">ETH fee</strong> (gas + ecosystem fee)
+            Campaign creation requires a small <strong class="text-amber-400">BNB fee</strong> (gas + ecosystem fee)
         </div>
         <div class="flex justify-between mt-6">
             <button class="cp-btn cp-btn-secondary" onclick="CharityPage.wizardBack()"><i class="fa-solid fa-arrow-left"></i> Back</button>
@@ -1186,7 +1186,7 @@ async function wizardLaunch() {
     if (!CS.createCategory) return showToast('Select a category', 'error');
     if (!CS.createTitle) return showToast('Enter a title', 'error');
     if (!CS.createDesc) return showToast('Enter a description', 'error');
-    if (!goal || parseFloat(goal) < 0.01) return showToast('Goal must be at least 0.01 ETH', 'error');
+    if (!goal || parseFloat(goal) < 0.01) return showToast('Goal must be at least 0.01 BNB', 'error');
     if (!duration || parseInt(duration) < 1 || parseInt(duration) > 365) return showToast('Duration must be 1-365 days', 'error');
 
     // Upload media files to Arweave
@@ -1316,7 +1316,7 @@ function openMyCampaigns() {
                             ${renderBadge(c.status)}
                         </div>
                         <p class="text-zinc-500 text-xs" style="margin:0">
-                            <i class="fa-brands fa-ethereum"></i> <strong class="text-white">${fmt(c.raisedAmount)}</strong> / ${fmt(c.goalAmount)} ETH (${prog}%)
+                            <i class="fa-brands fa-ethereum"></i> <strong class="text-white">${fmt(c.raisedAmount)}</strong> / ${fmt(c.goalAmount)} BNB (${prog}%)
                             &bull; <span style="color:${time.color}">${time.text}</span>
                         </p>
                     </div>
@@ -1353,7 +1353,7 @@ async function updateBoostCost() {
         const cost = await CharityTx.getBoostCost(CS.boostDays);
         CS.boostCost = cost;
         costEl.textContent = cost.totalFeeFormatted;
-        if (perDayEl) perDayEl.textContent = `${cost.feePerDayFormatted} ETH/day`;
+        if (perDayEl) perDayEl.textContent = `${cost.feePerDayFormatted} BNB/day`;
     } catch (e) {
         costEl.textContent = '...';
         if (perDayEl) perDayEl.textContent = '';
@@ -1380,9 +1380,9 @@ function setAmt(val, inputId) {
 
 function setMax(inputId) {
     if (!State?.ethBalance) return;
-    // Leave some for gas (~0.001 ETH)
+    // Leave some for gas (~0.001 BNB)
     const maxVal = Number(ethers.formatEther(State.ethBalance)) - 0.001;
-    if (maxVal <= 0) { showToast('Insufficient ETH balance', 'error'); return; }
+    if (maxVal <= 0) { showToast('Insufficient BNB balance', 'error'); return; }
     const el = document.getElementById(inputId);
     if (el) {
         el.value = Math.floor(maxVal * 10000) / 10000; // 4 decimals
@@ -1405,11 +1405,11 @@ function updateDonatePreview(inputId, previewId) {
         }
         try {
             const result = await CharityTx.previewDonation(ethers.parseEther(String(val)));
-            preview.innerHTML = `Fee: <span class="fee-val">${result.feeFormatted} ETH</span> &bull; Campaign receives: <span class="net-val">${result.netFormatted} ETH</span>`;
+            preview.innerHTML = `Fee: <span class="fee-val">${result.feeFormatted} BNB</span> &bull; Campaign receives: <span class="net-val">${result.netFormatted} BNB</span>`;
         } catch {
             const fee = (val * 0.05).toFixed(4);
             const net = (val * 0.95).toFixed(4);
-            preview.innerHTML = `Fee: <span class="fee-val">~${fee} ETH</span> &bull; Campaign receives: <span class="net-val">~${net} ETH</span>`;
+            preview.innerHTML = `Fee: <span class="fee-val">~${fee} BNB</span> &bull; Campaign receives: <span class="net-val">~${net} BNB</span>`;
         }
     }, 300);
 }
@@ -1423,7 +1423,7 @@ async function donateAction() {
     const c = CS.currentCampaign;
     if (!c) return;
     const amount = document.getElementById('donate-amount')?.value;
-    if (!amount || parseFloat(amount) < 0.001) return showToast('Minimum 0.001 ETH', 'error');
+    if (!amount || parseFloat(amount) < 0.001) return showToast('Minimum 0.001 BNB', 'error');
 
     await CharityTx.donate({
         campaignId: c.id, amount: ethers.parseEther(amount),
@@ -1442,7 +1442,7 @@ async function donateAction() {
 async function donateDetail(id) {
     if (!State?.isConnected) return showToast('Connect wallet', 'warning');
     const amount = document.getElementById('detail-amount')?.value;
-    if (!amount || parseFloat(amount) < 0.001) return showToast('Minimum 0.001 ETH', 'error');
+    if (!amount || parseFloat(amount) < 0.001) return showToast('Minimum 0.001 BNB', 'error');
 
     await CharityTx.donate({
         campaignId: id, amount: ethers.parseEther(amount),
@@ -1473,7 +1473,7 @@ async function withdrawAction(id) {
     if (!State?.isConnected) return showToast('Connect wallet', 'warning');
     const c = CS.campaigns.find(x => x.id === id || x.id === String(id));
     if (!c) return;
-    if (!confirm(`Withdraw ${fmt(c.raisedAmount)} ETH?`)) return;
+    if (!confirm(`Withdraw ${fmt(c.raisedAmount)} BNB?`)) return;
 
     await CharityTx.withdraw({
         campaignId: id,
@@ -1515,7 +1515,7 @@ function share(platform) {
     const c = CS.currentCampaign;
     if (!c) return;
     const url = getShareUrl(c.id);
-    const txt = `Support "${c.title}" on Backcoin Charity!\n\n${fmt(c.raisedAmount)} ETH raised of ${fmt(c.goalAmount)} goal.\n\nDonate now and make a difference:\n`;
+    const txt = `Support "${c.title}" on Backcoin Charity!\n\n${fmt(c.raisedAmount)} BNB raised of ${fmt(c.goalAmount)} goal.\n\nDonate now and make a difference:\n`;
 
     // Try native share first on mobile
     if (platform === 'native' && navigator.share) {

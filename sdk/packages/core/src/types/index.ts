@@ -5,7 +5,7 @@ import type { ethers } from 'ethers';
 
 // ── Network ─────────────────────────────────────────────────────────────────
 
-export type NetworkId = 'arbitrum-sepolia' | 'arbitrum-one';
+export type NetworkId = 'opbnb-testnet' | 'opbnb-mainnet';
 
 export interface NetworkConfig {
     chainId: number;
@@ -17,11 +17,11 @@ export interface NetworkConfig {
 // ── SDK Config ──────────────────────────────────────────────────────────────
 
 export interface BackchainConfig {
-    /** Your operator wallet address — earns 10-20% of all ETH fees */
+    /** Your operator wallet address — earns 10-20% of all fees */
     operator: string;
     /** Network to connect to */
     network?: NetworkId;
-    /** Custom RPC URL (overrides default Alchemy) */
+    /** Custom RPC URL (overrides default) */
     rpcUrl?: string;
     /** Custom contract addresses (overrides defaults) */
     addresses?: Partial<ContractAddresses>;

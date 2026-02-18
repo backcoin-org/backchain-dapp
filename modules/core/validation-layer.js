@@ -24,7 +24,7 @@ import { CacheManager, CacheTTL, CacheKeys } from './cache-manager.js';
 
 /**
  * Minimum ETH required for gas (in wei)
- * 0.0005 ETH should be enough for most Arbitrum transactions
+ * 0.0005 ETH should be enough for most opBNB transactions
  */
 const MIN_ETH_FOR_GAS = 500000000000000n; // 0.0005 ETH
 

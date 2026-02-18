@@ -54,7 +54,7 @@ export function renderPostMenu(post) {
                 </button>
                 ${post.txHash ? `
                 <button class="bc-post-dropdown-item" onclick="event.stopPropagation(); window.open('${EXPLORER_TX}${post.txHash}', '_blank')">
-                    <i class="fa-solid fa-cube"></i> View on Arbiscan
+                    <i class="fa-solid fa-cube"></i> View on Explorer
                 </button>` : ''}
                 ${isOwn ? `
                 <button class="bc-post-dropdown-item danger" onclick="event.stopPropagation(); AgoraPage.deletePost('${post.id}')">

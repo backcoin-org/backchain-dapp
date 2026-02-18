@@ -179,7 +179,7 @@ export async function rentNft({
             const { NetworkManager } = await import('../core/index.js');
             const ethBalance = await NetworkManager.getProvider().getBalance(userAddress);
             if (ethBalance < totalCost + ethers.parseEther('0.001')) {
-                throw new Error(`Insufficient ETH. Need ${ethers.formatEther(totalCost)} ETH + gas`);
+                throw new Error(`Insufficient BNB. Need ${ethers.formatEther(totalCost)} BNB + gas`);
             }
         },
 
@@ -315,7 +315,7 @@ export async function boostListing({
             const { NetworkManager } = await import('../core/index.js');
             const ethBalance = await NetworkManager.getProvider().getBalance(userAddress);
             if (ethBalance < totalFee + ethers.parseEther('0.001')) {
-                throw new Error(`Insufficient ETH. Need ${ethers.formatEther(totalFee)} ETH + gas`);
+                throw new Error(`Insufficient BNB. Need ${ethers.formatEther(totalFee)} BNB + gas`);
             }
         },
 

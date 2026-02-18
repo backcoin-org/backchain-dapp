@@ -1264,7 +1264,7 @@ function renderFuseTab(nftsByTier) {
         setTimeout(() => {
             FusionTx.getEstimatedFusionFee(fuseTierFilter).then(fee => {
                 const el = document.getElementById('fuse-fee-display');
-                if (el) el.textContent = `${Number(ethers.formatEther(fee)).toFixed(6)} ETH`;
+                if (el) el.textContent = `${Number(ethers.formatEther(fee)).toFixed(6)} BNB`;
             }).catch(() => {
                 const el = document.getElementById('fuse-fee-display');
                 if (el) el.textContent = 'N/A';
@@ -1411,7 +1411,7 @@ async function loadSplitFeesForNft(tokenId, sourceTier) {
         if (!el) continue;
         try {
             const fee = await FusionTx.getEstimatedMultiSplitFee(sourceTier, target);
-            el.innerHTML = `<span style="opacity:0.5"><i class="fa-solid fa-gas-pump" style="font-size:7px"></i></span> ${Number(ethers.formatEther(fee)).toFixed(6)} ETH`;
+            el.innerHTML = `<span style="opacity:0.5"><i class="fa-solid fa-gas-pump" style="font-size:7px"></i></span> ${Number(ethers.formatEther(fee)).toFixed(6)} BNB`;
         } catch { el.textContent = 'N/A'; }
     }
 }

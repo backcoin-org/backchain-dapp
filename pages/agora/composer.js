@@ -27,7 +27,7 @@ function renderComposeTagPicker() {
 export function renderCompose() {
     if (!State.isConnected) return '';
     const hasMedia = !!BC.pendingImage;
-    const feeLabel = hasMedia ? `~${formatETH(BC.fees.post || 0n)} ETH` : 'FREE';
+    const feeLabel = hasMedia ? `~${formatETH(BC.fees.post || 0n)} BNB` : 'FREE';
     const profileBanner = (!BC.hasProfile && State.isConnected) ? `
         <div class="bc-profile-create-banner">
             <p>Create your profile to get a username and start posting</p>

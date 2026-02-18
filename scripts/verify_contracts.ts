@@ -289,12 +289,12 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     failed.forEach(r => console.log(`   XX  ${r.name}`));
   }
 
-  const explorerBase = networkName === "arbitrumOne"
-    ? "https://arbiscan.io/address"
-    : "https://sepolia.arbiscan.io/address";
+  const explorerBase = networkName === "opbnbMainnet"
+    ? "https://opbnbscan.com/address"
+    : "https://testnet.opbnbscan.com/address";
 
   console.log("\n" + "=".repeat(70));
-  console.log("LINKS ARBISCAN");
+  console.log("LINKS EXPLORER");
   console.log("=".repeat(70));
 
   const allContracts = [

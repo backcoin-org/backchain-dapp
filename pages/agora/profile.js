@@ -59,7 +59,7 @@ export function renderProfile() {
                     <div class="bc-stat-cell"><div class="bc-stat-value">${userPosts.length}</div><div class="bc-stat-label">Posts</div></div>
                     <div class="bc-stat-cell"><div class="bc-stat-value">${followersCount}</div><div class="bc-stat-label">Followers</div></div>
                     <div class="bc-stat-cell"><div class="bc-stat-value">${followingCount}</div><div class="bc-stat-label">Following</div></div>
-                    <div class="bc-stat-cell"><div class="bc-stat-value" style="color:var(--bc-accent);">${formatETH(totalSuperLikeETH)}</div><div class="bc-stat-label"><i class="fa-solid fa-star" style="color:var(--bc-accent);font-size:10px;"></i> ETH</div></div>
+                    <div class="bc-stat-cell"><div class="bc-stat-value" style="color:var(--bc-accent);">${formatETH(totalSuperLikeETH)}</div><div class="bc-stat-label"><i class="fa-solid fa-star" style="color:var(--bc-accent);font-size:10px;"></i> BNB</div></div>
                 </div>
                 ${renderExpiryWarnings()}
             </div>
@@ -170,7 +170,7 @@ export function renderProfileSetup() {
                         <input type="text" id="wiz-username-input" class="bc-input" placeholder="e.g. satoshi"
                             value="${BC.wizUsername}" maxlength="15" oninput="AgoraPage.onWizUsernameInput(this.value)">
                         <div id="wiz-username-status" class="bc-username-row"></div>
-                        <div style="font-size:12px;color:var(--bc-text-3);margin-top:8px;">1-15 chars: lowercase letters, numbers, underscores. Shorter usernames cost more ETH.</div>
+                        <div style="font-size:12px;color:var(--bc-text-3);margin-top:8px;">1-15 chars: lowercase letters, numbers, underscores. Shorter usernames cost more BNB.</div>
                     </div>
                 ` : step === 2 ? `
                     <div class="bc-field">
@@ -198,7 +198,7 @@ export function renderProfileSetup() {
                         <div style="font-size:13px; color:var(--bc-text-2); margin-top:8px;">${(LANGUAGES.find(l => l.code === BC.wizLanguage) || LANGUAGES[0]).flag} ${(LANGUAGES.find(l => l.code === BC.wizLanguage) || LANGUAGES[0]).name}</div>
                         <div class="bc-fee-row" style="margin-top:20px;">
                             <span class="bc-fee-label">Username Fee</span>
-                            <span class="bc-fee-val">${BC.wizFee || '0'} ETH</span>
+                            <span class="bc-fee-val">${BC.wizFee || '0'} BNB</span>
                         </div>
                     </div>
                 `}

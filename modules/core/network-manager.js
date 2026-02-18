@@ -41,59 +41,42 @@ import { State } from '../../state.js';
 
 /**
  * Target network configuration
- * Currently: Arbitrum Sepolia (Testnet)
+ * Currently: opBNB Testnet
  */
 export const NETWORK_CONFIG = {
-    chainId: 421614,
-    chainIdHex: '0x66eee',
-    name: 'Arbitrum Sepolia',
+    chainId: 5611,
+    chainIdHex: '0x15EB',
+    name: 'opBNB Testnet',
     nativeCurrency: {
-        name: 'Ethereum',
-        symbol: 'ETH',
+        name: 'BNB',
+        symbol: 'tBNB',
         decimals: 18
     },
-    blockExplorer: 'https://sepolia.arbiscan.io'
+    blockExplorer: 'https://testnet.opbnbscan.com'
 };
 
 /**
- * V1.3: Get Alchemy URL - centralized function
- * @returns {string|null} Alchemy URL or null if not configured
- */
-function getAlchemyUrl() {
-    const key = import.meta.env?.VITE_ALCHEMY_API_KEY;
-    return key ? `https://arb-sepolia.g.alchemy.com/v2/${key}` : null;
-}
-
-/**
- * RPC endpoints in priority order
- * V1.3: Alchemy is always first and never skipped
+ * RPC endpoints in priority order (opBNB Testnet)
  */
 const RPC_ENDPOINTS = [
     {
-        name: 'Alchemy',
-        getUrl: getAlchemyUrl,
+        name: 'opBNB Official',
+        getUrl: () => 'https://opbnb-testnet-rpc.bnbchain.org',
         priority: 1,
-        isPublic: false,
-        isPaid: true  // V1.3: Mark as paid RPC
+        isPublic: true,
+        isPaid: false
     },
     {
-        name: 'Arbitrum Official',
-        getUrl: () => 'https://sepolia-rollup.arbitrum.io/rpc',
+        name: 'NodeReal',
+        getUrl: () => 'https://opbnb-testnet.nodereal.io/v1/64a9df0874fb4a93b9d0a3849de012d3',
         priority: 2,
         isPublic: true,
         isPaid: false
     },
     {
         name: 'PublicNode',
-        getUrl: () => 'https://arbitrum-sepolia-rpc.publicnode.com',
+        getUrl: () => 'https://opbnb-testnet.publicnode.com',
         priority: 3,
-        isPublic: true,
-        isPaid: false
-    },
-    {
-        name: 'Ankr',
-        getUrl: () => 'https://rpc.ankr.com/arbitrum_sepolia',
-        priority: 4,
         isPublic: true,
         isPaid: false
     }
@@ -720,7 +703,7 @@ export const NetworkManager = {
             const signer = await provider.getSigner();
             return signer;
         } catch (error) {
-            // Handle ENS not supported error (common on testnets like Arbitrum Sepolia)
+            // Handle ENS not supported error (common on testnets like opBNB Testnet)
             if (error.message?.includes('ENS') || error.code === 'UNSUPPORTED_OPERATION') {
                 // Fallback: get address directly and create signer without ENS
                 try {

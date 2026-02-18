@@ -81,7 +81,7 @@ export async function createProfile({
             const { NetworkManager } = await import('../core/index.js');
             const balance = await NetworkManager.getProvider().getBalance(userAddress);
             if (balance < usernameFee + ethers.parseEther('0.001')) {
-                throw new Error(`Insufficient ETH. Need ~${ethers.formatEther(usernameFee + ethers.parseEther('0.001'))} ETH`);
+                throw new Error(`Insufficient BNB. Need ~${ethers.formatEther(usernameFee + ethers.parseEther('0.001'))} BNB`);
             }
         },
         onSuccess, onError
@@ -290,7 +290,7 @@ export async function superLike({
         value: amount,
 
         validate: async () => {
-            if (amount <= 0n) throw new Error('SuperLike requires ETH > 0');
+            if (amount <= 0n) throw new Error('SuperLike requires BNB > 0');
         },
         onSuccess, onError
     });
@@ -574,7 +574,7 @@ export async function tipPost({
         value: amount,
 
         validate: async () => {
-            if (amount <= 0n) throw new Error('Tip requires ETH > 0');
+            if (amount <= 0n) throw new Error('Tip requires BNB > 0');
         },
         onSuccess, onError
     });

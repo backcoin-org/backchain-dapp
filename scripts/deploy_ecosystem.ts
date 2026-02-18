@@ -158,16 +158,14 @@ const SECURITY_CONFIG = {
 // ════════════════════════════════════════════════════════════════════════════
 
 const TESTNET_RPC_ENDPOINTS = [
-    { name: 'Arbitrum Official', url: 'https://sepolia-rollup.arbitrum.io/rpc', priority: 1 },
-    { name: 'Alchemy', url: process.env.ALCHEMY_API_KEY ? `https://arb-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}` : null, priority: 2 },
-    { name: 'BlockPI', url: 'https://arbitrum-sepolia.blockpi.network/v1/rpc/public', priority: 3 },
-    { name: 'PublicNode', url: 'https://arbitrum-sepolia-rpc.publicnode.com', priority: 4 }
+    { name: 'opBNB Official', url: 'https://opbnb-testnet-rpc.bnbchain.org', priority: 1 },
+    { name: 'NodeReal', url: 'https://opbnb-testnet.nodereal.io/v1/64a9df0874fb4a93b9d0a3849de012d3', priority: 2 },
+    { name: 'PublicNode', url: 'https://opbnb-testnet.publicnode.com', priority: 3 },
 ].filter(rpc => rpc.url) as { name: string; url: string; priority: number }[];
 
 const MAINNET_RPC_ENDPOINTS = [
-    { name: 'Alchemy', url: process.env.ALCHEMY_API_KEY ? `https://arb-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}` : null, priority: 1 },
-    { name: 'Arbitrum Official', url: 'https://arb1.arbitrum.io/rpc', priority: 2 },
-    { name: 'BlockPI', url: 'https://arbitrum.blockpi.network/v1/rpc/public', priority: 3 },
+    { name: 'opBNB Official', url: 'https://opbnb-mainnet-rpc.bnbchain.org', priority: 1 },
+    { name: 'PublicNode', url: 'https://opbnb.publicnode.com', priority: 2 },
 ].filter(rpc => rpc.url) as { name: string; url: string; priority: number }[];
 
 let RPC_ENDPOINTS = TESTNET_RPC_ENDPOINTS;
@@ -248,7 +246,7 @@ const MODULE_CONFIGS = {
 // feeType: 0 = gas-based (gasEstimate × gasPrice × bps × multiplier / 10000)
 // feeType: 1 = value-based (txValue × bps / 10000)
 //
-// V10 Fee Tiers (calibrated for Arbitrum L2, ~0.01-0.1 gwei gas):
+// V10 Fee Tiers (calibrated for opBNB L2, ~0.01-0.1 gwei gas):
 //   SOCIAL    (~$0.025): low-friction actions (like, follow, reply, claim)
 //   CONTENT   (~$0.10):  content creation (post, certify, report)
 //   FINANCIAL (~$1.00):  financial actions (delegate, NFT buy/sell, fortune tier1/2)
@@ -544,7 +542,7 @@ async function main() {
     const [deployer] = await ethers.getSigners();
     const networkName = hre.network.name;
 
-    const isMainnet = networkName === "arbitrum" || networkName === "arbitrumOne";
+    const isMainnet = networkName === "opbnbMainnet";
     RPC_ENDPOINTS = isMainnet ? MAINNET_RPC_ENDPOINTS : TESTNET_RPC_ENDPOINTS;
     RPC_ENDPOINTS.forEach(rpc => { rpcFailCounts[rpc.name] = 0; });
 

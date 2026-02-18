@@ -212,7 +212,7 @@ export async function certify({
             const ethBalance = await provider.getBalance(userAddress);
             const minEthNeeded = ethFee + ethers.parseEther('0.001');
             if (ethBalance < minEthNeeded) {
-                throw new Error(`Insufficient ETH. Need ~${ethers.formatEther(minEthNeeded)} ETH for fee + gas`);
+                throw new Error(`Insufficient BNB. Need ~${ethers.formatEther(minEthNeeded)} BNB for fee + gas`);
             }
         },
 
@@ -289,7 +289,7 @@ export async function boostCertificate({
             const provider = NetworkManager.getProvider();
             const ethBalance = await provider.getBalance(userAddress);
             if (ethBalance < totalFee + ethers.parseEther('0.001')) {
-                throw new Error(`Insufficient ETH. Need ~${ethers.formatEther(totalFee)} ETH for ${days}-day boost`);
+                throw new Error(`Insufficient BNB. Need ~${ethers.formatEther(totalFee)} BNB for ${days}-day boost`);
             }
         },
 
@@ -349,7 +349,7 @@ export async function transferCertificate({
             const ethBalance = await provider.getBalance(userAddress);
             const minNeeded = ethFee + ethers.parseEther('0.001');
             if (ethBalance < minNeeded) {
-                throw new Error(`Insufficient ETH. Need ~${ethers.formatEther(minNeeded)} ETH for transfer + gas`);
+                throw new Error(`Insufficient BNB. Need ~${ethers.formatEther(minNeeded)} BNB for transfer + gas`);
             }
         },
 
@@ -462,7 +462,7 @@ export async function getCertifyFee(docType = 0) {
     if (fee < MIN_CERTIFY_FEE) fee = MIN_CERTIFY_FEE;
     return {
         fee,
-        formatted: ethers.formatEther(fee) + ' ETH',
+        formatted: ethers.formatEther(fee) + ' BNB',
         docType,
         typeName: DOC_TYPE_NAMES[docType] || 'Unknown'
     };
@@ -498,7 +498,7 @@ export async function getTransferFee() {
     const fee = await calculateFeeClientSide(ethers.id('NOTARY_TRANSFER'));
     return {
         fee,
-        formatted: ethers.formatEther(fee) + ' ETH'
+        formatted: ethers.formatEther(fee) + ' BNB'
     };
 }
 

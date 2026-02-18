@@ -279,7 +279,7 @@ function renderHubSpokeSection() {
                         <ul class="text-zinc-400 text-xs space-y-1">
                             <li><i class="fa-solid fa-check text-amber-500/60 mr-1.5"></i>Fee collection & per-module distribution</li>
                             <li><i class="fa-solid fa-check text-amber-500/60 mr-1.5"></i>Operator commissions (10-20% to builders)</li>
-                            <li><i class="fa-solid fa-check text-amber-500/60 mr-1.5"></i>Tutor referral system (10% ETH + 5% BKC)</li>
+                            <li><i class="fa-solid fa-check text-amber-500/60 mr-1.5"></i>Tutor referral system (10% BNB + 5% BKC)</li>
                             <li><i class="fa-solid fa-check text-amber-500/60 mr-1.5"></i>Buyback & Burn engine (deflationary)</li>
                         </ul>
                     </div>
@@ -369,21 +369,21 @@ function renderAllModulesSection() {
                     <div class="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-water text-blue-400 text-sm"></i></div>
                     <div class="flex-1 min-w-0">
                         <p class="text-white text-sm font-medium">Liquidity Pool</p>
-                        <p class="text-zinc-500 text-[10px]">Constant-product AMM for ETH/BKC trading.</p>
+                        <p class="text-zinc-500 text-[10px]">Constant-product AMM for BNB/BKC trading.</p>
                     </div>
                 </div>
                 <div class="ab-module-pill bg-purple-500/5 border border-purple-500/20" onclick="window.navigateTo&&window.navigateTo('staking')">
                     <div class="w-8 h-8 rounded-lg bg-purple-500/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-layer-group text-purple-400 text-sm"></i></div>
                     <div class="flex-1 min-w-0">
                         <p class="text-white text-sm font-medium">Staking Pool</p>
-                        <p class="text-zinc-500 text-[10px]">Delegate BKC with time-locks. Earn ETH + BKC rewards.</p>
+                        <p class="text-zinc-500 text-[10px]">Delegate BKC with time-locks. Earn BNB + BKC rewards.</p>
                     </div>
                 </div>
                 <div class="ab-module-pill bg-orange-500/5 border border-orange-500/20">
                     <div class="w-8 h-8 rounded-lg bg-orange-500/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-fire text-orange-400 text-sm"></i></div>
                     <div class="flex-1 min-w-0">
                         <p class="text-white text-sm font-medium">Buyback Miner</p>
-                        <p class="text-zinc-500 text-[10px]">Converts ETH fees into BKC via scarcity curve mining.</p>
+                        <p class="text-zinc-500 text-[10px]">Converts BNB fees into BKC via scarcity curve mining.</p>
                     </div>
                 </div>
             </div>
@@ -506,7 +506,7 @@ function renderFeeSystemSection() {
             </div>
 
             <p class="text-zinc-400 text-sm leading-relaxed mb-5">
-                Every protocol action generates a small ETH fee. The smart contract automatically splits this fee among multiple beneficiaries — creating aligned incentives for users, builders, referrers, and the protocol.
+                Every protocol action generates a small BNB fee. The smart contract automatically splits this fee among multiple beneficiaries — creating aligned incentives for users, builders, referrers, and the protocol.
             </p>
 
             <!-- Fee Flow -->
@@ -516,7 +516,7 @@ function renderFeeSystemSection() {
                     <div class="w-10 h-10 rounded-xl bg-zinc-700/50 flex items-center justify-center shrink-0">
                         <i class="fa-solid fa-user text-zinc-300 text-sm"></i>
                     </div>
-                    <div class="flex-1 text-sm text-white font-medium">User pays fee (ETH)</div>
+                    <div class="flex-1 text-sm text-white font-medium">User pays fee (BNB)</div>
                 </div>
                 <div class="ml-5 border-l-2 border-zinc-700 pl-4 py-1 text-[11px] text-zinc-500 mb-4">
                     <i class="fa-solid fa-arrow-down mr-1"></i> BackchainEcosystem splits automatically
@@ -579,7 +579,7 @@ function renderMiningSection() {
 
             <p class="text-zinc-400 text-sm leading-relaxed mb-5">
                 In Backchain, <strong class="text-white">using the platform IS mining</strong>. When you buy an NFT Booster,
-                the BuybackMiner converts the ETH spent into newly minted BKC tokens via a scarcity curve — the more that's been mined, the harder it gets, just like Bitcoin.
+                the BuybackMiner converts the BNB spent into newly minted BKC tokens via a scarcity curve — the more that's been mined, the harder it gets, just like Bitcoin.
             </p>
 
             <!-- Mining Flow -->
@@ -604,8 +604,8 @@ function renderMiningSection() {
                             <span class="text-emerald-400 font-bold">2</span>
                         </div>
                         <div class="flex-1">
-                            <p class="text-white font-medium text-sm">BuybackMiner Converts ETH → BKC</p>
-                            <p class="text-zinc-500 text-xs">Scarcity curve: earlier miners get more BKC per ETH</p>
+                            <p class="text-white font-medium text-sm">BuybackMiner Converts BNB → BKC</p>
+                            <p class="text-zinc-500 text-xs">Scarcity curve: earlier miners get more BKC per BNB</p>
                         </div>
                     </div>
 
@@ -666,10 +666,10 @@ function renderGrowthPrograms() {
                         </div>
                     </div>
                     <p class="text-zinc-400 text-xs leading-relaxed mb-3">
-                        Share your referral link. When someone joins through it, you become their Tutor and earn <strong class="text-white">10% of their ETH fees</strong> + <strong class="text-white">5% of their BKC claims</strong> — forever.
+                        Share your referral link. When someone joins through it, you become their Tutor and earn <strong class="text-white">10% of their BNB fees</strong> + <strong class="text-white">5% of their BKC claims</strong> — forever.
                     </p>
                     <div class="flex items-center gap-2">
-                        <span class="ab-badge bg-amber-500/20 text-amber-400"><i class="fa-solid fa-percentage mr-1"></i>10% ETH</span>
+                        <span class="ab-badge bg-amber-500/20 text-amber-400"><i class="fa-solid fa-percentage mr-1"></i>10% BNB</span>
                         <span class="ab-badge bg-amber-500/20 text-amber-400"><i class="fa-solid fa-percentage mr-1"></i>5% BKC</span>
                         <span class="ab-badge bg-zinc-700/50 text-zinc-400"><i class="fa-solid fa-infinity mr-1"></i>Forever</span>
                     </div>
@@ -743,7 +743,7 @@ function renderWhyBackcoinSection() {
                     </div>
                     <div>
                         <h3 class="text-white font-bold text-sm mb-1">Sustainable Yield, Not Inflation</h3>
-                        <p class="text-zinc-500 text-xs leading-relaxed">Staking rewards come from real protocol fees (ETH) and mining activity — not from printing tokens. The more the ecosystem is used, the higher the real yield. No ponzinomics.</p>
+                        <p class="text-zinc-500 text-xs leading-relaxed">Staking rewards come from real protocol fees (BNB) and mining activity — not from printing tokens. The more the ecosystem is used, the higher the real yield. No ponzinomics.</p>
                     </div>
                 </div>
                 <div class="ab-card flex gap-4 items-start">

@@ -406,7 +406,7 @@ export async function doTipPost(postId) {
         operator: getOperatorAddress(),
         onSuccess: () => {
             closeModal('tip');
-            showToast(`Tipped ${amount} ETH!`, 'success');
+            showToast(`Tipped ${amount} BNB!`, 'success');
             BC._render();
         },
         onError: (err) => { showToast(err?.shortMessage || err?.message || 'Tip failed', 'error'); }
@@ -560,7 +560,7 @@ function renderWizardStatus() {
             row.innerHTML = '<span class="bc-username-checking"><i class="fa-solid fa-spinner fa-spin"></i> Checking...</span>';
         } else if (BC.wizUsernameOk === true) {
             row.innerHTML = `<span class="bc-username-ok"><i class="fa-solid fa-check"></i> Available</span>
-                ${BC.wizFee && BC.wizFee !== '0.0' ? `<span class="bc-username-fee">${BC.wizFee} ETH</span>` : '<span class="bc-username-fee">FREE</span>'}`;
+                ${BC.wizFee && BC.wizFee !== '0.0' ? `<span class="bc-username-fee">${BC.wizFee} BNB</span>` : '<span class="bc-username-fee">FREE</span>'}`;
         } else if (BC.wizUsernameOk === false) {
             row.innerHTML = '<span class="bc-username-taken"><i class="fa-solid fa-xmark"></i> Taken</span>';
         } else {

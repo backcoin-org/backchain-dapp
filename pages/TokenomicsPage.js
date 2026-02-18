@@ -209,10 +209,10 @@ function renderFeeFlow() {
             </div>
 
             <div class="tk-card mb-3">
-                <p class="text-white font-bold text-sm mb-2"><i class="fa-solid fa-layer-group text-blue-400 mr-2"></i>Tier 1 — ETH Fees</p>
-                <p class="text-zinc-500 text-xs mb-3">Every on-chain action pays an ETH fee split among:</p>
+                <p class="text-white font-bold text-sm mb-2"><i class="fa-solid fa-layer-group text-blue-400 mr-2"></i>Tier 1 — BNB Fees</p>
+                <p class="text-zinc-500 text-xs mb-3">Every on-chain action pays a BNB fee split among:</p>
                 <div class="grid grid-cols-3 gap-2 text-center text-[10px]">
-                    <div class="rounded-lg p-2" style="background:rgba(39,39,42,0.5)"><p class="text-emerald-400 font-bold text-base">Buyback</p><p class="text-zinc-500">ETH accumulates</p></div>
+                    <div class="rounded-lg p-2" style="background:rgba(39,39,42,0.5)"><p class="text-emerald-400 font-bold text-base">Buyback</p><p class="text-zinc-500">BNB accumulates</p></div>
                     <div class="rounded-lg p-2" style="background:rgba(39,39,42,0.5)"><p class="text-blue-400 font-bold text-base">Treasury</p><p class="text-zinc-500">Protocol fund</p></div>
                     <div class="rounded-lg p-2" style="background:rgba(39,39,42,0.5)"><p class="text-amber-400 font-bold text-base">Operator</p><p class="text-zinc-500">Frontend builder</p></div>
                 </div>
@@ -234,11 +234,11 @@ function renderFeeFlow() {
 
             <div class="tk-card" style="background:linear-gradient(135deg,rgba(16,185,129,0.08),rgba(6,182,212,0.08));border-color:rgba(16,185,129,0.3)">
                 <p class="text-white font-bold text-sm mb-2"><i class="fa-solid fa-recycle text-emerald-400 mr-2"></i>BuybackMiner — The Engine</p>
-                <p class="text-zinc-500 text-xs mb-2">When ETH fees accumulate, anyone can trigger a buyback:</p>
+                <p class="text-zinc-500 text-xs mb-2">When BNB fees accumulate, anyone can trigger a buyback:</p>
                 <div class="space-y-1 text-[10px] text-zinc-400">
-                    <p><span class="text-emerald-400">1.</span> Withdraw ETH from Ecosystem</p>
+                    <p><span class="text-emerald-400">1.</span> Withdraw BNB from Ecosystem</p>
                     <p><span class="text-emerald-400">2.</span> 1% to caller incentive (permissionless MEV)</p>
-                    <p><span class="text-emerald-400">3.</span> 99% swaps ETH to BKC via LiquidityPool</p>
+                    <p><span class="text-emerald-400">3.</span> 99% swaps BNB to BKC via LiquidityPool</p>
                     <p><span class="text-emerald-400">4.</span> Mint new BKC (scarcity curve decreases over time)</p>
                     <p><span class="text-emerald-400">5.</span> 5% burned + 95% to StakingPool rewards</p>
                 </div>
@@ -260,7 +260,7 @@ function renderPricing() {
                     </div>
                     <div class="min-w-0">
                         <p class="text-white text-xs font-medium truncate">Notary — Certify</p>
-                        <p class="text-violet-400 text-[10px] font-bold">0.0005 ETH</p>
+                        <p class="text-violet-400 text-[10px] font-bold">0.0005 BNB</p>
                     </div>
                 </div>
                 <div class="tk-card flex items-center gap-2 p-2">
@@ -269,7 +269,7 @@ function renderPricing() {
                     </div>
                     <div class="min-w-0">
                         <p class="text-white text-xs font-medium truncate">Fortune — Tier 0 (2x)</p>
-                        <p class="text-green-400 text-[10px] font-bold">0.0003 ETH</p>
+                        <p class="text-green-400 text-[10px] font-bold">0.0003 BNB</p>
                     </div>
                 </div>
                 <div class="tk-card flex items-center gap-2 p-2">
@@ -278,7 +278,7 @@ function renderPricing() {
                     </div>
                     <div class="min-w-0">
                         <p class="text-white text-xs font-medium truncate">Fortune — Tier 1 (10x)</p>
-                        <p class="text-emerald-400 text-[10px] font-bold">0.0005 ETH</p>
+                        <p class="text-emerald-400 text-[10px] font-bold">0.0005 BNB</p>
                     </div>
                 </div>
                 <div class="tk-card flex items-center gap-2 p-2">
@@ -287,7 +287,7 @@ function renderPricing() {
                     </div>
                     <div class="min-w-0">
                         <p class="text-white text-xs font-medium truncate">Fortune — Tier 2 (100x)</p>
-                        <p class="text-teal-400 text-[10px] font-bold">0.001 ETH</p>
+                        <p class="text-teal-400 text-[10px] font-bold">0.001 BNB</p>
                     </div>
                 </div>
                 <div class="tk-card flex items-center gap-2 p-2">
@@ -296,7 +296,7 @@ function renderPricing() {
                     </div>
                     <div class="min-w-0">
                         <p class="text-white text-xs font-medium truncate">Agora — Verified Badge</p>
-                        <p class="text-blue-400 text-[10px] font-bold">0.02 ETH/yr</p>
+                        <p class="text-blue-400 text-[10px] font-bold">0.02 BNB/yr</p>
                     </div>
                 </div>
                 <div class="tk-card flex items-center gap-2 p-2">
@@ -305,7 +305,7 @@ function renderPricing() {
                     </div>
                     <div class="min-w-0">
                         <p class="text-white text-xs font-medium truncate">Agora — Premium Badge</p>
-                        <p class="text-amber-400 text-[10px] font-bold">0.1 ETH/yr</p>
+                        <p class="text-amber-400 text-[10px] font-bold">0.1 BNB/yr</p>
                     </div>
                 </div>
                 <div class="tk-card flex items-center gap-2 p-2">
@@ -314,7 +314,7 @@ function renderPricing() {
                     </div>
                     <div class="min-w-0">
                         <p class="text-white text-xs font-medium truncate">Agora — Elite Badge</p>
-                        <p class="text-purple-400 text-[10px] font-bold">0.25 ETH/yr</p>
+                        <p class="text-purple-400 text-[10px] font-bold">0.25 BNB/yr</p>
                     </div>
                 </div>
                 <div class="tk-card flex items-center gap-2 p-2">
@@ -323,7 +323,7 @@ function renderPricing() {
                     </div>
                     <div class="min-w-0">
                         <p class="text-white text-xs font-medium truncate">Agora — Post Boost</p>
-                        <p class="text-cyan-400 text-[10px] font-bold">0.002 ETH/day</p>
+                        <p class="text-cyan-400 text-[10px] font-bold">0.002 BNB/day</p>
                     </div>
                 </div>
             </div>
@@ -433,7 +433,7 @@ function renderEarnings() {
                             <i class="fa-solid fa-landmark text-cyan-400"></i>
                         </div>
                         <div class="flex-1 min-w-0">
-                            <div class="flex items-center gap-2"><p class="text-white font-bold text-sm">Agora Social</p><span class="tk-badge" style="background:rgba(6,182,212,0.2);color:#22d3ee">ETH Tips</span></div>
+                            <div class="flex items-center gap-2"><p class="text-white font-bold text-sm">Agora Social</p><span class="tk-badge" style="background:rgba(6,182,212,0.2);color:#22d3ee">BNB Tips</span></div>
                             <p class="text-zinc-500 text-xs">Earn from followers, replies, SuperLikes, and tips. Build an audience and monetize your content.</p>
                         </div>
                     </div>
@@ -478,7 +478,7 @@ function renderEarnings() {
                         </div>
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center gap-2"><p class="text-white font-bold text-sm">Trigger Buybacks</p><span class="tk-badge" style="background:rgba(234,179,8,0.2);color:#facc15">1% Reward</span></div>
-                            <p class="text-zinc-500 text-xs">Call executeBuyback() when ETH accumulates. Earn 1% caller incentive. Permissionless MEV.</p>
+                            <p class="text-zinc-500 text-xs">Call executeBuyback() when BNB accumulates. Earn 1% caller incentive. Permissionless MEV.</p>
                         </div>
                     </div>
                 </div>
@@ -514,7 +514,7 @@ function renderContracts() {
             </div>
             <div class="mt-3 text-center">
                 <a href="https://sepolia.arbiscan.io" target="_blank" class="inline-flex items-center gap-2 text-xs text-zinc-500 hover:text-amber-400 transition-colors">
-                    <i class="fa-solid fa-external-link"></i> View all contracts on Arbiscan
+                    <i class="fa-solid fa-external-link"></i> View all contracts on Explorer
                 </a>
             </div>
         </div>`;

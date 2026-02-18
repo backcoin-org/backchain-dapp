@@ -10,17 +10,17 @@ import type { NetworkId, NetworkConfig } from './types/index.js';
 // ── Network Configs ─────────────────────────────────────────────────────────
 
 const NETWORKS: Record<NetworkId, NetworkConfig> = {
-    'arbitrum-sepolia': {
-        chainId: 421614,
-        name: 'Arbitrum Sepolia',
-        rpcUrl: 'https://sepolia-rollup.arbitrum.io/rpc',
-        explorerUrl: 'https://sepolia.arbiscan.io',
+    'opbnb-testnet': {
+        chainId: 5611,
+        name: 'opBNB Testnet',
+        rpcUrl: 'https://opbnb-testnet-rpc.bnbchain.org',
+        explorerUrl: 'https://testnet.opbnbscan.com',
     },
-    'arbitrum-one': {
-        chainId: 42161,
-        name: 'Arbitrum One',
-        rpcUrl: 'https://arb1.arbitrum.io/rpc',
-        explorerUrl: 'https://arbiscan.io',
+    'opbnb-mainnet': {
+        chainId: 204,
+        name: 'opBNB Mainnet',
+        rpcUrl: 'https://opbnb-mainnet-rpc.bnbchain.org',
+        explorerUrl: 'https://opbnbscan.com',
     },
 };
 
@@ -156,7 +156,7 @@ export class ProviderManager {
                     params: [{
                         chainId: chainIdHex,
                         chainName: this.networkConfig.name,
-                        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+                        nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
                         rpcUrls: [this.networkConfig.rpcUrl],
                         blockExplorerUrls: [this.networkConfig.explorerUrl],
                     }],

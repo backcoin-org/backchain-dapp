@@ -38,7 +38,7 @@ const GAS_CONFIG = {
     },
     
     // Maximum gas limits (safety cap)
-    MAX_GAS_LIMIT: 15000000n,  // 15M gas (Arbitrum block limit is higher)
+    MAX_GAS_LIMIT: 15000000n,  // 15M gas (opBNB block limit is higher)
     
     // Gas price bounds (in gwei)
     MIN_GAS_PRICE_GWEI: 0.01,
@@ -309,10 +309,10 @@ export const GasManager = {
     formatEth(ethValue, decimals = 6) {
         const value = parseFloat(ethValue);
         
-        if (value === 0) return '0 ETH';
-        if (value < 0.000001) return '< 0.000001 ETH';
-        
-        return `${value.toFixed(decimals).replace(/\.?0+$/, '')} ETH`;
+        if (value === 0) return '0 BNB';
+        if (value < 0.000001) return '< 0.000001 BNB';
+
+        return `${value.toFixed(decimals).replace(/\.?0+$/, '')} BNB`;
     },
 
     /**

@@ -16,19 +16,19 @@ const PRIVATE_KEY = process.env.PRIVATE_KEY || "";
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
 
 // ========================================
-// 🌐 RPCs - ARBITRUM OFFICIAL COMO PRIMÁRIA
+// 🌐 RPCs - opBNB
 // ========================================
 
 const RPC_URLS = {
-  // Testnet - Arbitrum Sepolia
-  arbitrumSepolia: {
-    primary: "https://sepolia-rollup.arbitrum.io/rpc",
-    fallback: ALCHEMY_API_KEY ? `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}` : null,
+  // Testnet - opBNB Testnet
+  opbnbTestnet: {
+    primary: "https://opbnb-testnet-rpc.bnbchain.org",
+    fallback: "https://opbnb-testnet.publicnode.com",
   },
-  // Mainnet - Arbitrum One
-  arbitrumOne: {
-    primary: "https://arb1.arbitrum.io/rpc",
-    fallback: ALCHEMY_API_KEY ? `https://arb-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}` : null,
+  // Mainnet - opBNB Mainnet
+  opbnbMainnet: {
+    primary: "https://opbnb-mainnet-rpc.bnbchain.org",
+    fallback: "https://opbnb.publicnode.com",
   },
 };
 
@@ -42,12 +42,8 @@ if (!PRIVATE_KEY) {
 if (!ETHERSCAN_API_KEY) {
   console.warn("⚠️ AVISO: ETHERSCAN_API_KEY não encontrada. Verificação impossível.");
 }
-if (!ALCHEMY_API_KEY) {
-  console.warn("ℹ️ INFO: ALCHEMY_API_KEY não encontrada. Usando apenas RPC oficial do Arbitrum.");
-}
-
 // Log da RPC sendo usada
-console.log(`🌐 Arbitrum Sepolia RPC: ${RPC_URLS.arbitrumSepolia.primary}`);
+console.log(`🌐 opBNB Testnet RPC: ${RPC_URLS.opbnbTestnet.primary}`);
 
 // ========================================
 // ⚙️ CONFIGURAÇÃO DO HARDHAT
@@ -101,27 +97,20 @@ const config: HardhatUserConfig = {
       chainId: 31337,
     },
 
-    // 🟢 TESTNET: Arbitrum Sepolia
-    arbitrumSepolia: {
-      url: RPC_URLS.arbitrumSepolia.primary,
+    // 🟢 TESTNET: opBNB Testnet
+    opbnbTestnet: {
+      url: RPC_URLS.opbnbTestnet.primary,
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
-      chainId: 421614,
+      chainId: 5611,
       timeout: 60000,
     },
 
-    // 🔴 MAINNET: Arbitrum One
-    arbitrumOne: {
-      url: RPC_URLS.arbitrumOne.primary,
+    // 🔴 MAINNET: opBNB Mainnet
+    opbnbMainnet: {
+      url: RPC_URLS.opbnbMainnet.primary,
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
-      chainId: 42161,
+      chainId: 204,
       timeout: 60000,
-    },
-
-    // 🔵 ALTERNATIVA: Arbitrum Sepolia via Alchemy
-    arbitrumSepoliaAlchemy: {
-      url: RPC_URLS.arbitrumSepolia.fallback || RPC_URLS.arbitrumSepolia.primary,
-      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
-      chainId: 421614,
     },
   },
 
@@ -132,19 +121,19 @@ const config: HardhatUserConfig = {
     apiKey: ETHERSCAN_API_KEY,
     customChains: [
       {
-        network: "arbitrumSepolia",
-        chainId: 421614,
+        network: "opbnbTestnet",
+        chainId: 5611,
         urls: {
-          apiURL: "https://api-sepolia.arbiscan.io/api",
-          browserURL: "https://sepolia.arbiscan.io",
+          apiURL: "https://api-testnet.opbnbscan.com/api",
+          browserURL: "https://testnet.opbnbscan.com",
         },
       },
       {
-        network: "arbitrumOne",
-        chainId: 42161,
+        network: "opbnbMainnet",
+        chainId: 204,
         urls: {
-          apiURL: "https://api.arbiscan.io/api",
-          browserURL: "https://arbiscan.io",
+          apiURL: "https://api.opbnbscan.com/api",
+          browserURL: "https://opbnbscan.com",
         },
       },
     ],

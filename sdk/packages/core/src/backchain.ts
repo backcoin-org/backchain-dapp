@@ -47,7 +47,7 @@ export class Backchain {
         }
 
         this.operator = ethers.getAddress(config.operator); // checksummed
-        this.network = config.network || 'arbitrum-sepolia';
+        this.network = config.network || 'opbnb-testnet';
 
         // Merge addresses (user overrides take precedence)
         const defaults = getAddresses(this.network);

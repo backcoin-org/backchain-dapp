@@ -457,7 +457,7 @@ function render() {
                         <div class="bm-step-num bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">1</div>
                         <div>
                             <p class="text-sm font-bold text-white">List</p>
-                            <p class="text-xs text-zinc-500">Owners list NFTs with daily ETH price</p>
+                            <p class="text-xs text-zinc-500">Owners list NFTs with daily BNB price</p>
                         </div>
                     </div>
                     <div class="bm-step">
@@ -471,7 +471,7 @@ function render() {
                         <div class="bm-step-num bg-amber-500/15 text-amber-400 border border-amber-500/25">3</div>
                         <div>
                             <p class="text-sm font-bold text-white">Earn</p>
-                            <p class="text-xs text-zinc-500">Owners withdraw accumulated ETH earnings anytime</p>
+                            <p class="text-xs text-zinc-500">Owners withdraw accumulated BNB earnings anytime</p>
                         </div>
                     </div>
                 </div>
@@ -493,7 +493,7 @@ function render() {
                 </div>
                 <div class="bm-card p-4 text-center">
                     <p class="text-2xl font-bold text-purple-400 font-mono"><i class="fa-brands fa-ethereum text-lg mr-1"></i>${stats ? formatEthPrice(stats.totalVolume) : '—'}</p>
-                    <p class="text-[10px] text-zinc-500 uppercase mt-1">Volume (ETH)</p>
+                    <p class="text-[10px] text-zinc-500 uppercase mt-1">Volume (BNB)</p>
                 </div>
             </div>
 
@@ -677,7 +677,7 @@ function renderNFTCard(listing, idx, showOwnerActions = false) {
                         <div class="flex items-baseline gap-1.5">
                             <i class="fa-brands fa-ethereum text-blue-400 text-sm"></i>
                             <span class="text-xl font-bold text-white">${price}</span>
-                            <span class="text-xs text-zinc-500">ETH</span>
+                            <span class="text-xs text-zinc-500">BNB</span>
                         </div>
                     </div>
 
@@ -729,7 +729,7 @@ function renderMyListings() {
                         <div>
                             <p class="text-sm text-zinc-400">Total Lifetime Earnings</p>
                             <p class="text-3xl font-bold text-white">
-                                <i class="fa-brands fa-ethereum text-blue-400 text-2xl mr-1"></i>${formatEthPrice(totalEarnings)} <span class="text-lg text-zinc-500">ETH</span>
+                                <i class="fa-brands fa-ethereum text-blue-400 text-2xl mr-1"></i>${formatEthPrice(totalEarnings)} <span class="text-lg text-zinc-500">BNB</span>
                             </p>
                         </div>
                     </div>
@@ -739,7 +739,7 @@ function renderMyListings() {
                             <p class="text-xl font-bold text-amber-400 font-mono" id="bm-pending-amount">
                                 ${RS.pendingEarningsAmount > 0n ? formatEthPrice(RS.pendingEarningsAmount) : '0'}
                             </p>
-                            <p class="text-[10px] text-zinc-500 uppercase">Pending ETH</p>
+                            <p class="text-[10px] text-zinc-500 uppercase">Pending BNB</p>
                         </div>
                         <button id="bm-withdraw-earnings" class="bm-btn-amber px-5 py-3 text-sm"
                                 ${RS.pendingEarningsAmount === 0n ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ''}>
@@ -761,7 +761,7 @@ function renderMyListings() {
             </div>
 
             <!-- My Listed NFTs -->
-            ${mine.length === 0 ? renderEmpty('No Listings Yet', 'List your first NFT to start earning ETH!') : `
+            ${mine.length === 0 ? renderEmpty('No Listings Yet', 'List your first NFT to start earning BNB!') : `
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 bm-nft-grid">
                     ${mine.map((l, i) => renderNFTCard(l, i, true)).join('')}
                 </div>
@@ -883,7 +883,7 @@ function renderListModal() {
                         </select>
                     </div>
                     <div>
-                        <label class="text-xs font-bold text-zinc-400 uppercase block mb-2">Price per Day (ETH)</label>
+                        <label class="text-xs font-bold text-zinc-400 uppercase block mb-2">Price per Day (BNB)</label>
                         <input type="number" id="bm-list-price" min="0.0001" step="0.0001" placeholder="0.005"
                             class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white outline-none text-lg font-mono">
                         <p class="text-[10px] text-zinc-600 mt-2">Fixed 1-day rental. NFT auto re-lists after each rental.</p>
@@ -1010,8 +1010,8 @@ function openBoostModal(tokenId) {
 
         try {
             const cost = await RentalTx.getBoostCost(days);
-            document.getElementById('bm-boost-cost-day').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${cost.feePerDayFormatted} ETH`;
-            document.getElementById('bm-boost-cost-total').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${cost.totalFeeFormatted} ETH`;
+            document.getElementById('bm-boost-cost-day').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${cost.feePerDayFormatted} BNB`;
+            document.getElementById('bm-boost-cost-total').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${cost.totalFeeFormatted} BNB`;
         } catch {
             document.getElementById('bm-boost-cost-day').textContent = 'Error';
             document.getElementById('bm-boost-cost-total').textContent = 'Error';
@@ -1305,15 +1305,15 @@ function openRentModal(tokenId) {
         try {
             const cost = await RentalTx.getRentalCost(tokenId);
             totalCost = cost.totalCost;
-            document.getElementById('bm-cost-rental').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${cost.rentalCostFormatted} ETH`;
-            document.getElementById('bm-cost-fee').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${cost.ethFeeFormatted} ETH`;
-            document.getElementById('bm-cost-total').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${cost.totalCostFormatted} ETH`;
+            document.getElementById('bm-cost-rental').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${cost.rentalCostFormatted} BNB`;
+            document.getElementById('bm-cost-fee').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${cost.ethFeeFormatted} BNB`;
+            document.getElementById('bm-cost-total').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${cost.totalCostFormatted} BNB`;
         } catch (err) {
             const simple = BigInt(listing.pricePerDay || 0);
             totalCost = simple;
-            document.getElementById('bm-cost-rental').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${formatEthPrice(simple)} ETH`;
+            document.getElementById('bm-cost-rental').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${formatEthPrice(simple)} BNB`;
             document.getElementById('bm-cost-fee').textContent = '~fee';
-            document.getElementById('bm-cost-total').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>~${formatEthPrice(simple)} ETH`;
+            document.getElementById('bm-cost-total').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>~${formatEthPrice(simple)} BNB`;
         }
 
         if (State.isConnected && totalCost > 0n) {
@@ -1326,9 +1326,9 @@ function openRentModal(tokenId) {
                     const deficit = formatEthPrice(needed - ethBalance);
                     rentBtn.disabled = true;
                     rentBtn.className = 'flex-1 py-3 rounded-xl font-bold text-sm border border-red-500/30 bg-red-500/10 text-red-400 cursor-not-allowed';
-                    rentBtn.innerHTML = `<i class="fa-brands fa-ethereum mr-1"></i>Need ${formatEthPrice(needed)} ETH`;
+                    rentBtn.innerHTML = `<i class="fa-brands fa-ethereum mr-1"></i>Need ${formatEthPrice(needed)} BNB`;
                     balanceWarn.classList.remove('hidden');
-                    balanceWarnText.textContent = `Your balance: ${formatEthPrice(ethBalance)} ETH — need ${deficit} more ETH`;
+                    balanceWarnText.textContent = `Your balance: ${formatEthPrice(ethBalance)} BNB — need ${deficit} more BNB`;
                 } else {
                     rentBtn.disabled = false;
                     rentBtn.className = 'bm-btn-primary flex-1 py-3';

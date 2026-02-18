@@ -140,7 +140,7 @@ function renderVerifyResult() {
 
                 <div style="margin-top:12px;display:flex;gap:8px">
                     <a href="${EXPLORER_ADDR}${addresses?.notary}?a=${r.tokenId}" target="_blank" class="nt-btn-secondary" style="font-size:12px;padding:8px 14px;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
-                        <i class="fa-solid fa-arrow-up-right-from-square"></i>View on Arbiscan
+                        <i class="fa-solid fa-arrow-up-right-from-square"></i>View on Explorer
                     </a>
                 </div>
             </div>

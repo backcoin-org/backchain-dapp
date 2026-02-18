@@ -131,7 +131,7 @@ export function renderCertDetail(el) {
                     </a>
                 ` : ''}
                 <a href="${EXPLORER_ADDR}${addresses?.notary}?a=${cert.id}" target="_blank" class="nt-btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:12px">
-                    <i class="fa-solid fa-arrow-up-right-from-square"></i>Arbiscan
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i>Explorer
                 </a>
                 ${cert.txHash ? `
                     <a href="${EXPLORER_TX}${cert.txHash}" target="_blank" class="nt-btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:12px">

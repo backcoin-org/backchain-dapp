@@ -48,7 +48,7 @@ export function renderStats(el) {
                         <i class="fa-brands fa-ethereum" style="font-size:16px;color:var(--nt-blue)"></i>
                     </div>
                     <div class="nt-stat-value" style="font-size:18px">${stats?.totalETHFormatted ?? '—'}</div>
-                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">ETH Collected</div>
+                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">BNB Collected</div>
                 </div>
             </div>
 
@@ -83,7 +83,7 @@ export function renderStats(el) {
 
             <div style="text-align:center;margin-top:16px">
                 <a href="${EXPLORER_ADDR}${addresses?.notary}" target="_blank" class="nt-btn-secondary" style="font-size:12px;padding:10px 20px;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
-                    <i class="fa-solid fa-arrow-up-right-from-square"></i>View Contract on Arbiscan
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i>View Contract on Explorer
                 </a>
             </div>
         </div>

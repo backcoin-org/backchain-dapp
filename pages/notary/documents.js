@@ -98,7 +98,7 @@ function renderCertCard(cert) {
                 ${docTypeName ? `<div style="font-size:10px;color:${fileInfo.color};margin-bottom:2px"><i class="${fileInfo.icon}" style="margin-right:3px;font-size:9px"></i>${docTypeName}</div>` : ''}
                 <div style="font-size:10px;font-family:monospace;color:var(--nt-text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:6px">SHA-256: ${cert.hash?.slice(0, 18) || '...'}...</div>
                 <div style="display:flex;gap:6px" onclick="event.stopPropagation()">
-                    <a href="${EXPLORER_ADDR}${addresses?.notary}?a=${cert.id}" target="_blank" class="nt-card-action" title="Verify on Arbiscan">
+                    <a href="${EXPLORER_ADDR}${addresses?.notary}?a=${cert.id}" target="_blank" class="nt-card-action" title="Verify on Explorer">
                         <i class="fa-solid fa-cube"></i> Verify
                     </a>
                     <button class="nt-card-action" onclick="NotaryPage.addToWallet('${cert.id}')" title="Copy certificate link">

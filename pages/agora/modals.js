@@ -31,9 +31,9 @@ export function renderModals() {
                     <button class="bc-modal-x" onclick="AgoraPage.closeModal('superlike')"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="bc-modal-inner">
-                    <p class="bc-modal-desc">Send any amount of ETH to boost this post to trending. More ETH = higher rank. All ETH goes to the ecosystem.</p>
-                    <div class="bc-field"><label class="bc-label">Amount (ETH)</label><input type="number" id="superlike-amount" class="bc-input" value="0.001" min="0.000001" step="0.0001"></div>
-                    <div class="bc-fee-row"><span class="bc-fee-label">Any amount</span><span class="bc-fee-val">&gt; 0 ETH</span></div>
+                    <p class="bc-modal-desc">Send any amount of BNB to boost this post to trending. More BNB = higher rank. All BNB goes to the ecosystem.</p>
+                    <div class="bc-field"><label class="bc-label">Amount (BNB)</label><input type="number" id="superlike-amount" class="bc-input" value="0.001" min="0.000001" step="0.0001"></div>
+                    <div class="bc-fee-row"><span class="bc-fee-label">Any amount</span><span class="bc-fee-val">&gt; 0 BNB</span></div>
                     <button class="bc-btn bc-btn-primary" style="width:100%;margin-top:20px;justify-content:center;" onclick="AgoraPage.confirmSuperLike()"><i class="fa-solid fa-star"></i> Super Like</button>
                 </div>
             </div>
@@ -48,7 +48,7 @@ export function renderModals() {
                 </div>
                 <div class="bc-modal-inner">
                     <p class="bc-modal-desc">Downvote this post. You can only downvote each post once. A small ecosystem fee applies.</p>
-                    <div class="bc-fee-row"><span class="bc-fee-label">Fee</span><span class="bc-fee-val">~${formatETH(BC.fees.downvote)} ETH</span></div>
+                    <div class="bc-fee-row"><span class="bc-fee-label">Fee</span><span class="bc-fee-val">~${formatETH(BC.fees.downvote)} BNB</span></div>
                     <button class="bc-btn bc-btn-outline" style="width:100%;margin-top:20px;justify-content:center;border-color:var(--bc-purple);color:var(--bc-purple);" onclick="AgoraPage.confirmDownvote()"><i class="fa-solid fa-arrow-down"></i> Downvote</button>
                 </div>
             </div>
@@ -65,13 +65,13 @@ export function renderModals() {
                     <p class="bc-modal-desc">Get a verified badge for 1 year. Higher tiers = more prestige.</p>
                     <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
                         <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:space-between;padding:12px 16px;" onclick="AgoraPage.confirmBadge(0)">
-                            <span><i class="fa-solid fa-circle-check" style="color:#3b82f6"></i> Verified</span><span style="color:var(--bc-text-3)">0.02 ETH/year</span>
+                            <span><i class="fa-solid fa-circle-check" style="color:#3b82f6"></i> Verified</span><span style="color:var(--bc-text-3)">0.02 BNB/year</span>
                         </button>
                         <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:space-between;padding:12px 16px;border-color:#eab308;" onclick="AgoraPage.confirmBadge(1)">
-                            <span><i class="fa-solid fa-circle-check" style="color:#eab308"></i> Premium</span><span style="color:var(--bc-text-3)">0.1 ETH/year</span>
+                            <span><i class="fa-solid fa-circle-check" style="color:#eab308"></i> Premium</span><span style="color:var(--bc-text-3)">0.1 BNB/year</span>
                         </button>
                         <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:space-between;padding:12px 16px;border-color:#a855f7;" onclick="AgoraPage.confirmBadge(2)">
-                            <span><i class="fa-solid fa-gem" style="color:#a855f7"></i> Elite</span><span style="color:var(--bc-text-3)">0.25 ETH/year</span>
+                            <span><i class="fa-solid fa-gem" style="color:#a855f7"></i> Elite</span><span style="color:var(--bc-text-3)">0.25 BNB/year</span>
                         </button>
                     </div>
                 </div>
@@ -166,7 +166,7 @@ export function renderModals() {
                     <button class="bc-modal-x" onclick="AgoraPage.closeModal('report')"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="bc-modal-inner">
-                    <p class="bc-modal-desc">Report this post and block the author from your feed. Cost: 0.0001 ETH</p>
+                    <p class="bc-modal-desc">Report this post and block the author from your feed. Cost: 0.0001 BNB</p>
                     <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
                         <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:flex-start;gap:8px;" onclick="AgoraPage.confirmReport(0)"><i class="fa-solid fa-robot"></i> Spam</button>
                         <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:flex-start;gap:8px;" onclick="AgoraPage.confirmReport(1)"><i class="fa-solid fa-hand"></i> Harassment</button>
@@ -190,10 +190,10 @@ export function renderModals() {
                     <div class="bc-field"><label class="bc-label">Days</label><input type="number" id="boost-post-days" class="bc-input" value="1" min="1" max="90" step="1"></div>
                     <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
                         <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:space-between;" onclick="AgoraPage.confirmBoostPost(0)">
-                            <span><i class="fa-solid fa-rocket"></i> Standard</span><span style="color:var(--bc-text-3)">~${formatETH(BC.fees.boostStd)} ETH/day</span>
+                            <span><i class="fa-solid fa-rocket"></i> Standard</span><span style="color:var(--bc-text-3)">~${formatETH(BC.fees.boostStd)} BNB/day</span>
                         </button>
                         <button class="bc-btn bc-btn-primary" style="width:100%;justify-content:space-between;" onclick="AgoraPage.confirmBoostPost(1)">
-                            <span><i class="fa-solid fa-star"></i> Featured</span><span>~${formatETH(BC.fees.boostFeat)} ETH/day</span>
+                            <span><i class="fa-solid fa-star"></i> Featured</span><span>~${formatETH(BC.fees.boostFeat)} BNB/day</span>
                         </button>
                     </div>
                 </div>
@@ -208,8 +208,8 @@ export function renderModals() {
                     <button class="bc-modal-x" onclick="AgoraPage.closeModal('tip')"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="bc-modal-inner">
-                    <p class="bc-modal-desc">Send ETH directly to the post author as a tip. Any amount &gt; 0.</p>
-                    <div class="bc-field"><label class="bc-label">Amount (ETH)</label><input type="number" id="tip-amount" class="bc-input" value="0.001" min="0.000001" step="0.0001"></div>
+                    <p class="bc-modal-desc">Send BNB directly to the post author as a tip. Any amount &gt; 0.</p>
+                    <div class="bc-field"><label class="bc-label">Amount (BNB)</label><input type="number" id="tip-amount" class="bc-input" value="0.001" min="0.000001" step="0.0001"></div>
                     <button class="bc-btn bc-btn-primary" style="width:100%;margin-top:16px;justify-content:center;background:var(--bc-green);" onclick="AgoraPage.confirmTip()"><i class="fa-solid fa-hand-holding-dollar"></i> Send Tip</button>
                 </div>
             </div>

@@ -232,7 +232,7 @@ export async function commitPlay({
             const { NetworkManager } = await import('../core/index.js');
             const ethBalance = await NetworkManager.getProvider().getBalance(userAddress);
             if (ethFee > 0n && ethBalance < ethFee + ethers.parseEther('0.001')) {
-                throw new Error(`Insufficient ETH for fee (${ethers.formatEther(ethFee)} ETH required)`);
+                throw new Error(`Insufficient BNB for fee (${ethers.formatEther(ethFee)} BNB required)`);
             }
         },
 

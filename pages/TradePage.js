@@ -58,7 +58,7 @@ const POOL_ABI = [
 // ════════════════════════════════════════════════════════════════════════════
 
 const TS = {
-    direction: 'buy',          // 'buy' = ETH→BKC, 'sell' = BKC→ETH
+    direction: 'buy',          // 'buy' = BNB→BKC, 'sell' = BKC→BNB
     inputAmount: '',
     estimatedOutput: 0n,
     estimatedOutputFormatted: '0',
@@ -421,7 +421,7 @@ async function executeBuySwap(btn) {
 
         // Validate
         if (TS.ethBalance < amountIn + GAS_RESERVE) {
-            throw new Error('Insufficient ETH (need amount + gas)');
+            throw new Error('Insufficient BNB (need amount + gas)');
         }
 
         const signer = State.signer;
@@ -429,7 +429,7 @@ async function executeBuySwap(btn) {
         const router = new ethers.Contract(SWAP_ROUTER, SWAP_ROUTER_ABI, signer);
 
         // Step 1: Wrap ETH → WETH
-        setSwapBtn(btn, 'Wrapping ETH...', true);
+        setSwapBtn(btn, 'Wrapping BNB...', true);
         let gasOvr = await getGasOverrides();
         const wrapTx = await weth.deposit({ value: amountIn, ...gasOvr });
         await wrapTx.wait();
@@ -549,7 +549,7 @@ async function executeSellSwap(btn) {
         setSwapBtn(btn, 'Processing...', true);
         const receipt = await mcTx.wait();
 
-        showToast('Swap successful! Sold BKC for ETH', 'success');
+        showToast('Swap successful! Sold BKC for BNB', 'success');
         console.log(`[Trade] Sell TX: ${receipt.hash}`);
         resetAfterSwap();
 
@@ -622,7 +622,7 @@ function updateSwapButton() {
     // Check balance
     const amountIn = ethers.parseEther(TS.inputAmount);
     if (TS.direction === 'buy' && TS.ethBalance < amountIn + GAS_RESERVE) {
-        btn.textContent = 'Insufficient ETH';
+        btn.textContent = 'Insufficient BNB';
         btn.disabled = true;
         btn.className = 'execute-trade-btn';
         return;
@@ -649,7 +649,7 @@ function updateSwapButton() {
 async function updatePriceDisplay() {
     const el = document.getElementById('trade-price');
     if (!el) return;
-    let txt = `1 ETH = ${formatPrice(TS.priceBkcPerEth)} BKC`;
+    let txt = `1 BNB = ${formatPrice(TS.priceBkcPerEth)} BKC`;
     // Add USD price
     const provider = State.publicProvider || State.provider;
     if (provider && TS.priceEthPerBkc > 0) {
@@ -686,12 +686,12 @@ function updateBalanceDisplays() {
     const toBal = document.getElementById('trade-to-bal');
     if (fromBal) {
         const bal = TS.direction === 'buy' ? TS.ethBalance : TS.bkcBalance;
-        const sym = TS.direction === 'buy' ? 'ETH' : 'BKC';
+        const sym = TS.direction === 'buy' ? 'BNB' : 'BKC';
         fromBal.textContent = `Balance: ${formatBal(bal)} ${sym}`;
     }
     if (toBal) {
         const bal = TS.direction === 'buy' ? TS.bkcBalance : TS.ethBalance;
-        const sym = TS.direction === 'buy' ? 'BKC' : 'ETH';
+        const sym = TS.direction === 'buy' ? 'BKC' : 'BNB';
         toBal.textContent = `Balance: ${formatBal(bal)} ${sym}`;
     }
     updateSwapButton();
@@ -721,8 +721,8 @@ function renderSwapCard() {
     const container = document.getElementById('trade');
     if (!container) return;
 
-    const fromSym = TS.direction === 'buy' ? 'ETH' : 'BKC';
-    const toSym = TS.direction === 'buy' ? 'BKC' : 'ETH';
+    const fromSym = TS.direction === 'buy' ? 'BNB' : 'BKC';
+    const toSym = TS.direction === 'buy' ? 'BKC' : 'BNB';
     const fromIcon = TS.direction === 'buy'
         ? '<i class="fa-brands fa-ethereum" style="font-size:20px;color:#627eea"></i>'
         : '<img src="./assets/bkc_logo_3d.png" style="width:28px;height:28px;border-radius:50%">';
@@ -805,7 +805,7 @@ function renderSwapCard() {
             <div class="trade-info" id="trade-info">
                 <div class="trade-info-row">
                     <span>Price</span>
-                    <span id="trade-price">${TS.priceBkcPerEth ? '1 ETH = ' + formatPrice(TS.priceBkcPerEth) + ' BKC' : 'Loading...'}</span>
+                    <span id="trade-price">${TS.priceBkcPerEth ? '1 BNB = ' + formatPrice(TS.priceBkcPerEth) + ' BKC' : 'Loading...'}</span>
                 </div>
                 <div class="trade-info-row">
                     <span>Price Impact</span>
@@ -1040,7 +1040,7 @@ function updateChartHeader(data) {
     if (useUsd) {
         currentEl.textContent = formatUsd(currentPrice);
     } else {
-        currentEl.textContent = currentPrice.toFixed(8) + ' ETH';
+        currentEl.textContent = currentPrice.toFixed(8) + ' BNB';
     }
 
     if (data.length >= 2 && firstPrice > 0) {
@@ -1084,7 +1084,7 @@ function setupChartEvents() {
         const price = meta.useUsd ? pt.p : pt.e;
         const prefix = meta.useUsd ? '$' : '';
         const decimals = meta.useUsd ? (price < 0.01 ? 6 : 4) : 8;
-        const suffix = meta.useUsd ? '' : ' ETH';
+        const suffix = meta.useUsd ? '' : ' BNB';
         const date = new Date(pt.t);
         const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 

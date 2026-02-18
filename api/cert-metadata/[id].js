@@ -65,10 +65,8 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Invalid certificate ID' });
     }
 
-    const serverAlchemyKey = (process.env.ALCHEMY_API_KEY || '').trim();
-    const rpcUrl = serverAlchemyKey
-        ? `https://arb-sepolia.g.alchemy.com/v2/${serverAlchemyKey}`
-        : 'https://sepolia-rollup.arbitrum.io/rpc';
+    // opBNB Testnet RPC
+    const rpcUrl = 'https://opbnb-testnet-rpc.bnbchain.org';
 
     try {
         const provider = new ethers.JsonRpcProvider(rpcUrl);
@@ -88,7 +86,7 @@ export default async function handler(req, res) {
 
         const metadata = {
             name: meta.name || meta.desc || `Notary Certificate #${certId}`,
-            description: `Backchain Notary Certificate #${certId}. ${docTypeName} document certified on Arbitrum. Hash: ${shortHash}`,
+            description: `Backchain Notary Certificate #${certId}. ${docTypeName} document certified on opBNB. Hash: ${shortHash}`,
             image: imageUrl || `https://backcoin.org/assets/bkc_logo_3d.png`,
             external_url: `https://backcoin.org/#notary`,
             attributes: [

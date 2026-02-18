@@ -149,7 +149,7 @@ export async function createCampaign({
             const provider = NetworkManager.getProvider();
             const ethBalance = await provider.getBalance(userAddress);
             if (ethBalance < createFee + ethers.parseEther('0.001')) {
-                throw new Error('Insufficient ETH for creation fee + gas');
+                throw new Error('Insufficient BNB for creation fee + gas');
             }
         },
 
@@ -374,7 +374,7 @@ export async function boostCampaign({
             const provider = NetworkManager.getProvider();
             const ethBalance = await provider.getBalance(userAddress);
             if (ethBalance < totalFee + ethers.parseEther('0.001')) {
-                throw new Error(`Insufficient ETH. Need ~${ethers.formatEther(totalFee)} ETH for ${days}-day boost`);
+                throw new Error(`Insufficient BNB. Need ~${ethers.formatEther(totalFee)} BNB for ${days}-day boost`);
             }
         },
 

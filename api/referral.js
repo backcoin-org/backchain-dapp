@@ -64,10 +64,8 @@ export default async function handler(req, res) {
         return res.status(500).json({ success: false, error: 'Server configuration error' });
     }
 
-    const serverAlchemyKey = (process.env.ALCHEMY_API_KEY || '').trim();
-    const rpcUrl = serverAlchemyKey
-        ? `https://arb-sepolia.g.alchemy.com/v2/${serverAlchemyKey}`
-        : 'https://sepolia-rollup.arbitrum.io/rpc';
+    // opBNB Testnet RPC
+    const rpcUrl = 'https://opbnb-testnet-rpc.bnbchain.org';
 
     try {
         const provider = new ethers.JsonRpcProvider(rpcUrl);

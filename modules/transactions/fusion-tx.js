@@ -231,7 +231,7 @@ export async function fuseNfts({
             // Check ETH balance
             const { NetworkManager } = await import('../core/index.js');
             const ethBalance = await NetworkManager.getProvider().getBalance(userAddress);
-            if (ethBalance < ethFee + ethers.parseEther('0.001')) throw new Error('Insufficient ETH for fee + gas');
+            if (ethBalance < ethFee + ethers.parseEther('0.001')) throw new Error('Insufficient BNB for fee + gas');
 
             // ERC-721 approval (txEngine only handles ERC-20)
             await ensureNftApproval(signer, userAddress);
@@ -302,7 +302,7 @@ export async function splitNft({
 
             const { NetworkManager } = await import('../core/index.js');
             const ethBalance = await NetworkManager.getProvider().getBalance(userAddress);
-            if (ethBalance < ethFee + ethers.parseEther('0.001')) throw new Error('Insufficient ETH for fee + gas');
+            if (ethBalance < ethFee + ethers.parseEther('0.001')) throw new Error('Insufficient BNB for fee + gas');
 
             await ensureNftApproval(signer, userAddress);
         },
@@ -383,7 +383,7 @@ export async function splitNftTo({
 
             const { NetworkManager } = await import('../core/index.js');
             const ethBalance = await NetworkManager.getProvider().getBalance(userAddress);
-            if (ethBalance < ethFee + ethers.parseEther('0.001')) throw new Error('Insufficient ETH for fee + gas');
+            if (ethBalance < ethFee + ethers.parseEther('0.001')) throw new Error('Insufficient BNB for fee + gas');
 
             // ERC-721 approval (txEngine only handles ERC-20)
             await ensureNftApproval(signer, userAddress);

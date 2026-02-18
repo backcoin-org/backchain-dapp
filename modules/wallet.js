@@ -41,8 +41,8 @@ const ethers = window.ethers;
 // ============================================================================
 // 1. CONFIGURAÇÃO
 // ============================================================================
-const ARBITRUM_SEPOLIA_ID_DECIMAL = 421614;
-const ARBITRUM_SEPOLIA_ID_HEX = '0x66eee'; 
+const OPBNB_TESTNET_ID_DECIMAL = 5611;
+const OPBNB_TESTNET_ID_HEX = '0x15EB';
 
 let balancePollingInterval = null;
 
@@ -64,7 +64,7 @@ let currentPublicProvider = null;
 const WALLETCONNECT_PROJECT_ID = 'cd4bdedee7a7e909ebd3df8bbc502aed';
 
 // 🔥 V8.0: Usa configuração centralizada do METAMASK_NETWORK_CONFIG
-const arbitrumSepoliaConfig = {
+const opbnbTestnetConfig = {
     chainId: METAMASK_NETWORK_CONFIG.chainIdDecimal,
     name: METAMASK_NETWORK_CONFIG.chainName,
     currency: METAMASK_NETWORK_CONFIG.nativeCurrency.symbol,
@@ -85,7 +85,7 @@ const ethersConfig = defaultConfig({
     enableInjected: true,
     enableCoinbase: false,
     rpcUrl: sepoliaRpcUrl,
-    defaultChainId: ARBITRUM_SEPOLIA_ID_DECIMAL,
+    defaultChainId: OPBNB_TESTNET_ID_DECIMAL,
     enableEmail: true,
     enableEns: false,
     auth: {
@@ -97,7 +97,7 @@ const ethersConfig = defaultConfig({
 
 const web3modal = createWeb3Modal({
     ethersConfig,
-    chains: [arbitrumSepoliaConfig],
+    chains: [opbnbTestnetConfig],
     projectId: WALLETCONNECT_PROJECT_ID,
     enableAnalytics: true,
     themeMode: 'dark',
@@ -106,8 +106,8 @@ const web3modal = createWeb3Modal({
         '--w3m-border-radius-master': '1px',
         '--w3m-z-index': 100
     },
-    // Force Arbitrum Sepolia as default chain for new connections
-    defaultChain: arbitrumSepoliaConfig,
+    // Force opBNB Testnet as default chain for new connections
+    defaultChain: opbnbTestnetConfig,
     // Force EOA only — no smart accounts for social/email login
     defaultAccountTypes: { eip155: 'eoa' },
     preferredAccountType: 'eoa'
@@ -410,10 +410,10 @@ async function ensureNetwork(provider) {
 
     try {
         const network = await provider.getNetwork();
-        if (Number(network.chainId) === ARBITRUM_SEPOLIA_ID_DECIMAL) return true;
+        if (Number(network.chainId) === OPBNB_TESTNET_ID_DECIMAL) return true;
 
         try {
-            await provider.send("wallet_switchEthereumChain", [{ chainId: ARBITRUM_SEPOLIA_ID_HEX }]);
+            await provider.send("wallet_switchEthereumChain", [{ chainId: OPBNB_TESTNET_ID_HEX }]);
             return true;
         } catch (switchError) { return true; }
     } catch (e) { return true; }
@@ -440,9 +440,9 @@ async function setupSignerAndLoadData(provider, address) {
         if (isEmbedded) {
             try {
                 const chainId = web3modal.getChainId();
-                if (chainId !== ARBITRUM_SEPOLIA_ID_DECIMAL) {
+                if (chainId !== OPBNB_TESTNET_ID_DECIMAL) {
                     console.log(`[Wallet] Embedded wallet on chain ${chainId}, switching...`);
-                    await web3modal.switchNetwork(ARBITRUM_SEPOLIA_ID_DECIMAL);
+                    await web3modal.switchNetwork(OPBNB_TESTNET_ID_DECIMAL);
                     try { web3modal.close(); } catch(_) {}
                 }
             } catch (e) {
@@ -590,7 +590,7 @@ export async function initPublicProvider() {
             setupNetworkChangeListener(async (info) => {
                 if (!info.isCorrectNetwork) {
                     console.log('⚠️ User switched to wrong network');
-                    showToast("Please switch back to Arbitrum Sepolia", "warning");
+                    showToast("Please switch back to opBNB Testnet", "warning");
                 } else {
                     const health = await checkRpcHealth();
                     if (!health.healthy) {

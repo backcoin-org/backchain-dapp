@@ -194,7 +194,7 @@ function render(isActive) {
                     </div>
                     <div>
                         <h3 class="text-white font-bold text-sm mb-1">Friend gets welcome bonus</h3>
-                        <p class="text-zinc-400 text-xs leading-relaxed">Your friend receives <strong class="text-amber-400">free BKC tokens</strong> immediately as a welcome bonus + free testnet ETH from the faucet to start using the platform.</p>
+                        <p class="text-zinc-400 text-xs leading-relaxed">Your friend receives <strong class="text-amber-400">free BKC tokens</strong> immediately as a welcome bonus + free testnet BNB from the faucet to start using the platform.</p>
                     </div>
                 </div>
                 <div class="flex items-start gap-4 bg-gradient-to-r from-amber-900/20 to-zinc-800/40 border border-amber-500/30 rounded-xl p-4">
@@ -203,7 +203,7 @@ function render(isActive) {
                     </div>
                     <div>
                         <h3 class="text-white font-bold text-sm mb-1">You earn rewards — forever</h3>
-                        <p class="text-zinc-400 text-xs leading-relaxed">Every time your student pays any ETH fee on the platform, you earn <strong class="text-amber-400">10%</strong>. When they claim staking rewards, you earn <strong class="text-amber-400">5% BKC</strong>. This is <strong class="text-white">permanent and on-chain</strong> — no one can revoke it.</p>
+                        <p class="text-zinc-400 text-xs leading-relaxed">Every time your student pays any BNB fee on the platform, you earn <strong class="text-amber-400">10%</strong>. When they claim staking rewards, you earn <strong class="text-amber-400">5% BKC</strong>. This is <strong class="text-white">permanent and on-chain</strong> — no one can revoke it.</p>
                     </div>
                 </div>
             </div>
@@ -215,27 +215,27 @@ function render(isActive) {
                 <i class="fa-solid fa-coins text-amber-400"></i> What You Earn
             </h2>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-                <!-- ETH Reward -->
+                <!-- BNB Reward -->
                 <div class="bg-zinc-800/40 border border-blue-500/30 rounded-xl p-4">
                     <div class="flex items-center gap-2 mb-3">
                         <div class="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center">
                             <i class="fa-brands fa-ethereum text-blue-400"></i>
                         </div>
                         <div>
-                            <p class="text-white font-bold text-sm">10% ETH</p>
+                            <p class="text-white font-bold text-sm">10% BNB</p>
                             <p class="text-zinc-500 text-[10px]">On all protocol fees</p>
                         </div>
                     </div>
-                    <p class="text-zinc-400 text-xs mb-3">Every ETH fee your student pays — Fortune bets, Notary certifications, NFT trades, Agora badges, post boosts — <strong class="text-white">10% goes directly to you</strong>.</p>
+                    <p class="text-zinc-400 text-xs mb-3">Every BNB fee your student pays — Fortune bets, Notary certifications, NFT trades, Agora badges, post boosts — <strong class="text-white">10% goes directly to you</strong>.</p>
                     <div class="bg-black/30 rounded-lg p-3">
                         <p class="text-zinc-500 text-[10px] uppercase mb-2">Example</p>
                         <div class="space-y-1 text-xs">
-                            <div class="flex justify-between"><span class="text-zinc-400">Student certifies a document</span><span class="text-zinc-300">0.0005 ETH</span></div>
-                            <div class="flex justify-between"><span class="text-zinc-400">Student plays Fortune Tier 1</span><span class="text-zinc-300">0.0005 ETH</span></div>
-                            <div class="flex justify-between"><span class="text-zinc-400">Student buys verified badge</span><span class="text-zinc-300">0.02 ETH</span></div>
+                            <div class="flex justify-between"><span class="text-zinc-400">Student certifies a document</span><span class="text-zinc-300">0.0005 BNB</span></div>
+                            <div class="flex justify-between"><span class="text-zinc-400">Student plays Fortune Tier 1</span><span class="text-zinc-300">0.0005 BNB</span></div>
+                            <div class="flex justify-between"><span class="text-zinc-400">Student buys verified badge</span><span class="text-zinc-300">0.02 BNB</span></div>
                             <div class="border-t border-zinc-700 my-1.5"></div>
-                            <div class="flex justify-between"><span class="text-zinc-300 font-bold">Total fees</span><span class="text-zinc-300 font-bold">0.021 ETH</span></div>
-                            <div class="flex justify-between"><span class="text-amber-400 font-bold">Your 10% cut</span><span class="text-amber-400 font-bold">0.0021 ETH</span></div>
+                            <div class="flex justify-between"><span class="text-zinc-300 font-bold">Total fees</span><span class="text-zinc-300 font-bold">0.021 BNB</span></div>
+                            <div class="flex justify-between"><span class="text-amber-400 font-bold">Your 10% cut</span><span class="text-amber-400 font-bold">0.0021 BNB</span></div>
                         </div>
                     </div>
                 </div>
@@ -330,7 +330,7 @@ function render(isActive) {
                             <i class="fa-solid fa-user text-blue-400 text-xs"></i>
                         </div>
                         <div class="flex-1">
-                            <p class="text-white text-sm font-medium">Student pays ETH fee</p>
+                            <p class="text-white text-sm font-medium">Student pays BNB fee</p>
                             <p class="text-zinc-500 text-[10px]">Any on-chain action: Fortune, Notary, Agora, NFT, etc.</p>
                         </div>
                     </div>
@@ -378,8 +378,8 @@ function render(isActive) {
                 </h3>
                 <p class="text-zinc-400 text-sm mb-4">
                     ${TS.tutor
-                        ? `Your current tutor is <strong class="text-white">${formatAddress(TS.tutor)}</strong>. You can change your tutor by paying a small fee (0.0001 ETH).`
-                        : `Enter a tutor address or ask someone for their tutor link. First-time fee: 0.00002 ETH.`}
+                        ? `Your current tutor is <strong class="text-white">${formatAddress(TS.tutor)}</strong>. You can change your tutor by paying a small fee (0.0001 BNB).`
+                        : `Enter a tutor address or ask someone for their tutor link. First-time fee: 0.00002 BNB.`}
                 </p>
                 <div class="flex gap-2">
                     <input id="tutor-address-input" type="text" placeholder="0x... tutor address"
@@ -440,7 +440,7 @@ function render(isActive) {
                     </div>
                     <div>
                         <p class="text-white font-bold text-sm">Gasless onboarding</p>
-                        <p class="text-zinc-400 text-xs">First-time tutor setup via link costs nothing. A server relayer pays the gas. Your friend doesn't even need ETH.</p>
+                        <p class="text-zinc-400 text-xs">First-time tutor setup via link costs nothing. A server relayer pays the gas. Your friend doesn't even need BNB.</p>
                     </div>
                 </div>
                 <div class="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 flex items-start gap-3">
@@ -449,7 +449,7 @@ function render(isActive) {
                     </div>
                     <div>
                         <p class="text-white font-bold text-sm">Mutable by student</p>
-                        <p class="text-zinc-400 text-xs">Students can change their tutor by paying 0.0001 ETH. This keeps tutors motivated to help their students.</p>
+                        <p class="text-zinc-400 text-xs">Students can change their tutor by paying 0.0001 BNB. This keeps tutors motivated to help their students.</p>
                     </div>
                 </div>
             </div>
@@ -463,11 +463,11 @@ function render(isActive) {
             <div class="space-y-2">
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-4">
                     <h4 class="text-white font-semibold text-sm mb-1">Which actions generate tutor rewards?</h4>
-                    <p class="text-zinc-400 text-xs">Every action that charges an ETH fee: Fortune Pool bets, Notary certifications, Agora badges/boosts, NFT purchases, Charity donations, and more. The tutor cut (10%) is taken off-the-top before any other split.</p>
+                    <p class="text-zinc-400 text-xs">Every action that charges a BNB fee: Fortune Pool bets, Notary certifications, Agora badges/boosts, NFT purchases, Charity donations, and more. The tutor cut (10%) is taken off-the-top before any other split.</p>
                 </div>
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-4">
                     <h4 class="text-white font-semibold text-sm mb-1">How do I withdraw my earnings?</h4>
-                    <p class="text-zinc-400 text-xs">ETH rewards accumulate in the Ecosystem contract under your address. You can withdraw anytime via the Dashboard. BKC rewards from staking claims are sent directly to your wallet.</p>
+                    <p class="text-zinc-400 text-xs">BNB rewards accumulate in the Ecosystem contract under your address. You can withdraw anytime via the Dashboard. BKC rewards from staking claims are sent directly to your wallet.</p>
                 </div>
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-4">
                     <h4 class="text-white font-semibold text-sm mb-1">Is there a limit on students?</h4>
@@ -475,7 +475,7 @@ function render(isActive) {
                 </div>
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-4">
                     <h4 class="text-white font-semibold text-sm mb-1">Can students change their tutor?</h4>
-                    <p class="text-zinc-400 text-xs">Yes. Students can change their tutor by paying 0.0001 ETH. This means you should actively help your students — if you're a good tutor, they'll stay with you.</p>
+                    <p class="text-zinc-400 text-xs">Yes. Students can change their tutor by paying 0.0001 BNB. This means you should actively help your students — if you're a good tutor, they'll stay with you.</p>
                 </div>
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-4">
                     <h4 class="text-white font-semibold text-sm mb-1">What's the welcome BKC bonus?</h4>

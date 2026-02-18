@@ -289,8 +289,8 @@ const renderFaucetCard = () => {
                 <span class="text-xs text-zinc-500">Token Balance</span>
             </div>
             <div class="text-center">
-                <span class="block text-lg font-bold text-sky-400">${ethBal.toFixed(4)} ETH</span>
-                <span class="text-xs text-zinc-500">ETH Balance</span>
+                <span class="block text-lg font-bold text-sky-400">${ethBal.toFixed(4)} BNB</span>
+                <span class="text-xs text-zinc-500">BNB Balance</span>
             </div>
             <div class="text-center">
                 <span class="block text-lg font-bold text-purple-400">${Number(fs.totalClaims).toLocaleString()}</span>
@@ -302,7 +302,7 @@ const renderFaucetCard = () => {
             </div>
         </div>
         <div class="flex flex-wrap gap-2 text-xs text-zinc-400 mb-4">
-            <span>Per claim: ${parseFloat(ethers.formatEther(fs.tokensPerDrip)).toLocaleString()} BKC + ${parseFloat(ethers.formatEther(fs.ethPerDrip))} ETH</span>
+            <span>Per claim: ${parseFloat(ethers.formatEther(fs.tokensPerDrip)).toLocaleString()} BKC + ${parseFloat(ethers.formatEther(fs.ethPerDrip))} BNB</span>
             <span>|</span>
             <span>Total distributed: ${totalTokensDist.toLocaleString('en-US', {maximumFractionDigits:0})} BKC</span>
         </div>
@@ -312,7 +312,7 @@ const renderFaucetCard = () => {
             </button>
             <a href="https://sepolia.arbiscan.io/address/${addresses.faucet}" target="_blank" rel="noopener noreferrer"
                class="bg-zinc-700 hover:bg-zinc-600 text-white text-sm py-2 px-4 rounded-lg transition-colors inline-flex items-center gap-2">
-                <i class="fa-solid fa-arrow-up-right-from-square"></i>Arbiscan
+                <i class="fa-solid fa-arrow-up-right-from-square"></i>Explorer
             </a>
         </div>
     `;

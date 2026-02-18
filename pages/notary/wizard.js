@@ -237,12 +237,12 @@ export function renderWizStep2(panel) {
                 </div>
                 <div class="nt-fee-row">
                     <span style="font-size:13px;color:var(--nt-text-2)">Certification Fee</span>
-                    <span style="font-size:14px;font-weight:700;color:var(--nt-blue);font-family:monospace">${ethFmt} ETH</span>
+                    <span style="font-size:14px;font-weight:700;color:var(--nt-blue);font-family:monospace">${ethFmt} BNB</span>
                 </div>
                 <div style="font-size:10px;color:var(--nt-text-3);margin-top:6px;font-style:italic">
                     <i class="fa-solid fa-infinity" style="margin-right:4px"></i>Arweave = permanent, decentralized storage
                 </div>
-                ${!hasEth ? `<div style="font-size:11px;color:var(--nt-red);margin-top:8px"><i class="fa-solid fa-circle-xmark" style="margin-right:4px"></i>Insufficient ETH for fees + gas</div>` : ''}
+                ${!hasEth ? `<div style="font-size:11px;color:var(--nt-red);margin-top:8px"><i class="fa-solid fa-circle-xmark" style="margin-right:4px"></i>Insufficient BNB for fees + gas</div>` : ''}
             </div>
 
             <div style="display:flex;gap:10px">
@@ -265,7 +265,7 @@ function renderWizStep3(panel) {
     const docTypeNames = ['General', 'Contract', 'Identity', 'Diploma', 'Property', 'Financial', 'Legal', 'Medical', 'IP', 'Other'];
 
     const ethFmt = ethers ? ethers.formatEther(NT.ethFee) : '0.0001';
-    const uploadCostFmt = NT.wizUploadCost ? NT.wizUploadCost.costFormatted : '~0 ETH';
+    const uploadCostFmt = NT.wizUploadCost ? NT.wizUploadCost.costFormatted : '~0 BNB';
 
     panel.innerHTML = `
         <div style="max-width:420px;margin:0 auto;text-align:center">
@@ -295,7 +295,7 @@ function renderWizStep3(panel) {
                 </div>
                 <div class="nt-fee-row">
                     <span style="font-size:13px;color:var(--nt-text-2)">Certification Fee</span>
-                    <span style="font-size:14px;font-weight:700;color:var(--nt-blue);font-family:monospace">${ethFmt} ETH</span>
+                    <span style="font-size:14px;font-weight:700;color:var(--nt-blue);font-family:monospace">${ethFmt} BNB</span>
                 </div>
             </div>
 
