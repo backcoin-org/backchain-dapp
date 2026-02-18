@@ -555,7 +555,7 @@ function showTutorWelcomeOverlay(tutorAddress) {
             <img src="/assets/bkc_logo_3d.png" alt="" class="h-16 w-16 mx-auto rounded-full mb-5 ring-1 ring-amber-500/30 shadow-lg shadow-amber-500/20">
 
             <p class="text-3xl font-black text-white tracking-wide letter-stagger mb-1">${letters}</p>
-            <p class="text-zinc-500 text-[11px] uppercase tracking-[0.25em] mb-5">Unstoppable DeFi</p>
+            <p class="text-zinc-500 text-[11px] uppercase tracking-[0.25em] mb-5">Optimized for opBNB</p>
 
             <div class="relative mb-5">
                 <div class="h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent quote-line"></div>

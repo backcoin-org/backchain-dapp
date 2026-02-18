@@ -115,7 +115,7 @@ import{defaultConfig as Lm,createWeb3Modal as Rm}from"https://esm.sh/@web3modal/
             <img src="/assets/bkc_logo_3d.png" alt="" class="h-16 w-16 mx-auto rounded-full mb-5 ring-1 ring-amber-500/30 shadow-lg shadow-amber-500/20">
 
             <p class="text-3xl font-black text-white tracking-wide letter-stagger mb-1">${e}</p>
-            <p class="text-zinc-500 text-[11px] uppercase tracking-[0.25em] mb-6">Unstoppable DeFi</p>
+            <p class="text-zinc-500 text-[11px] uppercase tracking-[0.25em] mb-6">Optimized for opBNB</p>
 
             <div class="relative mb-6">
                 <div class="h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent quote-line"></div>
@@ -127,7 +127,7 @@ import{defaultConfig as Lm,createWeb3Modal as Rm}from"https://esm.sh/@web3modal/
             </div>
 
             <p class="text-zinc-600 text-[10px] uppercase tracking-widest">
-                No admin keys &bull; No pause &bull; No blacklists
+                Unstoppable DeFi &bull; No Admin Keys &bull; No Blacklists
             </p>
 
             <div class="w-48 mt-8 mx-auto bg-zinc-800/60 rounded-full overflow-hidden">
@@ -11217,7 +11217,7 @@ nftPool.buy(tier, quantity, <span class="op-string">OPERATOR_ADDR</span>, { valu
             <img src="/assets/bkc_logo_3d.png" alt="" class="h-16 w-16 mx-auto rounded-full mb-5 ring-1 ring-amber-500/30 shadow-lg shadow-amber-500/20">
 
             <p class="text-3xl font-black text-white tracking-wide letter-stagger mb-1">${n}</p>
-            <p class="text-zinc-500 text-[11px] uppercase tracking-[0.25em] mb-5">Unstoppable DeFi</p>
+            <p class="text-zinc-500 text-[11px] uppercase tracking-[0.25em] mb-5">Optimized for opBNB</p>
 
             <div class="relative mb-5">
                 <div class="h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent quote-line"></div>
