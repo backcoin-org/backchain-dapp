@@ -20,7 +20,7 @@ const setCorsHeaders = (res) => {
 };
 
 // --- Contract config ---
-const FAUCET_ADDRESS = '0x7485AF4f996753B85f701960661d67D40FCaCE85';
+const FAUCET_ADDRESS = '0x2483E352e276f684Be1A6a990253dE6da82c2173';
 const FAUCET_ABI = [
     'function distributeTo(address recipient) external',
     'function canClaim(address user) view returns (bool)',

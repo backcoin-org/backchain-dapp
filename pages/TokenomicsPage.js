@@ -8,11 +8,11 @@ import { formatBigNumber } from '../utils.js';
 //  1. CONSTANTS
 // ==========================================================
 const MAX_SUPPLY = 200_000_000;
-const TGE_AMOUNT = 40_000_000;
-const AIRDROP_AMOUNT = 14_000_000; // 35% of TGE
-const AIRDROP_PHASE1 = 7_000_000;  // 50% of airdrop — Phase 1 (active)
-const AIRDROP_PHASE2 = 7_000_000;  // 50% of airdrop — Phase 2 (future)
-const LIQUIDITY_AMOUNT = 26_000_000; // 65% of TGE
+const TGE_AMOUNT = 20_000_000;
+const AIRDROP_AMOUNT = 7_000_000; // 35% of TGE
+const AIRDROP_PHASE1 = 3_500_000;  // 50% of airdrop — Phase 1 (active)
+const AIRDROP_PHASE2 = 3_500_000;  // 50% of airdrop — Phase 2 (future)
+const LIQUIDITY_AMOUNT = 13_000_000; // 65% of TGE
 
 // Tier 2 BKC fee distribution
 const BKC_FEE_SPLIT = { burn: 5, stakers: 75, treasury: 20 };
@@ -112,12 +112,12 @@ function renderTGE() {
         <div class="tk-section tk-fade" style="animation-delay:0.15s">
             <div class="flex items-center gap-2 mb-4">
                 <div class="tk-icon-box" style="background:rgba(168,85,247,0.2)"><i class="fa-solid fa-rocket text-purple-400"></i></div>
-                <div><h2 class="text-white font-bold">TGE — Token Launch</h2><p class="text-zinc-500 text-xs">40M BKC minted at genesis</p></div>
+                <div><h2 class="text-white font-bold">TGE — Token Launch</h2><p class="text-zinc-500 text-xs">20M BKC minted at genesis</p></div>
             </div>
             <div class="flex items-center justify-center gap-6 mb-4">
                 <div class="tk-pie-ring" style="background: conic-gradient(#f59e0b 0% 17.5%, #ea580c 17.5% 35%, #10b981 35% 100%);">
                     <div class="tk-pie-center">
-                        <p class="text-2xl font-black text-white">40M</p>
+                        <p class="text-2xl font-black text-white">20M</p>
                         <p class="text-[10px] text-zinc-500">BKC</p>
                     </div>
                 </div>

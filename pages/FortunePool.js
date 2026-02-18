@@ -25,7 +25,7 @@ import { calculateFeeClientSide } from '../modules/core/index.js';
 // ============================================================================
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const EXPLORER_ADDRESS = "https://sepolia.arbiscan.io/address/";
-const FORTUNE_POOL_ADDRESS = addresses?.fortunePool || "0x277dB00d533Bbc0fc267bbD954640aDA38ee6B37";
+const FORTUNE_POOL_ADDRESS = addresses?.fortunePool || "0x123d881D96aD01c5C47996eC18D275eC87B7Dc96";
 // Tiger image removed — cleaner mobile layout
 const SHARE_POINTS = 1000;
 const ESTIMATED_BLOCK_TIME = 250; // ~250ms per Arbitrum block

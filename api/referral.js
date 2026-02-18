@@ -23,8 +23,8 @@ const setCorsHeaders = (res) => {
 
 // --- Contract config ---
 // NOTE: Update these addresses after every full redeploy
-const ECOSYSTEM_ADDRESS = '0xE08F491C07BFdA63dfd50b7305a756f527398065';
-const FAUCET_ADDRESS = '0x350888B5dCB1D616350c0da2929A0b093DeBF03D';
+const ECOSYSTEM_ADDRESS = '0x041ebC7c2281F987739f27646CD7d9d22D0F6678';
+const FAUCET_ADDRESS = '0x2483E352e276f684Be1A6a990253dE6da82c2173';
 
 const ECOSYSTEM_ABI = [
     'function setTutorFor(address _user, address _tutor) external',
