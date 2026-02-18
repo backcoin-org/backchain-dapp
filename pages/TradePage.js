@@ -1,5 +1,5 @@
 // pages/TradePage.js
-// ✅ PRODUCTION V1.0 — Trade BKC/ETH via Uniswap V3
+// ✅ PRODUCTION V2.0 — Trade BKC/ETH via Internal Liquidity Pool (x*y=k AMM)
 
 const ethers = window.ethers;
 
@@ -8,36 +8,33 @@ import { formatBigNumber } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
 import { openConnectModal } from '../modules/wallet.js';
 import { getBkcPrice, formatUsd } from '../modules/price-service.js';
+import { addresses } from '../config.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // CONSTANTS
 // ════════════════════════════════════════════════════════════════════════════
 
-const SWAP_ROUTER = "0x101F443B4d1b059569D643917553c771E1b9663E";
-const WETH9       = "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73";
-const BKC_TOKEN   = "0x8264fa8C238Ca723A5D55D77E7aeC1271bd7E737";
-const POOL        = "0x4A434eCcA4c53e79834d74Be0DA6c224b92f0B35";
-const FEE_TIER    = 3000;
-const EXPLORER    = "https://sepolia.arbiscan.io";
+const SWAP_FEE_BPS = 30; // 0.3% (matches contract)
+const BPS = 10_000;
+const EXPLORER = "https://sepolia.arbiscan.io";
 const PRICE_REFRESH_MS = 15000;
 const DEFAULT_SLIPPAGE = 1;
 const GAS_RESERVE = ethers.parseEther("0.005");
 
 // ════════════════════════════════════════════════════════════════════════════
-// ABIs
+// ABIs — Internal LiquidityPool
 // ════════════════════════════════════════════════════════════════════════════
 
-const SWAP_ROUTER_ABI = [
-    'function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)',
-    'function multicall(uint256 deadline, bytes[] calldata data) external payable returns (bytes[] memory results)',
-    'function unwrapWETH9(uint256 amountMinimum, address recipient) external payable',
-];
-
-const WETH_ABI = [
-    'function deposit() payable',
-    'function approve(address, uint256) returns (bool)',
-    'function allowance(address, address) view returns (uint256)',
-    'function balanceOf(address) view returns (uint256)',
+const LP_ABI = [
+    'function swapETHforBKC(uint256 minBkcOut) external payable returns (uint256 bkcOut)',
+    'function swapBKCforETH(uint256 bkcAmount, uint256 minEthOut) external returns (uint256 ethOut)',
+    'function ethReserve() view returns (uint256)',
+    'function bkcReserve() view returns (uint256)',
+    'function getQuote(uint256 ethAmount) view returns (uint256 bkcOut)',
+    'function getQuoteBKCtoETH(uint256 bkcAmount) view returns (uint256 ethOut)',
+    'function totalSwapCount() view returns (uint64)',
+    'function totalEthVolume() view returns (uint96)',
+    'function totalBkcVolume() view returns (uint96)',
 ];
 
 const ERC20_ABI = [
@@ -46,27 +43,19 @@ const ERC20_ABI = [
     'function balanceOf(address) view returns (uint256)',
 ];
 
-const POOL_ABI = [
-    'function slot0() view returns (uint160 sqrtPriceX96, int24 tick, uint16, uint16, uint16, uint8, bool)',
-    'function liquidity() view returns (uint128)',
-    'function token0() view returns (address)',
-    'function token1() view returns (address)',
-];
-
 // ════════════════════════════════════════════════════════════════════════════
 // LOCAL STATE
 // ════════════════════════════════════════════════════════════════════════════
 
 const TS = {
-    direction: 'buy',          // 'buy' = BNB→BKC, 'sell' = BKC→BNB
+    direction: 'buy',          // 'buy' = ETH→BKC, 'sell' = BKC→ETH
     inputAmount: '',
     estimatedOutput: 0n,
     estimatedOutputFormatted: '0',
     priceImpact: 0,
 
-    sqrtPriceX96: 0n,
-    liquidity: 0n,
-    wethIsToken0: false,
+    ethReserve: 0n,
+    bkcReserve: 0n,
     priceBkcPerEth: 0,
     priceEthPerBkc: 0,
 
@@ -176,10 +165,10 @@ function injectStyles() {
         }
         .trade-pool-info a { color: #4c82fb; text-decoration: none; }
         .trade-pool-info a:hover { text-decoration: underline; }
-        .trade-uni-badge {
+        .trade-lp-badge {
             display: inline-flex; align-items: center; gap: 4px;
-            padding: 2px 8px; border-radius: 8px; background: rgba(255,0,122,0.1);
-            color: #ff007a; font-size: 0.7rem; font-weight: 600;
+            padding: 2px 8px; border-radius: 8px; background: rgba(245,158,11,0.1);
+            color: #f59e0b; font-size: 0.7rem; font-weight: 600;
         }
 
         /* Swap button states */
@@ -263,41 +252,48 @@ function injectStyles() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// PRICE & QUOTES
+// HELPERS
 // ════════════════════════════════════════════════════════════════════════════
+
+function getLpAddress() {
+    return addresses?.liquidityPool;
+}
 
 function getProvider() {
     return State.publicProvider || (State.provider ? State.provider : null);
 }
+
+function getLpContract(signerOrProvider) {
+    return new ethers.Contract(getLpAddress(), LP_ABI, signerOrProvider);
+}
+
+function getBkcAddress() {
+    return addresses?.bkcToken;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PRICE & QUOTES
+// ════════════════════════════════════════════════════════════════════════════
 
 async function getPoolPrice() {
     const provider = getProvider();
     if (!provider) return;
 
     try {
-        const pool = new ethers.Contract(POOL, POOL_ABI, provider);
-        const [slot0, liq, t0] = await Promise.all([
-            pool.slot0(),
-            pool.liquidity(),
-            pool.token0(),
+        const lp = getLpContract(provider);
+        const [ethRes, bkcRes] = await Promise.all([
+            lp.ethReserve(),
+            lp.bkcReserve(),
         ]);
 
-        TS.sqrtPriceX96 = slot0[0];
-        TS.liquidity = liq;
-        TS.wethIsToken0 = t0.toLowerCase() === WETH9.toLowerCase();
+        TS.ethReserve = ethRes;
+        TS.bkcReserve = bkcRes;
 
-        // price = (sqrtPriceX96 / 2^96)^2 = token1 per token0
-        const sqrtPrice = Number(TS.sqrtPriceX96) / (2 ** 96);
-        const price = sqrtPrice * sqrtPrice;
-
-        if (TS.wethIsToken0) {
-            // token0=WETH, token1=BKC → price = BKC per WETH
-            TS.priceBkcPerEth = price;
-            TS.priceEthPerBkc = price > 0 ? 1 / price : 0;
-        } else {
-            // token0=BKC, token1=WETH → price = WETH per BKC
-            TS.priceEthPerBkc = price;
-            TS.priceBkcPerEth = price > 0 ? 1 / price : 0;
+        if (ethRes > 0n && bkcRes > 0n) {
+            const ethNum = Number(ethers.formatEther(ethRes));
+            const bkcNum = Number(ethers.formatEther(bkcRes));
+            TS.priceBkcPerEth = bkcNum / ethNum;   // how many BKC per 1 ETH
+            TS.priceEthPerBkc = ethNum / bkcNum;   // how many ETH per 1 BKC
         }
 
         updatePriceDisplay();
@@ -310,34 +306,29 @@ async function getPoolPrice() {
 
 function calculateEstimatedOutput() {
     const val = parseFloat(TS.inputAmount);
-    if (!val || val <= 0 || TS.sqrtPriceX96 === 0n) {
+    if (!val || val <= 0 || TS.ethReserve === 0n || TS.bkcReserve === 0n) {
         TS.estimatedOutput = 0n;
         TS.estimatedOutputFormatted = '0';
         TS.priceImpact = 0;
         return;
     }
 
-    const fee = 0.003;
-    const sqrtPrice = Number(TS.sqrtPriceX96) / (2 ** 96);
-    const L = Number(TS.liquidity);
-    if (L === 0 || sqrtPrice === 0) return;
-
-    // Virtual reserves at current price
-    const reserve0 = L / sqrtPrice;  // token0
-    const reserve1 = L * sqrtPrice;  // token1
+    const ethRes = Number(ethers.formatEther(TS.ethReserve));
+    const bkcRes = Number(ethers.formatEther(TS.bkcReserve));
 
     let reserveIn, reserveOut;
     if (TS.direction === 'buy') {
-        // ETH→BKC: input is ETH (WETH)
-        reserveIn  = TS.wethIsToken0 ? reserve0 : reserve1;
-        reserveOut = TS.wethIsToken0 ? reserve1 : reserve0;
+        // ETH→BKC
+        reserveIn = ethRes;
+        reserveOut = bkcRes;
     } else {
-        // BKC→ETH: input is BKC
-        reserveIn  = TS.wethIsToken0 ? reserve1 : reserve0;
-        reserveOut = TS.wethIsToken0 ? reserve0 : reserve1;
+        // BKC→ETH
+        reserveIn = bkcRes;
+        reserveOut = ethRes;
     }
 
-    const effectiveInput = val * (1 - fee);
+    // Constant product with 0.3% fee
+    const effectiveInput = val * (BPS - SWAP_FEE_BPS) / BPS;
     let outputNum = effectiveInput * reserveOut / (reserveIn + effectiveInput);
 
     if (outputNum <= 0) {
@@ -346,11 +337,6 @@ function calculateEstimatedOutput() {
         TS.priceImpact = 0;
         return;
     }
-
-    // V3 concentrated liquidity: virtual reserves overestimate output when
-    // swap crosses tick boundaries. Apply conservative 5% buffer for UI estimate.
-    // Actual execution uses staticCall for exact output.
-    outputNum *= 0.95;
 
     // Price impact
     const midPrice = reserveOut / reserveIn;
@@ -362,7 +348,7 @@ function calculateEstimatedOutput() {
 }
 
 function formatOutput(num) {
-    if (num < 0.0001) return num.toExponential(2);
+    if (num < 0.0001) return num.toFixed(8).replace(/0+$/, '');
     if (num < 1) return num.toFixed(6);
     if (num < 1000) return num.toFixed(4);
     if (num < 1e6) return num.toLocaleString('en-US', { maximumFractionDigits: 2 });
@@ -371,7 +357,7 @@ function formatOutput(num) {
 
 function formatPrice(num) {
     if (num === 0) return '--';
-    if (num < 0.0001) return num.toExponential(4);
+    if (num < 0.0001) return num.toFixed(8).replace(/0+$/, '');
     if (num < 1) return num.toFixed(6);
     return num.toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
@@ -386,9 +372,10 @@ async function loadBalances() {
     if (!provider) return;
 
     try {
+        const bkcAddr = getBkcAddress();
         const [ethBal, bkcBal] = await Promise.all([
             provider.getBalance(State.userAddress),
-            new ethers.Contract(BKC_TOKEN, ERC20_ABI, provider).balanceOf(State.userAddress),
+            bkcAddr ? new ethers.Contract(bkcAddr, ERC20_ABI, provider).balanceOf(State.userAddress) : 0n,
         ]);
         TS.ethBalance = ethBal;
         TS.bkcBalance = bkcBal;
@@ -402,15 +389,6 @@ async function loadBalances() {
 // SWAP EXECUTION
 // ════════════════════════════════════════════════════════════════════════════
 
-// Get gas overrides with 2x buffer to prevent "max fee < base fee" on Arbitrum
-async function getGasOverrides() {
-    const provider = State.publicProvider || State.provider;
-    const feeData = await provider.getFeeData();
-    const maxFee = (feeData.maxFeePerGas || feeData.gasPrice || 100000000n) * 2n;
-    const maxPriority = (feeData.maxPriorityFeePerGas || 0n) * 2n || 1n;
-    return { maxFeePerGas: maxFee, maxPriorityFeePerGas: maxPriority };
-}
-
 async function executeBuySwap(btn) {
     if (TS.isSwapping || !State.isConnected || !State.signer) return;
     TS.isSwapping = true;
@@ -419,56 +397,26 @@ async function executeBuySwap(btn) {
         const amountIn = ethers.parseEther(TS.inputAmount);
         if (amountIn === 0n) throw new Error('Enter an amount');
 
-        // Validate
         if (TS.ethBalance < amountIn + GAS_RESERVE) {
-            throw new Error('Insufficient BNB (need amount + gas)');
+            throw new Error('Insufficient ETH (need amount + gas)');
         }
 
         const signer = State.signer;
-        const weth = new ethers.Contract(WETH9, WETH_ABI, signer);
-        const router = new ethers.Contract(SWAP_ROUTER, SWAP_ROUTER_ABI, signer);
+        const lp = getLpContract(signer);
 
-        // Step 1: Wrap ETH → WETH
-        setSwapBtn(btn, 'Wrapping BNB...', true);
-        let gasOvr = await getGasOverrides();
-        const wrapTx = await weth.deposit({ value: amountIn, ...gasOvr });
-        await wrapTx.wait();
-
-        // Step 2: Approve WETH (skip if enough allowance)
-        setSwapBtn(btn, 'Approving...', true);
-        const allowance = await weth.allowance(State.userAddress, SWAP_ROUTER);
-        if (allowance < amountIn) {
-            gasOvr = await getGasOverrides();
-            const appTx = await weth.approve(SWAP_ROUTER, ethers.MaxUint256, gasOvr);
-            await appTx.wait();
-        }
-
-        // Step 3: Get real output via staticCall, then apply slippage
+        // Get on-chain quote for exact output
         setSwapBtn(btn, 'Getting quote...', true);
-        const swapParams = {
-            tokenIn: WETH9,
-            tokenOut: BKC_TOKEN,
-            fee: FEE_TIER,
-            recipient: State.userAddress,
-            amountIn,
-            amountOutMinimum: 0n,
-            sqrtPriceLimitX96: 0n,
-        };
-        const realOutput = await router.exactInputSingle.staticCall(swapParams, { from: State.userAddress });
+        const realOutput = await lp.getQuote(amountIn);
         const slippageBps = BigInt(Math.floor(TS.slippage * 100));
-        const amountOutMin = realOutput * (10000n - slippageBps) / 10000n;
-        console.log(`[Trade] Buy quote: real=${ethers.formatEther(realOutput)} BKC, min=${ethers.formatEther(amountOutMin)} BKC`);
+        const minBkcOut = realOutput * (10000n - slippageBps) / 10000n;
+        console.log(`[Trade] Buy quote: real=${ethers.formatEther(realOutput)} BKC, min=${ethers.formatEther(minBkcOut)} BKC`);
 
-        // Step 4: Swap
+        // Execute swap — send ETH directly (no WETH wrapping needed)
         setSwapBtn(btn, 'Confirm in Wallet...', true);
-        gasOvr = await getGasOverrides();
-        const swapTx = await router.exactInputSingle({
-            ...swapParams,
-            amountOutMinimum: amountOutMin,
-        }, gasOvr);
+        const tx = await lp.swapETHforBKC(minBkcOut, { value: amountIn });
 
         setSwapBtn(btn, 'Processing...', true);
-        const receipt = await swapTx.wait();
+        const receipt = await tx.wait();
 
         showToast('Swap successful! Bought BKC', 'success');
         console.log(`[Trade] Buy TX: ${receipt.hash}`);
@@ -490,66 +438,39 @@ async function executeSellSwap(btn) {
         const amountIn = ethers.parseEther(TS.inputAmount);
         if (amountIn === 0n) throw new Error('Enter an amount');
 
-        // Validate
         if (TS.bkcBalance < amountIn) {
-            throw new Error(`Insufficient BKC`);
+            throw new Error('Insufficient BKC');
         }
 
         const signer = State.signer;
-        const bkc = new ethers.Contract(BKC_TOKEN, ERC20_ABI, signer);
-        const router = new ethers.Contract(SWAP_ROUTER, SWAP_ROUTER_ABI, signer);
+        const lpAddr = getLpAddress();
+        const bkcAddr = getBkcAddress();
+        const bkc = new ethers.Contract(bkcAddr, ERC20_ABI, signer);
+        const lp = getLpContract(signer);
 
-        // Step 1: Approve BKC (skip if enough)
+        // Approve BKC to LP (skip if enough allowance)
         setSwapBtn(btn, 'Approving BKC...', true);
-        const allowance = await bkc.allowance(State.userAddress, SWAP_ROUTER);
+        const allowance = await bkc.allowance(State.userAddress, lpAddr);
         if (allowance < amountIn) {
-            let gasOvr = await getGasOverrides();
-            const appTx = await bkc.approve(SWAP_ROUTER, ethers.MaxUint256, gasOvr);
+            const appTx = await bkc.approve(lpAddr, ethers.MaxUint256);
             await appTx.wait();
         }
 
-        // Step 2: Get real output via staticCall, then apply slippage
+        // Get on-chain quote
         setSwapBtn(btn, 'Getting quote...', true);
-        const realOutput = await router.exactInputSingle.staticCall({
-            tokenIn: BKC_TOKEN,
-            tokenOut: WETH9,
-            fee: FEE_TIER,
-            recipient: SWAP_ROUTER,
-            amountIn,
-            amountOutMinimum: 0n,
-            sqrtPriceLimitX96: 0n,
-        }, { from: State.userAddress });
+        const realOutput = await lp.getQuoteBKCtoETH(amountIn);
         const slippageBps = BigInt(Math.floor(TS.slippage * 100));
-        const amountOutMin = realOutput * (10000n - slippageBps) / 10000n;
-        console.log(`[Trade] Sell quote: real=${ethers.formatEther(realOutput)} ETH, min=${ethers.formatEther(amountOutMin)} ETH`);
+        const minEthOut = realOutput * (10000n - slippageBps) / 10000n;
+        console.log(`[Trade] Sell quote: real=${ethers.formatEther(realOutput)} ETH, min=${ethers.formatEther(minEthOut)} ETH`);
 
-        // Step 3: Multicall (exactInputSingle + unwrapWETH9)
+        // Execute swap
         setSwapBtn(btn, 'Confirm in Wallet...', true);
-        const iface = new ethers.Interface(SWAP_ROUTER_ABI);
-
-        const swapData = iface.encodeFunctionData('exactInputSingle', [{
-            tokenIn: BKC_TOKEN,
-            tokenOut: WETH9,
-            fee: FEE_TIER,
-            recipient: SWAP_ROUTER,
-            amountIn,
-            amountOutMinimum: amountOutMin,
-            sqrtPriceLimitX96: 0n,
-        }]);
-
-        const unwrapData = iface.encodeFunctionData('unwrapWETH9', [
-            amountOutMin,
-            State.userAddress,
-        ]);
-
-        const deadline = BigInt(Math.floor(Date.now() / 1000) + 600);
-        const gasOvr = await getGasOverrides();
-        const mcTx = await router.multicall(deadline, [swapData, unwrapData], gasOvr);
+        const tx = await lp.swapBKCforETH(amountIn, minEthOut);
 
         setSwapBtn(btn, 'Processing...', true);
-        const receipt = await mcTx.wait();
+        const receipt = await tx.wait();
 
-        showToast('Swap successful! Sold BKC for BNB', 'success');
+        showToast('Swap successful! Sold BKC for ETH', 'success');
         console.log(`[Trade] Sell TX: ${receipt.hash}`);
         resetAfterSwap();
 
@@ -566,7 +487,12 @@ function handleSwapError(err) {
         showToast('Transaction cancelled', 'info');
     } else {
         console.error('[Trade] Swap failed:', err);
-        showToast(`Swap failed: ${err.reason || err.shortMessage || err.message}`, 'error');
+        const reason = err.reason || err.shortMessage || err.message;
+        if (reason?.includes('SlippageExceeded')) {
+            showToast('Swap failed: price moved too much. Try increasing slippage.', 'error');
+        } else {
+            showToast(`Swap failed: ${reason}`, 'error');
+        }
     }
 }
 
@@ -622,7 +548,7 @@ function updateSwapButton() {
     // Check balance
     const amountIn = ethers.parseEther(TS.inputAmount);
     if (TS.direction === 'buy' && TS.ethBalance < amountIn + GAS_RESERVE) {
-        btn.textContent = 'Insufficient BNB';
+        btn.textContent = 'Insufficient ETH';
         btn.disabled = true;
         btn.className = 'execute-trade-btn';
         return;
@@ -649,7 +575,7 @@ function updateSwapButton() {
 async function updatePriceDisplay() {
     const el = document.getElementById('trade-price');
     if (!el) return;
-    let txt = `1 BNB = ${formatPrice(TS.priceBkcPerEth)} BKC`;
+    let txt = `1 ETH = ${formatPrice(TS.priceBkcPerEth)} BKC`;
     // Add USD price
     const provider = State.publicProvider || State.provider;
     if (provider && TS.priceEthPerBkc > 0) {
@@ -686,12 +612,12 @@ function updateBalanceDisplays() {
     const toBal = document.getElementById('trade-to-bal');
     if (fromBal) {
         const bal = TS.direction === 'buy' ? TS.ethBalance : TS.bkcBalance;
-        const sym = TS.direction === 'buy' ? 'BNB' : 'BKC';
+        const sym = TS.direction === 'buy' ? 'ETH' : 'BKC';
         fromBal.textContent = `Balance: ${formatBal(bal)} ${sym}`;
     }
     if (toBal) {
         const bal = TS.direction === 'buy' ? TS.bkcBalance : TS.ethBalance;
-        const sym = TS.direction === 'buy' ? 'BKC' : 'BNB';
+        const sym = TS.direction === 'buy' ? 'BKC' : 'ETH';
         toBal.textContent = `Balance: ${formatBal(bal)} ${sym}`;
     }
     updateSwapButton();
@@ -721,8 +647,10 @@ function renderSwapCard() {
     const container = document.getElementById('trade');
     if (!container) return;
 
-    const fromSym = TS.direction === 'buy' ? 'BNB' : 'BKC';
-    const toSym = TS.direction === 'buy' ? 'BKC' : 'BNB';
+    const lpAddr = getLpAddress() || '';
+
+    const fromSym = TS.direction === 'buy' ? 'ETH' : 'BKC';
+    const toSym = TS.direction === 'buy' ? 'BKC' : 'ETH';
     const fromIcon = TS.direction === 'buy'
         ? '<i class="fa-brands fa-ethereum" style="font-size:20px;color:#627eea"></i>'
         : '<img src="./assets/bkc_logo_3d.png" style="width:28px;height:28px;border-radius:50%">';
@@ -805,7 +733,7 @@ function renderSwapCard() {
             <div class="trade-info" id="trade-info">
                 <div class="trade-info-row">
                     <span>Price</span>
-                    <span id="trade-price">${TS.priceBkcPerEth ? '1 BNB = ' + formatPrice(TS.priceBkcPerEth) + ' BKC' : 'Loading...'}</span>
+                    <span id="trade-price">${TS.priceBkcPerEth ? '1 ETH = ' + formatPrice(TS.priceBkcPerEth) + ' BKC' : 'Loading...'}</span>
                 </div>
                 <div class="trade-info-row">
                     <span>Price Impact</span>
@@ -827,9 +755,9 @@ function renderSwapCard() {
 
         <!-- Pool info -->
         <div class="trade-pool-info">
-            <span>Pool: <a href="${EXPLORER}/address/${POOL}" target="_blank" rel="noopener noreferrer">${POOL.slice(0,6)}...${POOL.slice(-4)}</a></span>
+            <span>Pool: <a href="${EXPLORER}/address/${lpAddr}" target="_blank" rel="noopener noreferrer">${lpAddr.slice(0,6)}...${lpAddr.slice(-4)}</a></span>
             <span>Fee: 0.3%</span>
-            <span class="trade-uni-badge"><i class="fa-solid fa-droplet"></i> Uniswap V3</span>
+            <span class="trade-lp-badge"><i class="fa-solid fa-droplet"></i> Backchain AMM</span>
         </div>
 
         <!-- Price Chart -->
@@ -866,7 +794,6 @@ function loadPriceHistory() {
 
 function savePriceHistory() {
     try {
-        // Trim to max points
         if (TS.priceHistory.length > CHART_MAX_POINTS) {
             TS.priceHistory = TS.priceHistory.slice(-CHART_MAX_POINTS);
         }
@@ -880,7 +807,6 @@ function recordPricePoint() {
 
     getBkcPrice(provider).then(price => {
         const now = Date.now();
-        // Avoid duplicates within 10s
         const last = TS.priceHistory[TS.priceHistory.length - 1];
         if (last && now - last.t < 10_000) return;
 
@@ -913,12 +839,9 @@ function drawChart() {
     ctx.clearRect(0, 0, W, H);
 
     const data = getChartData();
-
-    // Update header
     updateChartHeader(data);
 
     if (data.length < 2) {
-        // Show empty state message on canvas
         ctx.fillStyle = '#98a1c0';
         ctx.font = '12px system-ui, sans-serif';
         ctx.textAlign = 'center';
@@ -929,7 +852,6 @@ function drawChart() {
         return;
     }
 
-    // Determine price field — prefer USD, fall back to ETH
     const useUsd = data.some(d => d.p > 0);
     const prices = data.map(d => useUsd ? d.p : d.e);
     const times = data.map(d => d.t);
@@ -947,40 +869,32 @@ function drawChart() {
     const toX = (i) => padX + (i / (data.length - 1)) * chartW;
     const toY = (p) => padTop + (1 - (p - minP) / range) * chartH;
 
-    // Gradient fill
     const isUp = prices[prices.length - 1] >= prices[0];
     const lineColor = isUp ? '#22c55e' : '#ef4444';
     const gradTop = isUp ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)';
     const gradBot = isUp ? 'rgba(34,197,94,0)' : 'rgba(239,68,68,0)';
 
-    // Draw fill
     const gradient = ctx.createLinearGradient(0, padTop, 0, H - padBot);
     gradient.addColorStop(0, gradTop);
     gradient.addColorStop(1, gradBot);
 
     ctx.beginPath();
     ctx.moveTo(toX(0), toY(prices[0]));
-    for (let i = 1; i < prices.length; i++) {
-        ctx.lineTo(toX(i), toY(prices[i]));
-    }
+    for (let i = 1; i < prices.length; i++) ctx.lineTo(toX(i), toY(prices[i]));
     ctx.lineTo(toX(prices.length - 1), H - padBot);
     ctx.lineTo(toX(0), H - padBot);
     ctx.closePath();
     ctx.fillStyle = gradient;
     ctx.fill();
 
-    // Draw line
     ctx.beginPath();
     ctx.moveTo(toX(0), toY(prices[0]));
-    for (let i = 1; i < prices.length; i++) {
-        ctx.lineTo(toX(i), toY(prices[i]));
-    }
+    for (let i = 1; i < prices.length; i++) ctx.lineTo(toX(i), toY(prices[i]));
     ctx.strokeStyle = lineColor;
     ctx.lineWidth = 1.8;
     ctx.lineJoin = 'round';
     ctx.stroke();
 
-    // Endpoint dot
     const lastX = toX(prices.length - 1);
     const lastY = toY(prices[prices.length - 1]);
     ctx.beginPath();
@@ -995,7 +909,6 @@ function drawChart() {
     ctx.stroke();
     ctx.globalAlpha = 1;
 
-    // Time labels
     ctx.fillStyle = '#6b7280';
     ctx.font = '10px system-ui, sans-serif';
     ctx.textAlign = 'center';
@@ -1007,7 +920,6 @@ function drawChart() {
         ctx.fillText(label, toX(idx), H - 4);
     }
 
-    // Price labels (min/max)
     ctx.textAlign = 'right';
     ctx.fillStyle = '#4b5563';
     ctx.font = '9px system-ui, sans-serif';
@@ -1016,7 +928,6 @@ function drawChart() {
     ctx.fillText(prefix + maxP.toFixed(decimals), W - padX, padTop + 10);
     ctx.fillText(prefix + minP.toFixed(decimals), W - padX, H - padBot - 4);
 
-    // Store chart layout for hover
     canvas._chartMeta = { data, prices, times, useUsd, toX, toY, padX, padTop, padBot, chartW, chartH, W, H };
 }
 
@@ -1040,7 +951,7 @@ function updateChartHeader(data) {
     if (useUsd) {
         currentEl.textContent = formatUsd(currentPrice);
     } else {
-        currentEl.textContent = currentPrice.toFixed(8) + ' BNB';
+        currentEl.textContent = currentPrice.toFixed(8) + ' ETH';
     }
 
     if (data.length >= 2 && firstPrice > 0) {
@@ -1059,7 +970,6 @@ function setupChartEvents() {
     const wrap = document.getElementById('chart-wrap');
     if (!canvas || !wrap) return;
 
-    // Range buttons
     wrap.closest('.trade-chart-card')?.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-range]');
         if (!btn) return;
@@ -1069,7 +979,6 @@ function setupChartEvents() {
         drawChart();
     });
 
-    // Hover tooltip
     canvas.addEventListener('mousemove', (e) => {
         const meta = canvas._chartMeta;
         if (!meta || meta.data.length < 2) return;
@@ -1082,16 +991,16 @@ function setupChartEvents() {
 
         const pt = meta.data[idx];
         const price = meta.useUsd ? pt.p : pt.e;
-        const prefix = meta.useUsd ? '$' : '';
-        const decimals = meta.useUsd ? (price < 0.01 ? 6 : 4) : 8;
-        const suffix = meta.useUsd ? '' : ' BNB';
+        const pfx = meta.useUsd ? '$' : '';
+        const dec = meta.useUsd ? (price < 0.01 ? 6 : 4) : 8;
+        const suffix = meta.useUsd ? '' : ' ETH';
         const date = new Date(pt.t);
         const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
         const tooltip = document.getElementById('chart-tooltip');
         const crosshair = document.getElementById('chart-crosshair');
         if (tooltip) {
-            tooltip.textContent = `${prefix}${price.toFixed(decimals)}${suffix}  ·  ${timeStr}`;
+            tooltip.textContent = `${pfx}${price.toFixed(dec)}${suffix}  ·  ${timeStr}`;
             tooltip.style.left = meta.toX(idx) + 'px';
             tooltip.style.top = meta.toY(price) + 'px';
             tooltip.classList.add('visible');
@@ -1125,7 +1034,6 @@ function setupEvents() {
 function handleClick(e) {
     const target = e.target;
 
-    // Settings toggle
     if (target.closest('#trade-settings-toggle')) {
         TS.showSettings = !TS.showSettings;
         const panel = document.getElementById('trade-settings-panel');
@@ -1133,7 +1041,6 @@ function handleClick(e) {
         return;
     }
 
-    // Slippage presets
     const slipBtn = target.closest('[data-slip]');
     if (slipBtn) {
         TS.slippage = parseFloat(slipBtn.dataset.slip);
@@ -1146,7 +1053,6 @@ function handleClick(e) {
         return;
     }
 
-    // Flip
     if (target.closest('#trade-flip-btn')) {
         TS.direction = TS.direction === 'buy' ? 'sell' : 'buy';
         TS.inputAmount = '';
@@ -1159,7 +1065,6 @@ function handleClick(e) {
         return;
     }
 
-    // MAX
     if (target.closest('#trade-max-btn')) {
         let max;
         if (TS.direction === 'buy') {
@@ -1176,7 +1081,6 @@ function handleClick(e) {
         return;
     }
 
-    // Swap button
     if (target.closest('#trade-swap-btn')) {
         if (!State.isConnected) {
             openConnectModal();
@@ -1195,9 +1099,7 @@ function handleClick(e) {
 function handleInput(e) {
     const target = e.target;
 
-    // Amount input
     if (target.id === 'trade-input') {
-        // Allow only valid decimal input
         let val = target.value.replace(/[^0-9.]/g, '');
         const dots = val.split('.').length - 1;
         if (dots > 1) val = val.slice(0, val.lastIndexOf('.'));
@@ -1209,7 +1111,6 @@ function handleInput(e) {
         return;
     }
 
-    // Custom slippage
     if (target.id === 'trade-slip-custom') {
         const val = parseFloat(target.value);
         if (val >= 0.1 && val <= 50) {
