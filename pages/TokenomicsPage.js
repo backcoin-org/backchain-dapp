@@ -86,7 +86,7 @@ function renderSupply() {
         <div class="tk-section tk-fade" style="animation-delay:0.1s">
             <div class="flex items-center gap-2 mb-4">
                 <div class="tk-icon-box" style="background:rgba(245,158,11,0.2)"><i class="fa-solid fa-coins text-amber-400"></i></div>
-                <div><h2 class="text-white font-bold">Token Supply</h2><p class="text-zinc-500 text-xs">BKC — ERC-20 on Arbitrum</p></div>
+                <div><h2 class="text-white font-bold">Token Supply</h2><p class="text-zinc-500 text-xs">BKC — ERC-20 on opBNB</p></div>
             </div>
             <div class="grid grid-cols-3 gap-3 mb-4">
                 <div class="tk-card text-center">

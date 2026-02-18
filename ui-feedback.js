@@ -399,51 +399,8 @@ export function dismissSplash(id = 'welcome-splash') {
 }
 
 export function showWelcomeModal() {
-    if (hasShownWelcomeModal) return;
+    // Welcome splash is now rendered as static HTML in index.html
+    // This function is kept for backward compatibility but is a no-op
+    // (splash dismiss is wired up in app.js)
     hasShownWelcomeModal = true;
-
-    injectSplashStyles();
-    const letters = buildStaggeredTitle();
-
-    // Create full-screen overlay (not using openModal — custom lighter overlay)
-    const overlay = document.createElement('div');
-    overlay.id = 'welcome-splash';
-    overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm cursor-pointer';
-    overlay.style.opacity = '0';
-    overlay.style.transition = 'opacity 0.3s ease';
-
-    overlay.innerHTML = `
-        <div class="splash-enter text-center px-8 max-w-sm">
-            <img src="/assets/bkc_logo_3d.png" alt="" class="h-16 w-16 mx-auto rounded-full mb-5 ring-1 ring-amber-500/30 shadow-lg shadow-amber-500/20">
-
-            <p class="text-3xl font-black text-white tracking-wide letter-stagger mb-1">${letters}</p>
-            <p class="text-zinc-500 text-[11px] uppercase tracking-[0.25em] mb-6">Optimized for opBNB</p>
-
-            <div class="relative mb-6">
-                <div class="h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent quote-line"></div>
-                <p class="text-zinc-400 text-sm italic mt-4 leading-relaxed">
-                    "I may not agree with what you say, but I will defend to the death your right to say it."
-                </p>
-                <p class="text-amber-500/70 text-xs font-semibold mt-2">— Voltaire</p>
-                <div class="h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent mt-4 quote-line"></div>
-            </div>
-
-            <p class="text-zinc-600 text-[10px] uppercase tracking-widest">
-                Unstoppable DeFi &bull; No Admin Keys &bull; No Blacklists
-            </p>
-
-            <div class="w-48 mt-8 mx-auto bg-zinc-800/60 rounded-full overflow-hidden">
-                <div class="splash-bar"></div>
-            </div>
-        </div>
-    `;
-
-    document.body.appendChild(overlay);
-
-    // Fade in
-    requestAnimationFrame(() => { overlay.style.opacity = '1'; });
-
-    // Auto-close after 6.5s or on tap
-    overlay.addEventListener('click', () => dismissSplash());
-    setTimeout(() => dismissSplash(), 6500);
 }

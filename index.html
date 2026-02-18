@@ -342,9 +342,7 @@
                 <div class="container mx-auto max-w-7xl">
 
                     <section id="dashboard" class=""> 
-                        <div id="initial-loader-container" class="flex flex-col items-center justify-center min-h-[65vh]">
-                            <div class="w-8 h-8 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin"></div>
-                        </div>
+                        <div id="initial-loader-container"></div>
                     </section>
                     
                     <section id="staking" class="hidden"></section>
@@ -479,5 +477,41 @@
             window.ethereum.on('accountsChanged', checkAdminVisibility);
         }
     </script>
+    <!-- Welcome Splash (renders instantly while JS loads) -->
+    <style>
+        @keyframes splash-in{0%{opacity:0;transform:scale(.92) translateY(12px)}100%{opacity:1;transform:scale(1) translateY(0)}}
+        @keyframes splash-out{0%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(.95) translateY(-8px)}}
+        @keyframes quote-line{0%{width:0}100%{width:100%}}
+        @keyframes letter-in{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:translateY(0)}}
+        @keyframes splash-progress{0%{width:0}100%{width:100%}}
+        .splash-enter{animation:splash-in .6s cubic-bezier(.16,1,.3,1) forwards}
+        .splash-exit{animation:splash-out .4s ease-in forwards}
+        .quote-line{animation:quote-line 2s ease-out .4s both}
+        .splash-letter{display:inline-block;opacity:0;animation:letter-in .3s ease-out both}
+        .splash-bar{height:2px;background:linear-gradient(90deg,#b45309,#f59e0b,#b45309);border-radius:9999px;animation:splash-progress 6s linear forwards}
+    </style>
+    <div id="welcome-splash" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm cursor-pointer" style="transition:opacity .3s ease">
+        <div class="splash-enter text-center px-8 max-w-sm">
+            <img src="./assets/bkc_logo_3d.png" alt="" class="h-16 w-16 mx-auto rounded-full mb-5 ring-1 ring-amber-500/30 shadow-lg shadow-amber-500/20">
+            <p class="text-3xl font-black text-white tracking-wide mb-1">
+                <span class="splash-letter" style="animation-delay:.6s">B</span><span class="splash-letter" style="animation-delay:.65s">a</span><span class="splash-letter" style="animation-delay:.7s">c</span><span class="splash-letter" style="animation-delay:.75s">k</span><span class="splash-letter" style="animation-delay:.8s">c</span><span class="splash-letter" style="animation-delay:.85s">h</span><span class="splash-letter" style="animation-delay:.9s">a</span><span class="splash-letter" style="animation-delay:.95s">i</span><span class="splash-letter" style="animation-delay:1s">n</span>
+            </p>
+            <p class="text-zinc-500 text-[11px] uppercase tracking-[0.25em] mb-6">Optimized for opBNB</p>
+            <div class="relative mb-6">
+                <div class="h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent quote-line"></div>
+                <p class="text-zinc-400 text-sm italic mt-4 leading-relaxed">
+                    "I may not agree with what you say, but I will defend to the death your right to say it."
+                </p>
+                <p class="text-amber-500/70 text-xs font-semibold mt-2">&mdash; Voltaire</p>
+                <div class="h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent mt-4 quote-line"></div>
+            </div>
+            <p class="text-zinc-600 text-[10px] uppercase tracking-widest">
+                Unstoppable DeFi &bull; No Admin Keys &bull; No Blacklists
+            </p>
+            <div class="w-48 mt-8 mx-auto bg-zinc-800/60 rounded-full overflow-hidden">
+                <div class="splash-bar"></div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

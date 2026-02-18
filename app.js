@@ -698,17 +698,25 @@ window.addEventListener('load', async () => {
     // Capture tutor param before navigation
     captureTutorParam();
 
-    // Show tutor welcome overlay if pending tutor, otherwise generic welcome
-    const pendingTutor = localStorage.getItem('backchain_tutor');
-    if (pendingTutor && !State.isConnected) {
-        showTutorWelcomeOverlay(pendingTutor);
-    } else {
-        showWelcomeModal();
-    }
-
     // Remove initial loader placeholder once app is ready
     const initLoader = document.getElementById('initial-loader-container');
     if (initLoader) initLoader.remove();
+
+    // Welcome splash is already in index.html (renders while JS loads).
+    // If pending tutor, replace generic splash with tutor overlay.
+    // Otherwise just set up auto-dismiss for the existing splash.
+    const pendingTutor = localStorage.getItem('backchain_tutor');
+    if (pendingTutor && !State.isConnected) {
+        dismissSplash(); // remove generic splash
+        showTutorWelcomeOverlay(pendingTutor);
+    } else {
+        // Generic splash is already visible from HTML — just wire up dismiss
+        const existingSplash = document.getElementById('welcome-splash');
+        if (existingSplash) {
+            existingSplash.addEventListener('click', () => dismissSplash());
+            setTimeout(() => dismissSplash(), 6500);
+        }
+    }
 
     // ✅ FIX: Navigate to the page specified in URL hash, or dashboard if none
     const initialPage = getInitialPageFromHash();
