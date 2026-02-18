@@ -1,7 +1,5 @@
 // modules/price-service.js
-// ✅ PRODUCTION V2.0 — BKC Price Tracker (Internal LP + CoinGecko)
-
-import { addresses } from '../config.js';
+// ✅ PRODUCTION V3.0 — BKC Price Tracker (Uniswap V3 + CoinGecko)
 
 const ethers = window.ethers;
 
@@ -9,9 +7,11 @@ const ethers = window.ethers;
 // CONSTANTS
 // ════════════════════════════════════════════════════════════════════════════
 
-const LP_ABI = [
-    'function ethReserve() view returns (uint256)',
-    'function bkcReserve() view returns (uint256)',
+const POOL = "0x808eFFE4d4ee6a6560b861F05d6f14BD7d6208f0";
+const WETH9 = "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73";
+const POOL_ABI = [
+    'function slot0() view returns (uint160 sqrtPriceX96, int24 tick, uint16, uint16, uint16, uint8, bool)',
+    'function token0() view returns (address)',
 ];
 const COINGECKO_URL = 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd';
 const CACHE_TTL_MS = 60_000; // 60s cache
@@ -26,6 +26,7 @@ let priceCache = {
     bkcUsd: 0,
     timestamp: 0,
 };
+let wethIsToken0 = null; // cached after first call
 
 // ════════════════════════════════════════════════════════════════════════════
 // FETCH ETH/USD FROM COINGECKO
@@ -44,29 +45,35 @@ async function fetchEthUsd() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// FETCH BKC/ETH FROM INTERNAL LIQUIDITY POOL
+// FETCH BKC/ETH FROM UNISWAP V3 POOL
 // ════════════════════════════════════════════════════════════════════════════
 
 async function fetchBkcEth(provider) {
     try {
-        const lpAddress = addresses?.liquidityPool;
-        if (!lpAddress) {
-            console.warn('[PriceService] LP address not loaded yet');
-            return priceCache.bkcEth || 0;
+        const pool = new ethers.Contract(POOL, POOL_ABI, provider);
+
+        const promises = [pool.slot0()];
+        if (wethIsToken0 === null) promises.push(pool.token0());
+
+        const results = await Promise.all(promises);
+        const sqrtPriceX96 = results[0][0];
+
+        if (wethIsToken0 === null) {
+            wethIsToken0 = results[1].toLowerCase() === WETH9.toLowerCase();
         }
 
-        const lp = new ethers.Contract(lpAddress, LP_ABI, provider);
-        const [ethReserve, bkcReserve] = await Promise.all([
-            lp.ethReserve(),
-            lp.bkcReserve(),
-        ]);
+        const sqrtPrice = Number(sqrtPriceX96) / (2 ** 96);
+        const price = sqrtPrice * sqrtPrice; // token1 per token0
 
-        if (bkcReserve === 0n || ethReserve === 0n) return 0;
-
-        // BKC price in ETH = ethReserve / bkcReserve
-        return Number(ethReserve) / Number(bkcReserve);
+        if (wethIsToken0) {
+            // token0=WETH, token1=BKC → price = BKC per WETH
+            return price > 0 ? 1 / price : 0; // ETH per BKC
+        } else {
+            // token0=BKC, token1=WETH → price = WETH per BKC
+            return price;
+        }
     } catch (e) {
-        console.warn('[PriceService] LP price fetch failed:', e.message);
+        console.warn('[PriceService] Pool price fetch failed:', e.message);
         return priceCache.bkcEth || 0;
     }
 }

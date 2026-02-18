@@ -16,7 +16,7 @@ const SWAP_ROUTER     = "0x101F443B4d1b059569D643917553c771E1b9663E";
 const WETH9           = "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73";
 
 // Project tokens
-const BKC_TOKEN       = "0x8264fa8C238Ca723A5D55D77E7aeC1271bd7E737";
+const BKC_TOKEN       = "0x888b9422bbEeaB772E035734A6a91a07c23550d1";
 
 // Pool config
 const FEE_TIER        = 3000;      // 0.3%

@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-02-15T11:39:46.884Z",
+  "timestamp": "2026-02-18T23:24:53.017Z",
   "network": "arbitrum-sepolia",
-  "pool": "0x4A434eCcA4c53e79834d74Be0DA6c224b92f0B35",
-  "positionNftId": "2819",
-  "token0": "0x8264fa8C238Ca723A5D55D77E7aeC1271bd7E737",
+  "pool": "0x808eFFE4d4ee6a6560b861F05d6f14BD7d6208f0",
+  "positionNftId": "2827",
+  "token0": "0x888b9422bbEeaB772E035734A6a91a07c23550d1",
   "token1": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
   "feeTier": "0.3%",
   "tickRange": [
