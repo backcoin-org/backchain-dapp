@@ -37,10 +37,10 @@ import { StakingTx, BuybackTx } from '../modules/transactions/index.js';
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 
 const RECYCLE_TIERS = {
-    NONE:    { boost: 0,    recycleRate: 60, keepRate: 40,  color: '#71717a', name: 'None',    icon: '○',  class: 'stk-tier-none' },
-    BRONZE:  { boost: 1000, recycleRate: 40, keepRate: 60,  color: '#cd7f32', name: 'Bronze',  icon: '🥉', class: 'stk-tier-bronze' },
-    SILVER:  { boost: 2500, recycleRate: 30, keepRate: 70,  color: '#c0c0c0', name: 'Silver',  icon: '🥈', class: 'stk-tier-silver' },
-    GOLD:    { boost: 4000, recycleRate: 20, keepRate: 80,  color: '#ffd700', name: 'Gold',    icon: '🥇', class: 'stk-tier-gold' },
+    NONE:    { boost: 0,    recycleRate: 50, keepRate: 50,  color: '#71717a', name: 'None',    icon: '○',  class: 'stk-tier-none' },
+    BRONZE:  { boost: 1000, recycleRate: 30, keepRate: 70,  color: '#cd7f32', name: 'Bronze',  icon: '🥉', class: 'stk-tier-bronze' },
+    SILVER:  { boost: 2500, recycleRate: 20, keepRate: 80,  color: '#c0c0c0', name: 'Silver',  icon: '🥈', class: 'stk-tier-silver' },
+    GOLD:    { boost: 4000, recycleRate: 10, keepRate: 90,  color: '#ffd700', name: 'Gold',    icon: '🥇', class: 'stk-tier-gold' },
     DIAMOND: { boost: 5000, recycleRate: 0,  keepRate: 100, color: '#b9f2ff', name: 'Diamond', icon: '💎', class: 'stk-tier-diamond' }
 };
 
@@ -58,7 +58,7 @@ let currentHistoryFilter = 'ALL';
 
 // NFT Boost State
 let userNftBoost = 0;
-let userRecycleRate = 60;
+let userRecycleRate = 50;
 let nftSource = 'none';
 let claimPreview = null;
 let claimEthFee = 0n;
@@ -971,16 +971,8 @@ function updateHeroRewards() {
         const tutorEl = document.getElementById('stk-break-tutor');
         const tutorLabel = document.getElementById('stk-break-tutor-label');
         if (tutorRow) {
-            if (hasTutor && tutorCut > 0n) {
-                tutorRow.style.display = '';
-                if (tutorLabel) tutorLabel.textContent = 'Tutor (5%)';
-                if (tutorEl) { tutorEl.textContent = `-${tutorNum} BKC`; tutorEl.style.color = 'var(--stk-accent)'; }
-            } else if (!hasTutor && burnAmount > 0n) {
-                // No tutor: 10% burned instead of 5% tutor
-                tutorRow.style.display = 'none';
-            } else {
-                tutorRow.style.display = 'none';
-            }
+            // V11: no tutor cut on staking claims, no burn
+            tutorRow.style.display = 'none';
         }
         document.getElementById('stk-break-burned').textContent = burnAmount > 0n ? `-${burnNum} BKC` : 'None';
         document.getElementById('stk-break-burned').style.color = burnAmount > 0n ? 'var(--stk-red)' : 'var(--stk-green)';
@@ -1021,14 +1013,14 @@ function updateNftBoostPanel() {
         ? `<div style="display:flex;align-items:center;gap:6px;margin-top:10px;padding:6px 8px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);border-radius:6px">
             <i class="fa-solid fa-graduation-cap" style="color:var(--stk-accent);font-size:10px"></i>
             <span style="font-size:10px;color:var(--stk-accent);font-weight:600">Tutor: ${tutorShort}</span>
-            <span style="font-size:9px;color:var(--stk-text-3);margin-left:auto">5% rewards</span>
+            <span style="font-size:9px;color:var(--stk-text-3);margin-left:auto">-10% recycle</span>
         </div>`
         : `<div style="margin-top:10px;padding:6px 8px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.15);border-radius:6px">
             <div style="display:flex;align-items:center;gap:6px">
                 <i class="fa-solid fa-graduation-cap" style="color:var(--stk-red);font-size:10px"></i>
-                <span style="font-size:10px;color:var(--stk-red);font-weight:600">No tutor — 10% burned</span>
+                <span style="font-size:10px;color:var(--stk-red);font-weight:600">No tutor — +10% extra recycled</span>
             </div>
-            <p style="font-size:9px;color:var(--stk-text-3);margin:3px 0 0">Set a tutor to reduce burn to 5% (sent to tutor instead)</p>
+            <p style="font-size:9px;color:var(--stk-text-3);margin:3px 0 0">Set a tutor to reduce recycling by 10%</p>
             <a href="#referral" class="go-to-tutor" style="display:inline-flex;align-items:center;gap:4px;margin-top:4px;font-size:10px;font-weight:700;color:var(--stk-accent);text-decoration:none;cursor:pointer">
                 <i class="fa-solid fa-arrow-right" style="font-size:8px"></i> Set a Tutor
             </a>
@@ -1396,7 +1388,7 @@ async function handleUnstake(index, isForce) {
 
     if (isForce) {
         // Load force unstake preview for detailed info
-        let previewMsg = `Force unstake has a 60% base penalty.\n`;
+        let previewMsg = `Force unstake has a penalty based on your NFT tier.\n`;
         try {
             const stakingContract = State.stakingPoolContractPublic || State.stakingPoolContract;
             if (stakingContract && State.userAddress) {
@@ -1414,8 +1406,6 @@ async function handleUnstake(index, isForce) {
                     previewMsg += `Staked: ${stakedAmt} BKC\n`;
                     previewMsg += `Penalty: -${totalPenalty} BKC\n`;
                     previewMsg += `  Recycled: ${recycleAmt} BKC (to all stakers)\n`;
-                    if (parseFloat(tutorAmt) > 0) previewMsg += `  Tutor: ${tutorAmt} BKC (5%)\n`;
-                    if (parseFloat(burnAmt) > 0) previewMsg += `  Burned: ${burnAmt} BKC${!hasTutor ? ' (no tutor = 10% burn)' : ''}\n`;
                     previewMsg += `  BNB Fee: ${ethFee} BNB\n`;
                     previewMsg += `\nYou receive: ${userGets} BKC\n`;
                     previewMsg += `\nContinue?`;
@@ -1424,7 +1414,7 @@ async function handleUnstake(index, isForce) {
         } catch (e) {
             console.warn('Force unstake preview error:', e);
             previewMsg += `Your NFT tier: ${getTierFromBoost(userNftBoost).icon} ${getTierFromBoost(userNftBoost).name}\n`;
-            previewMsg += `${hasTutor ? '5% to tutor' : '10% burned (no tutor)'}\nContinue?`;
+            previewMsg += `${hasTutor ? 'Tutor reduces recycling by 10%' : 'No tutor (+10% extra recycled)'}\nContinue?`;
         }
         if (!confirm(previewMsg)) return;
     }

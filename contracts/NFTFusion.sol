@@ -66,6 +66,10 @@ contract NFTFusion is INFTFusion {
     uint8 public constant TIER_GOLD    = 2;
     uint8 public constant TIER_DIAMOND = 3;
 
+    /// @notice Premium surcharge on splitTo (multi-level split convenience fee)
+    uint256 public constant SPLITTO_PREMIUM_BPS = 2000; // 20% premium
+    uint256 private constant BPS = 10_000;
+
     // ════════════════════════════════════════════════════════════════════════
     // IMMUTABLE
     // ════════════════════════════════════════════════════════════════════════
@@ -281,8 +285,9 @@ contract NFTFusion is INFTFusion {
 
         uint8 levels = sourceTier - targetTier;
 
-        // Calculate total fee (sum of fees for each level)
-        uint256 totalFee = _getMultiSplitFee(sourceTier, targetTier);
+        // Calculate total fee (sum of fees for each level + 20% convenience premium)
+        uint256 baseFee = _getMultiSplitFee(sourceTier, targetTier);
+        uint256 totalFee = baseFee + (baseFee * SPLITTO_PREMIUM_BPS / BPS);
         if (msg.value < totalFee) revert InsufficientFee();
 
         // Pull + burn source NFT
@@ -332,8 +337,10 @@ contract NFTFusion is INFTFusion {
     }
 
     /// @notice Get total ETH fee for a multi-level split (1 → 2^N target tier)
+    ///         Includes 20% convenience premium over step-by-step splits
     function getMultiSplitFee(uint8 sourceTier, uint8 targetTier) external view returns (uint256) {
-        return _getMultiSplitFee(sourceTier, targetTier);
+        uint256 baseFee = _getMultiSplitFee(sourceTier, targetTier);
+        return baseFee + (baseFee * SPLITTO_PREMIUM_BPS / BPS);
     }
 
     /// @notice Statistics
@@ -382,7 +389,7 @@ contract NFTFusion is INFTFusion {
         } catch {}
     }
 
-    /// @notice Preview split result
+    /// @notice Preview split result (includes 20% splitTo premium for multi-level)
     function previewSplit(uint256 tokenId, uint8 targetTier) external view returns (
         uint8 sourceTier,
         uint256 mintCount,
@@ -397,14 +404,15 @@ contract NFTFusion is INFTFusion {
             if (sourceTier > TIER_BRONZE && targetTier < sourceTier) {
                 uint8 levels = sourceTier - targetTier;
                 mintCount = 1 << levels;
-                ethFee = _getMultiSplitFee(sourceTier, targetTier);
+                uint256 baseFee = _getMultiSplitFee(sourceTier, targetTier);
+                ethFee = baseFee + (baseFee * SPLITTO_PREMIUM_BPS / BPS);
                 canSplit = true;
             }
         } catch {}
     }
 
     function version() external pure returns (string memory) {
-        return "2.0.0";
+        return "3.0.0";
     }
 
     // ════════════════════════════════════════════════════════════════════════

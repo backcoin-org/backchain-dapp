@@ -28,9 +28,9 @@ export const CONFIG = {
 // Resolve o problema de RPC ruim sem intervenção do usuário
 
 export const METAMASK_NETWORK_CONFIG = {
-    chainId: '0x66eee', // 421614 in hex (Arbitrum Sepolia)
+    chainId: '0x66eee', // 421614 in hex (opBNB Testnet)
     chainIdDecimal: 421614,
-    chainName: 'Arbitrum Sepolia',
+    chainName: 'opBNB Testnet',
     nativeCurrency: {
         name: 'ETH',
         symbol: 'ETH',
@@ -48,7 +48,7 @@ export const METAMASK_NETWORK_CONFIG = {
 // 2. NETWORK CONFIGURATION - MULTI-RPC SYSTEM
 // ============================================================================
 
-// Lista de RPCs em ordem de prioridade (Arbitrum Sepolia — runtime)
+// Lista de RPCs em ordem de prioridade (opBNB Testnet — runtime)
 export const RPC_ENDPOINTS = [
     {
         name: "Alchemy",
@@ -73,7 +73,7 @@ export const RPC_ENDPOINTS = [
     }
 ].filter(rpc => rpc.url !== null);
 
-// RPC Principal (Arbitrum Sepolia — runtime)
+// RPC Principal (opBNB Testnet — runtime)
 export const sepoliaRpcUrl = ALCHEMY_KEY
     ? `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`
     : "https://sepolia-rollup.arbitrum.io/rpc";
@@ -599,7 +599,7 @@ export const fortunePoolABI = [
     "function TIER_COUNT() view returns (uint8)",
     "function BKC_FEE_BPS() view returns (uint256)",
     "function MAX_PAYOUT_BPS() view returns (uint256)",
-    "function REVEAL_DELAY() view returns (uint256)",
+    "function revealDelay() view returns (uint256)",
     "function REVEAL_WINDOW() view returns (uint256)",
     "function POOL_CAP() view returns (uint256)",
 

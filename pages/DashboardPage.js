@@ -1803,7 +1803,7 @@ function updateBoosterDisplay(data, claimDetails) {
                     <i class="fa-solid fa-arrow-up" style="color:var(--dash-green);margin-right:3px"></i>Get up to <span style="color:var(--dash-green);font-weight:700">+${formatBigNumber(potentialBonus).toFixed(2)} BKC</span> with NFT
                 </p>` : `
                 <p style="font-size:10px;color:var(--dash-text-3);margin:0 0 10px">
-                    <i class="fa-solid fa-recycle" style="color:var(--dash-accent);margin-right:3px"></i>60% recycled to stakers. <span style="color:var(--dash-green);font-weight:700">Diamond: keep 100%</span>
+                    <i class="fa-solid fa-recycle" style="color:var(--dash-accent);margin-right:3px"></i>50% recycled to stakers. <span style="color:var(--dash-green);font-weight:700">Diamond: keep 100%</span>
                 </p>`}
 
                 <div style="display:flex;gap:6px;justify-content:center">
@@ -1824,7 +1824,7 @@ function updateBoosterDisplay(data, claimDetails) {
     const isRented = data.source === 'rented';
     const tierName = tierInfo?.name || data.boostName?.replace(' Booster', '').replace('Booster', '').trim() || 'Booster';
     const tierColor = tierInfo?.color || 'color:var(--dash-accent)';
-    const withoutNftReward = (grossReward * 40n) / 100n; // No NFT: keeps 40% (60% recycled)
+    const withoutNftReward = (grossReward * 50n) / 100n; // No NFT+tutor: keeps 50% (50% recycled)
     const bonusGained = netReward - withoutNftReward;
 
     const statusIcon = isRented ? 'fa-clock' : 'fa-check-circle';

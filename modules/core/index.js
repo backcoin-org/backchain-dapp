@@ -139,14 +139,20 @@ export async function calculateFeeClientSide(actionId, txValue = 0n) {
         const ecosystem = new ethers.Contract(ecosystemAddr, ECOSYSTEM_FEE_ABI, provider);
         const cfg = await ecosystem.getFeeConfig(actionId);
 
+        const feeType = Number(cfg.feeType);
         const bps = BigInt(cfg.bps);
+
+        if (feeType === 2) {
+            // V11 Fixed: gasEstimate × multiplier (direct wei amount)
+            const fee = BigInt(cfg.gasEstimate) * BigInt(cfg.multiplier);
+            console.log(`[FeeCalc] Fixed: ${ethers.formatEther(fee)} BNB`);
+            return fee;
+        }
+
         if (bps === 0n) return 0n;
 
-        if (Number(cfg.feeType) === 0) {
+        if (feeType === 0) {
             // Gas-based: gasEstimate × gasPrice × bps × multiplier / BPS
-            // Use 150% of gasPrice to cover opBNB's L1 data cost component
-            // (tx.gasprice in Solidity = effective price including L1, but
-            //  provider.getFeeData() only returns the L2 base fee)
             const feeData = await provider.getFeeData();
             const rawGasPrice = feeData.gasPrice || feeData.maxFeePerGas || 100000000n;
             const gasPrice = rawGasPrice * 150n / 100n;

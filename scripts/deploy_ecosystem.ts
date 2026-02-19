@@ -242,14 +242,14 @@ const AIRDROP_CONFIG = {
 //   Standard modules (no custom): 15% operator / 30% treasury / 55% buyback
 //   Custom modules: custom% first, then 15/30/55 ratio on remainder
 const MODULE_CONFIGS = {
-    // Standard (staking, nft_pool, fortune, notary, nft_fusion, rental): no custom recipient
+    // Standard (staking, nft_pool, fortune, notary, nft_fusion): no custom recipient
     STANDARD:    { active: true, customBps: 0,    operatorBps: 1500, treasuryBps: 3000, buybackBps: 5500 },
     // Agora (50% to content creator, 15/30/55 on remaining 50%)
     AGORA:       { active: true, customBps: 5000, operatorBps: 750,  treasuryBps: 1500, buybackBps: 2750 },
-    // Charity (70% to campaign, 15/30/55 on remaining 30%)
-    CHARITY:     { active: true, customBps: 7000, operatorBps: 450,  treasuryBps: 900,  buybackBps: 1650 },
-    // RENTAL: 20% ecosystem fee (owner gets rentalCost directly, fee goes to standard split)
-    // Note: owner already gets rentalCost via pendingEarnings — the fee is 100% ecosystem
+    // Charity V11: 97% to campaign, 1/1/1 on remaining 3%
+    CHARITY:     { active: true, customBps: 9700, operatorBps: 100,  treasuryBps: 100,  buybackBps: 100 },
+    // Rental V11: 90% to owner, 3/2/5 on remaining 10%
+    RENTAL:      { active: true, customBps: 9000, operatorBps: 300,  treasuryBps: 200,  buybackBps: 500 },
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -270,80 +270,89 @@ const MODULE_CONFIGS = {
 
 const FEE_TYPE_GAS = 0;
 const FEE_TYPE_VALUE = 1;
+const FEE_TYPE_FIXED = 2;
 
-// V10 fee tiers
-const GAS_FEE_SOCIAL    = { feeType: FEE_TYPE_GAS, bps: 100, multiplier: 50,        gasEstimate: 150000 };
-const GAS_FEE_CONTENT   = { feeType: FEE_TYPE_GAS, bps: 100, multiplier: 200,       gasEstimate: 200000 };
-const GAS_FEE_FINANCIAL = { feeType: FEE_TYPE_GAS, bps: 100, multiplier: 2000,      gasEstimate: 200000 };
-const GAS_FEE_PREMIUM   = { feeType: FEE_TYPE_GAS, bps: 100, multiplier: 2700,      gasEstimate: 300000 };
+// ── V11 Fixed Fee Tiers ──
+// feeType=2: fee = gasEstimate × multiplier (direct wei amount)
+// Using multiplier=1 and gasEstimate=fee_in_wei for simplicity
+const FIXED = (weiAmount: bigint) => ({
+    feeType: FEE_TYPE_FIXED, bps: 0, multiplier: 1, gasEstimate: Number(weiAmount)
+});
 
-// Badge tiers (annual pricing via high multipliers — uint32 required)
-const GAS_FEE_BADGE_VERIFIED = { feeType: FEE_TYPE_GAS, bps: 100, multiplier: 120000,   gasEstimate: 200000 }; // ~$60/year
-const GAS_FEE_BADGE_PREMIUM  = { feeType: FEE_TYPE_GAS, bps: 100, multiplier: 600000,   gasEstimate: 200000 }; // ~$300/year
-const GAS_FEE_BADGE_ELITE    = { feeType: FEE_TYPE_GAS, bps: 100, multiplier: 1500000,  gasEstimate: 200000 }; // ~$750/year
+// Fee levels (individually configurable post-deploy via setFeeConfig)
+const FIXED_SOCIAL    = FIXED(50000000000000n);   // 0.00005 ETH (~$0.10)
+const FIXED_CONTENT   = FIXED(100000000000000n);  // 0.0001 ETH  (~$0.20)
+const FIXED_FINANCIAL = FIXED(200000000000000n);   // 0.0002 ETH  (~$0.40)
+const FIXED_PREMIUM   = FIXED(500000000000000n);   // 0.0005 ETH  (~$1.00)
 
-// Todas as ações do ecossistema e suas taxas
+// Badge tiers (annual subscriptions — fixed prices)
+const FIXED_BADGE_VERIFIED = FIXED(30000000000000000n);   // 0.03 ETH  (~$60/year)
+const FIXED_BADGE_PREMIUM  = FIXED(150000000000000000n);  // 0.15 ETH  (~$300/year)
+const FIXED_BADGE_ELITE    = FIXED(375000000000000000n);  // 0.375 ETH (~$750/year)
+
+// Todas as ações do ecossistema e suas taxas (V11: fixed fees)
 // Nota: ações com string usam ethers.id(), ações NFT usam abi.encode(string, uint8)
 const ACTION_FEE_CONFIGS: Record<string, { feeType: number; bps: number; multiplier: number; gasEstimate: number }> = {
     // StakingPool
-    "STAKING_DELEGATE":       GAS_FEE_FINANCIAL,
-    "STAKING_CLAIM":          GAS_FEE_SOCIAL,
-    "STAKING_FORCE_UNSTAKE":  GAS_FEE_FINANCIAL,
+    "STAKING_DELEGATE":       FIXED_SOCIAL,
+    "STAKING_CLAIM":          FIXED_CONTENT,
+    "STAKING_FORCE_UNSTAKE":  FIXED_FINANCIAL,
     // Agora (social)
-    "AGORA_POST":             GAS_FEE_CONTENT,
-    "AGORA_POST_IMAGE":       GAS_FEE_CONTENT,
-    "AGORA_POST_VIDEO":       GAS_FEE_CONTENT,
-    "AGORA_LIVE":             GAS_FEE_CONTENT,
-    "AGORA_REPLY":            GAS_FEE_SOCIAL,
-    "AGORA_REPOST":           GAS_FEE_SOCIAL,
-    "AGORA_LIKE":             GAS_FEE_SOCIAL,
-    "AGORA_FOLLOW":           GAS_FEE_SOCIAL,
-    "AGORA_REPORT":           GAS_FEE_CONTENT,
-    "AGORA_PROFILE_BOOST":    GAS_FEE_PREMIUM,
-    "AGORA_BADGE_VERIFIED":   GAS_FEE_BADGE_VERIFIED,
-    "AGORA_BADGE_PREMIUM":    GAS_FEE_BADGE_PREMIUM,
-    "AGORA_BADGE_ELITE":      GAS_FEE_BADGE_ELITE,
+    "AGORA_POST":             FIXED_CONTENT,
+    "AGORA_POST_IMAGE":       FIXED_CONTENT,
+    "AGORA_POST_VIDEO":       FIXED_CONTENT,
+    "AGORA_LIVE":             FIXED_CONTENT,
+    "AGORA_REPLY":            FIXED_SOCIAL,
+    "AGORA_REPOST":           FIXED_SOCIAL,
+    "AGORA_LIKE":             FIXED_SOCIAL,
+    "AGORA_FOLLOW":           FIXED_SOCIAL,
+    "AGORA_DOWNVOTE":         FIXED_SOCIAL,
+    "AGORA_REPORT":           FIXED_CONTENT,
+    "AGORA_PROFILE_BOOST":    FIXED_PREMIUM,
+    "AGORA_BADGE_VERIFIED":   FIXED_BADGE_VERIFIED,
+    "AGORA_BADGE_PREMIUM":    FIXED_BADGE_PREMIUM,
+    "AGORA_BADGE_ELITE":      FIXED_BADGE_ELITE,
     // FortunePool (per tier)
-    "FORTUNE_TIER0":          GAS_FEE_SOCIAL,
-    "FORTUNE_TIER1":          GAS_FEE_FINANCIAL,
-    "FORTUNE_TIER2":          GAS_FEE_FINANCIAL,
+    "FORTUNE_TIER0":          FIXED_SOCIAL,
+    "FORTUNE_TIER1":          FIXED_CONTENT,
+    "FORTUNE_TIER2":          FIXED_FINANCIAL,
     // Notary
-    "NOTARY_CERTIFY":         GAS_FEE_CONTENT,
+    "NOTARY_CERTIFY":         FIXED_FINANCIAL,
     // CharityPool
-    "CHARITY_CREATE":         GAS_FEE_FINANCIAL,
-    "CHARITY_BOOST":          GAS_FEE_CONTENT,
+    "CHARITY_CREATE":         FIXED_FINANCIAL,
+    "CHARITY_BOOST":          FIXED_CONTENT,
     // RentalManager
-    "RENTAL_BOOST":           GAS_FEE_PREMIUM,
+    "RENTAL_BOOST":           FIXED_PREMIUM,
     // (RENTAL_RENT e CHARITY_DONATE são value-based, definidos separadamente)
     // AirdropClaim
-    "AIRDROP_CLAIM":          GAS_FEE_FINANCIAL,
+    "AIRDROP_CLAIM":          FIXED_FINANCIAL,
     // NFTFusion (fuse 2→1 up, split 1→2 down)
-    "FUSION_BRONZE":          GAS_FEE_FINANCIAL,
-    "FUSION_SILVER":          GAS_FEE_FINANCIAL,
-    "FUSION_GOLD":            GAS_FEE_FINANCIAL,
-    "SPLIT_SILVER":           GAS_FEE_FINANCIAL,
-    "SPLIT_GOLD":             GAS_FEE_FINANCIAL,
-    "SPLIT_DIAMOND":          GAS_FEE_FINANCIAL,
+    "FUSION_BRONZE":          FIXED_FINANCIAL,
+    "FUSION_SILVER":          FIXED_FINANCIAL,
+    "FUSION_GOLD":            FIXED_FINANCIAL,
+    "SPLIT_SILVER":           FIXED_FINANCIAL,
+    "SPLIT_GOLD":             FIXED_FINANCIAL,
+    "SPLIT_DIAMOND":          FIXED_FINANCIAL,
 };
 
-// Ações value-based
+// Ações value-based (unchanged)
 const VALUE_FEE_CONFIGS: Record<string, { bps: number }> = {
-    "CHARITY_DONATE": { bps: 500 },    // 5% da doação
-    "RENTAL_RENT":    { bps: 2000 },   // 20% do custo de aluguel → ecossistema
+    "CHARITY_DONATE": { bps: 300 },    // 3% da doação (V11: was 5%)
+    "RENTAL_RENT":    { bps: 1000 },   // 10% do custo de aluguel (V11: was 20%)
 };
 
 // NFTPool actions (usam abi.encode, não keccak256 de string simples)
-// Serão calculadas dinamicamente no script com ethers.AbiCoder
+// Keep value-based for NFT pool (percentage of trade value)
 const NFT_FEE_CONFIG = {
-    BUY:  GAS_FEE_FINANCIAL,
-    SELL: GAS_FEE_FINANCIAL,
+    BUY:  FIXED_FINANCIAL,
+    SELL: FIXED_FINANCIAL,
 };
 
 // ════════════════════════════════════════════════════════════════════════════
 //                    🔥 BKC DISTRIBUTION (burn / operator / stakers / treasury)
 // ════════════════════════════════════════════════════════════════════════════
 // burn + operator + staker + treasury = 10000
-// Deflation via StakingPool claims (10% burn if no tutor, recycle if NFT penalty)
+// V11: No burn in ecosystem — deflation via StakingPool recycling only
 
 const BKC_DISTRIBUTION = {
     burnBps: 0,         // 0% burn in ecosystem (burn happens on StakingPool claims)
@@ -772,6 +781,12 @@ async function main() {
         addresses.fortunePool = fortuneAddr;
         updateAddressJSON("fortunePool", fortuneAddr);
 
+        // V11: Set reveal delay to 2 blocks (default is 2, but explicit for clarity)
+        await sendTxWithRetry(
+            async () => await fortune.setRevealDelay(2),
+            "FortunePool.setRevealDelay(2)"
+        );
+
         // Agora constructor(address _ecosystem)
         const Agora = await ethers.getContractFactory("Agora");
         const { contract: agora, address: agoraAddr } = await deployContractWithRetry(
@@ -868,7 +883,7 @@ async function main() {
         ];
         const moduleConfigs = [
             MODULE_CONFIGS.STANDARD, MODULE_CONFIGS.STANDARD, MODULE_CONFIGS.STANDARD, MODULE_CONFIGS.AGORA,
-            MODULE_CONFIGS.STANDARD, MODULE_CONFIGS.CHARITY, MODULE_CONFIGS.STANDARD, MODULE_CONFIGS.STANDARD,
+            MODULE_CONFIGS.STANDARD, MODULE_CONFIGS.CHARITY, MODULE_CONFIGS.RENTAL, MODULE_CONFIGS.STANDARD,
             MODULE_CONFIGS.STANDARD, // AirdropClaim: claim fee → standard split (buyback-heavy)
         ];
 

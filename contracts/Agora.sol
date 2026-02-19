@@ -647,6 +647,108 @@ contract Agora {
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    // BATCH ACTIONS (V3)
+    // ════════════════════════════════════════════════════════════════════════
+
+    uint8 public constant BATCH_LIKE     = 1;
+    uint8 public constant BATCH_FOLLOW   = 2;
+    uint8 public constant BATCH_DOWNVOTE = 3;
+
+    struct BatchAction {
+        uint8   actionType;  // 1=like, 2=follow, 3=downvote
+        uint256 targetId;    // postId for like/downvote, uint256(address) for follow
+    }
+
+    event BatchExecuted(
+        address indexed user, uint256 attempted, uint256 succeeded, address operator
+    );
+
+    /// @notice Execute multiple social actions in one TX.
+    ///         Skips already-done actions (no revert). Total ETH collected as single fee.
+    function batchActions(
+        BatchAction[] calldata actions,
+        address operator
+    ) external payable {
+        uint256 totalFee;
+
+        // Calculate total fee (sum of individual action fees)
+        for (uint256 i; i < actions.length;) {
+            uint8 t = actions[i].actionType;
+            if (t == BATCH_LIKE) {
+                totalFee += ecosystem.calculateFee(ACTION_LIKE, 0);
+            } else if (t == BATCH_FOLLOW) {
+                totalFee += ecosystem.calculateFee(ACTION_FOLLOW, 0);
+            } else if (t == BATCH_DOWNVOTE) {
+                totalFee += ecosystem.calculateFee(ACTION_DOWNVOTE, 0);
+            }
+            unchecked { ++i; }
+        }
+        if (msg.value < totalFee) revert InsufficientFee();
+
+        // Execute each action (skip failures gracefully)
+        uint256 succeeded;
+        for (uint256 i; i < actions.length;) {
+            bool ok = _executeBatchAction(actions[i], operator);
+            if (ok) succeeded++;
+            unchecked { ++i; }
+        }
+
+        // All ETH as single collectFee call
+        if (msg.value > 0) {
+            ecosystem.collectFee{value: msg.value}(
+                msg.sender, operator, address(0), MODULE_ID, 0
+            );
+        }
+
+        emit BatchExecuted(msg.sender, actions.length, succeeded, operator);
+    }
+
+    function _executeBatchAction(
+        BatchAction calldata action,
+        address operator
+    ) internal returns (bool) {
+        if (action.actionType == BATCH_LIKE) {
+            uint256 postId = action.targetId;
+            Post storage p = posts[postId];
+            if (p.author == address(0) || p.deleted) return false;
+            if (p.author == msg.sender) return false;
+            if (hasLiked[postId][msg.sender]) return false;
+
+            hasLiked[postId][msg.sender] = true;
+            likeCount[postId]++;
+            if (operator != address(0)) operatorEngagement[operator]++;
+            emit Liked(postId, msg.sender, p.author, operator);
+            return true;
+
+        } else if (action.actionType == BATCH_FOLLOW) {
+            address user = address(uint160(action.targetId));
+            if (user == msg.sender) return false;
+            if (isFollowing[msg.sender][user]) return false;
+
+            isFollowing[msg.sender][user] = true;
+            followerCount[user]++;
+            followingCount[msg.sender]++;
+            if (operator != address(0)) operatorEngagement[operator]++;
+            emit Followed(msg.sender, user, operator);
+            return true;
+
+        } else if (action.actionType == BATCH_DOWNVOTE) {
+            uint256 postId = action.targetId;
+            Post storage p = posts[postId];
+            if (p.author == address(0) || p.deleted) return false;
+            if (p.author == msg.sender) return false;
+            if (hasDownvoted[postId][msg.sender]) return false;
+
+            hasDownvoted[postId][msg.sender] = true;
+            downvoteCount[postId]++;
+            if (operator != address(0)) operatorEngagement[operator]++;
+            emit Downvoted(postId, msg.sender, p.author, operator);
+            return true;
+        }
+        return false;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     // REPORTS
     // ════════════════════════════════════════════════════════════════════════
 

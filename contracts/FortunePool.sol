@@ -4,30 +4,30 @@ pragma solidity ^0.8.28;
 import "./IBackchain.sol";
 
 // ============================================================================
-// FORTUNE POOL V2 — IMMUTABLE (Tier 2: ETH + BKC)
+// FORTUNE POOL V3 — CONFIGURABLE DELAY (Tier 2: ETH + BKC)
 // ============================================================================
 //
 // Provably fair commit-reveal game with 3 prize tiers.
 //
 // How it works:
 //   1. COMMIT: Player picks tiers (1, 2, or 3), submits hash + BKC wager + ETH
-//   2. WAIT:   5 blocks for unpredictable blockhash
+//   2. WAIT:   revealDelay blocks (configurable, default 2)
 //   3. REVEAL: Player reveals guesses + secret, contract rolls & pays
 //
-// Tiers (hardcoded, immutable):
-//   Tier 0 — range 1-4,   pays  3x   (25% chance)
-//   Tier 1 — range 1-20,  pays  15x  (5% chance)
-//   Tier 2 — range 1-100, pays  75x  (1% chance)
+// Tiers (hardcoded):
+//   Tier 0 — range 1-4,   pays  3.2x (25% chance, 80% EV)
+//   Tier 1 — range 1-20,  pays  16x  (5% chance,  80% EV)
+//   Tier 2 — range 1-100, pays  80x  (1% chance,  80% EV)
 //
 // Economics:
-//   - 20% BKC fee on wager → ecosystem (burn/stakers/treasury/operator)
+//   - 10% BKC fee on wager → ecosystem (stakers/treasury/operator)
 //   - ETH fee per tier played → ecosystem (operator/treasury/buyback)
-//   - 80% of wager enters the prize pool
+//   - 90% of wager enters the prize pool
 //   - Max payout per game: 10% of prize pool
 //   - Pool capped at 1M BKC — excess is burned (deflationary)
 //   - Expired games forfeit wager to pool
 //
-// No admin. No pause. Fully immutable and permissionless.
+// Deployer can adjust revealDelay (1-20 blocks). No other admin powers.
 //
 // ============================================================================
 
@@ -44,9 +44,8 @@ contract FortunePool {
     bytes32 public constant ACTION_TIER2 = keccak256("FORTUNE_TIER2");
 
     uint8   public constant TIER_COUNT          = 3;
-    uint256 public constant BKC_FEE_BPS         = 2000;          // 20% BKC fee
+    uint256 public constant BKC_FEE_BPS         = 1000;          // 10% BKC fee (V3: was 20%)
     uint256 public constant MAX_PAYOUT_BPS      = 1000;          // 10% of pool max
-    uint256 public constant REVEAL_DELAY        = 5;             // blocks to wait
     uint256 public constant REVEAL_WINDOW       = 200;           // blocks to reveal
     uint256 public constant POOL_CAP            = 1_000_000e18;  // 1M BKC
 
@@ -63,6 +62,7 @@ contract FortunePool {
 
     IBackchainEcosystem public immutable ecosystem;
     IBKCToken public immutable bkcToken;
+    address public immutable deployer;
 
     // ════════════════════════════════════════════════════════════════════════
     // STATE
@@ -70,6 +70,7 @@ contract FortunePool {
 
     uint256 public gameCounter;
     uint256 public prizePool;
+    uint256 public revealDelay = 2;  // V3: configurable (was constant 5)
 
     struct Commitment {
         bytes32 hash;
@@ -152,6 +153,14 @@ contract FortunePool {
     constructor(address _ecosystem, address _bkcToken) {
         ecosystem = IBackchainEcosystem(_ecosystem);
         bkcToken = IBKCToken(_bkcToken);
+        deployer = msg.sender;
+    }
+
+    /// @notice Adjust reveal delay (deployer only). Min 1, max 20.
+    function setRevealDelay(uint256 _delay) external {
+        require(msg.sender == deployer, "Not deployer");
+        require(_delay >= 1 && _delay <= 20, "Invalid delay");
+        revealDelay = _delay;
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -174,7 +183,7 @@ contract FortunePool {
         if (prevId != 0) {
             Commitment storage prev = games[prevId];
             if (prev.status == S_COMMITTED) {
-                uint256 expiryBlock = uint256(prev.commitBlock) + REVEAL_DELAY + REVEAL_WINDOW;
+                uint256 expiryBlock = uint256(prev.commitBlock) + revealDelay + REVEAL_WINDOW;
                 if (block.number > expiryBlock) {
                     _expireGame(prevId, prev);
                 } else {
@@ -243,7 +252,7 @@ contract FortunePool {
         if (g.status != S_COMMITTED) revert AlreadyFinalized();
 
         // Timing
-        uint256 revealBlock = uint256(g.commitBlock) + REVEAL_DELAY;
+        uint256 revealBlock = uint256(g.commitBlock) + revealDelay;
         if (block.number < revealBlock) revert TooEarlyToReveal();
         if (block.number > revealBlock + REVEAL_WINDOW) revert TooLateToReveal();
 
@@ -331,7 +340,7 @@ contract FortunePool {
         Commitment storage g = games[gameId];
         if (g.status != S_COMMITTED) revert NotCommitted();
 
-        uint256 expiryBlock = uint256(g.commitBlock) + REVEAL_DELAY + REVEAL_WINDOW;
+        uint256 expiryBlock = uint256(g.commitBlock) + revealDelay + REVEAL_WINDOW;
         if (block.number <= expiryBlock) revert CommitmentNotExpired();
 
         _expireGame(gameId, g);
@@ -402,7 +411,7 @@ contract FortunePool {
         status = g.status;
 
         if (status == S_COMMITTED) {
-            uint256 rb = uint256(g.commitBlock) + REVEAL_DELAY;
+            uint256 rb = uint256(g.commitBlock) + revealDelay;
             uint256 eb = rb + REVEAL_WINDOW;
 
             canReveal = block.number >= rb && block.number <= eb;
@@ -471,7 +480,7 @@ contract FortunePool {
     }
 
     function version() external pure returns (string memory) {
-        return "2.1.0";
+        return "3.0.0";
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -479,9 +488,9 @@ contract FortunePool {
     // ════════════════════════════════════════════════════════════════════════
 
     function _tierData(uint8 tier_) internal pure returns (uint256 range, uint256 multiplierBps) {
-        if (tier_ == 0) return (4,   30_000);    // 3x
-        if (tier_ == 1) return (20,  150_000);   // 15x
-        if (tier_ == 2) return (100, 750_000);   // 75x
+        if (tier_ == 0) return (4,   32_000);    // 3.2x (V3: was 3x, 80% EV)
+        if (tier_ == 1) return (20,  160_000);   // 16x  (V3: was 15x, 80% EV)
+        if (tier_ == 2) return (100, 800_000);   // 80x  (V3: was 75x, 80% EV)
         revert InvalidTier();
     }
 

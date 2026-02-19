@@ -28,7 +28,7 @@ const EXPLORER_ADDRESS = "https://sepolia.arbiscan.io/address/";
 const FORTUNE_POOL_ADDRESS = addresses?.fortunePool || "0x123d881D96aD01c5C47996eC18D275eC87B7Dc96";
 // Tiger image removed — cleaner mobile layout
 const SHARE_POINTS = 1000;
-const ESTIMATED_BLOCK_TIME = 250; // ~250ms per Arbitrum block
+const ESTIMATED_BLOCK_TIME = 250; // ~250ms per opBNB block
 const REVEAL_CHECK_MS = 3000;
 
 // Multi-language share texts
@@ -40,16 +40,16 @@ const MODAL_UI = {
 
 const SHARE_TEXTS = {
     pt: {
-        win: (prize) => `🎉 Ganhei ${prize.toLocaleString()} BKC no Fortune Pool!\n\n🐯 Loteria on-chain com resultados instantâneos!\n\n👉 https://backcoin.org\n\n@backcoin #Backcoin #Web3 #Arbitrum`,
-        lose: `🐯 Jogando Fortune Pool no @backcoin!\n\nLoteria on-chain verificável!\n\n👉 https://backcoin.org\n\n#Backcoin #Web3 #Arbitrum`
+        win: (prize) => `🎉 Ganhei ${prize.toLocaleString()} BKC no Fortune Pool!\n\n🐯 Loteria on-chain com resultados instantâneos!\n\n👉 https://backcoin.org\n\n@backcoin #Backcoin #Web3 #opBNB`,
+        lose: `🐯 Jogando Fortune Pool no @backcoin!\n\nLoteria on-chain verificável!\n\n👉 https://backcoin.org\n\n#Backcoin #Web3 #opBNB`
     },
     en: {
-        win: (prize) => `🎉 Just won ${prize.toLocaleString()} BKC on Fortune Pool!\n\n🐯 On-chain lottery with instant results!\n\n👉 https://backcoin.org\n\n@backcoin #Backcoin #Web3 #Arbitrum`,
-        lose: `🐯 Playing Fortune Pool on @backcoin!\n\nVerifiable on-chain lottery!\n\n👉 https://backcoin.org\n\n#Backcoin #Web3 #Arbitrum`
+        win: (prize) => `🎉 Just won ${prize.toLocaleString()} BKC on Fortune Pool!\n\n🐯 On-chain lottery with instant results!\n\n👉 https://backcoin.org\n\n@backcoin #Backcoin #Web3 #opBNB`,
+        lose: `🐯 Playing Fortune Pool on @backcoin!\n\nVerifiable on-chain lottery!\n\n👉 https://backcoin.org\n\n#Backcoin #Web3 #opBNB`
     },
     es: {
-        win: (prize) => `🎉 ¡Gané ${prize.toLocaleString()} BKC en Fortune Pool!\n\n🐯 ¡Lotería on-chain con resultados instantáneos!\n\n👉 https://backcoin.org\n\n@backcoin #Backcoin #Web3 #Arbitrum`,
-        lose: `🐯 ¡Jugando Fortune Pool en @backcoin!\n\nLotería on-chain verificable!\n\n👉 https://backcoin.org\n\n#Backcoin #Web3 #Arbitrum`
+        win: (prize) => `🎉 ¡Gané ${prize.toLocaleString()} BKC en Fortune Pool!\n\n🐯 ¡Lotería on-chain con resultados instantáneos!\n\n👉 https://backcoin.org\n\n@backcoin #Backcoin #Web3 #opBNB`,
+        lose: `🐯 ¡Jugando Fortune Pool en @backcoin!\n\nLotería on-chain verificable!\n\n👉 https://backcoin.org\n\n#Backcoin #Web3 #opBNB`
     }
 };
 
@@ -118,7 +118,7 @@ const Game = {
         userSecret: null,
         commitBlock: null,
         commitTxHash: null,
-        revealDelay: 5,
+        revealDelay: 2,
         waitStartTime: null,
         canReveal: false
     }
@@ -355,7 +355,7 @@ function cleanup() {
     Game._wagerInit = false;
     Game.commitment = {
         hash: null, userSecret: null, commitBlock: null, commitTxHash: null,
-        revealDelay: Game.commitment.revealDelay || 5,
+        revealDelay: Game.commitment.revealDelay || 2,
         waitStartTime: null, canReveal: false
     };
 }
@@ -474,7 +474,7 @@ function clearStuckGame() {
     // Reset game state
     Game.phase = 'tier';
     Game.gameId = null;
-    Game.commitment = { hash: null, userSecret: null, commitBlock: null, commitTxHash: null, revealDelay: 5, waitStartTime: null, canReveal: false };
+    Game.commitment = { hash: null, userSecret: null, commitBlock: null, commitTxHash: null, revealDelay: 2, waitStartTime: null, canReveal: false };
     autoRevealAttempt = 0;
     showToast('Previous game expired. Start a new one!', 'info');
     renderPhase();
@@ -1006,7 +1006,7 @@ async function commitGame() {
                     userSecret: commitData?.userSecret || null,
                     commitBlock: commitData?.commitBlock || null,
                     commitTxHash: commitData?.txHash || null,
-                    revealDelay: Game.commitment.revealDelay || 5,
+                    revealDelay: Game.commitment.revealDelay || 2,
                     waitStartTime: Date.now(),
                     canReveal: true  // Skip waiting — go straight to reveal
                 };
@@ -1406,16 +1406,16 @@ async function checkCanReveal() {
 
         return status.canReveal === true;
     } catch (e) {
-        // Time-based fallback (more conservative for Arbitrum ~250ms blocks)
+        // Time-based fallback (more conservative for opBNB ~250ms blocks)
         const elapsed = Date.now() - (Game.commitment.waitStartTime || Date.now());
-        return elapsed >= 10000; // 10s fallback (plenty for 5 blocks × 250ms)
+        return elapsed >= 5000; // 5s fallback (plenty for 2 blocks × 250ms)
     }
 }
 
-// Auto-reveal retry — uses increasing delays for blockhash propagation on Arbitrum L2.
+// Auto-reveal retry — uses increasing delays for blockhash propagation on opBNB L2.
 // First attempt is immediate (from commitGame onSuccess). Retries show countdown UI.
 let autoRevealAttempt = 0;
-const AUTO_REVEAL_DELAYS = [8000, 15000, 20000]; // 8s, 15s, 20s (increasing)
+const AUTO_REVEAL_DELAYS = [3000, 8000, 15000]; // 3s, 8s, 15s (faster with revealDelay=2)
 
 async function autoRevealWithPreSim() {
     if (Game.phase !== 'waiting') return;
@@ -1452,7 +1452,7 @@ async function autoRevealWithPreSim() {
     // Update UI before MetaMask popup
     updateQuickRevealToStep3();
 
-    console.log('[FortunePool] Starting direct reveal (skipping pre-sim for Arbitrum L2)');
+    console.log('[FortunePool] Starting direct reveal (skipping pre-sim for opBNB L2)');
     executeReveal();
 }
 
@@ -1504,8 +1504,8 @@ function pollCanRevealThenReveal() {
             const statusText = document.getElementById('reveal-status-text');
 
             if (blocksUntilReveal > 0 && statusText) {
-                // Calculate progress (5 blocks total for REVEAL_DELAY)
-                const totalBlocks = 5; // REVEAL_DELAY
+                // Calculate progress based on revealDelay
+                const totalBlocks = Game.commitment.revealDelay || 2;
                 const done = Math.max(0, totalBlocks - blocksUntilReveal);
                 const pct = 33 + (done / totalBlocks) * 34; // 33% → 67%
                 if (progressEl) progressEl.style.width = `${pct}%`;
@@ -2086,8 +2086,8 @@ async function getFortunePoolStatus() {
 
         // Reveal delay
         try {
-            const delay = await contract.REVEAL_DELAY();
-            Game.commitment.revealDelay = Number(delay) || 5;
+            const delay = await contract.revealDelay();
+            Game.commitment.revealDelay = Number(delay) || 2;
         } catch {}
 
         // Tier data

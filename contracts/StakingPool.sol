@@ -4,33 +4,37 @@ pragma solidity ^0.8.28;
 import "./IBackchain.sol";
 
 // ============================================================================
-// STAKING POOL — IMMUTABLE (V2: Recycle + Tutor)
+// STAKING POOL — IMMUTABLE (V3: Simplified Recycle)
 // ============================================================================
 //
 // Users delegate BKC with a time lock. Longer locks = higher pStake (power).
 // Rewards come from BuybackMiner (purchased + mined BKC) and Tier 2 BKC fees.
 //
-// Reward claim flow (V2 — Recycle Model):
+// Reward claim flow (V3 — Simplified Recycle):
 //   1. Calculate total pending (active delegations + savedRewards)
-//   2. NFT tier determines recycle rate (tokens returned to stakers, NOT burned)
-//   3. Tutor system: 5% to tutor if set, otherwise 10% burned
-//   4. User receives: total - recycle - tutorCut (or - burn if no tutor)
+//   2. NFT tier determines base recycle rate (tokens returned to stakers)
+//   3. No-tutor penalty: +10% extra recycled (incentivizes tutor system)
+//   4. User receives: total - recycle (no tutor cut, no burn)
 //   5. Pay ETH fee to ecosystem
 //
-// NFT Recycle Rates (basis points recycled to all stakers):
-//   No NFT  → 60% recycled (user keeps 40%, or 45% with tutor)
-//   Bronze  → 40% recycled (user keeps 60%, or 65% with tutor)
-//   Silver  → 30% recycled (user keeps 70%, or 75% with tutor)
-//   Gold    → 20% recycled (user keeps 80%, or 85% with tutor)
-//   Diamond →  0% recycled (user keeps 100%, or 95% with tutor)
+// NFT Recycle Rates (with tutor — basis points recycled to all stakers):
+//   No NFT  → 50% recycled (user keeps 50%)
+//   Bronze  → 30% recycled (user keeps 70%)
+//   Silver  → 20% recycled (user keeps 80%)
+//   Gold    → 10% recycled (user keeps 90%)
+//   Diamond →  0% recycled (user keeps 100%)
 //
-// Tutor system:
-//   With tutor: 5% of total → tutor, 0% burned (user saves 5% vs no-tutor)
-//   No tutor:  10% of total → burned (deflationary penalty for no mentor)
-//   Net: having a tutor saves user 5% of rewards
+// Without tutor: +10% extra recycled (penalty for no mentor)
+//   No NFT  → 60% recycled (user keeps 40%)
+//   Bronze  → 40% recycled (user keeps 60%)
+//   Silver  → 30% recycled (user keeps 70%)
+//   Gold    → 20% recycled (user keeps 80%)
+//   Diamond → 10% recycled (user keeps 90%)
 //
-// Force unstake:
-//   Default: 10% penalty (burned). Diamond NFT holders: only 5% penalty.
+// Tutor earns nothing from staking claims — only from other module fees.
+// No burn on claims — all deductions are recycled to stakers.
+//
+// Force unstake: same NFT-tier recycle rates + no-tutor penalty.
 //   Pending rewards are saved (not auto-claimed).
 //
 // Gas optimized: combined calculate+update loop in claims (single iteration).
@@ -46,11 +50,8 @@ contract StakingPool is IStakingPool {
     uint256 private constant BPS       = 10_000;
     uint256 private constant PRECISION = 1e18;
 
-    // Tutor: 5% of total rewards goes to tutor
-    uint256 public constant TUTOR_BPS = 500; // 5%
-
-    // No-tutor burn: 10% of total rewards is burned (only penalty for no tutor)
-    uint256 public constant NO_TUTOR_BURN_BPS = 1000; // 10%
+    // No-tutor penalty: +10% extra recycled (incentivizes having a tutor)
+    uint256 public constant NO_TUTOR_EXTRA_RECYCLE_BPS = 1000; // 10%
 
     // Lock duration limits
     uint256 public constant MIN_LOCK_DAYS = 1;
@@ -68,16 +69,12 @@ contract StakingPool is IStakingPool {
     uint256 public constant BOOST_GOLD    = 4000;
     uint256 public constant BOOST_DIAMOND = 5000;
 
-    // ── Recycle Rates per Tier (in basis points — recycled to stakers, NOT burned) ──
-    uint256 public constant RECYCLE_RATE_NO_NFT  = 6000; // 60%
-    uint256 public constant RECYCLE_RATE_BRONZE  = 4000; // 40%
-    uint256 public constant RECYCLE_RATE_SILVER  = 3000; // 30%
-    uint256 public constant RECYCLE_RATE_GOLD    = 2000; // 20%
-    uint256 public constant RECYCLE_RATE_DIAMOND = 0;    // 0% (keeps everything)
-
-    // ── Tutor & Burn on Penalties ──
-    uint256 public constant TUTOR_PENALTY_BPS = 500;     // 5% of penalty → tutor
-    uint256 public constant NO_TUTOR_BURN_PENALTY_BPS = 1000; // 10% of penalty → burned
+    // ── Recycle Rates per Tier (with tutor — basis points recycled to stakers) ──
+    uint256 public constant RECYCLE_RATE_NO_NFT  = 5000; // 50% (user keeps 50%)
+    uint256 public constant RECYCLE_RATE_BRONZE  = 3000; // 30% (user keeps 70%)
+    uint256 public constant RECYCLE_RATE_SILVER  = 2000; // 20% (user keeps 80%)
+    uint256 public constant RECYCLE_RATE_GOLD    = 1000; // 10% (user keeps 90%)
+    uint256 public constant RECYCLE_RATE_DIAMOND = 0;    // 0%  (user keeps 100%)
 
     // ════════════════════════════════════════════════════════════════════════
     // IMMUTABLE ADDRESSES
@@ -427,45 +424,28 @@ contract StakingPool is IStakingPool {
             savedRewards[msg.sender] += pending;
         }
 
-        // ── Penalty follows same NFT-tier logic as claims ──
+        // ── Penalty follows same NFT-tier logic as claims (V3: recycle only) ──
         uint256 nftBoost = _getUserBestBoost(msg.sender);
         uint256 penaltyRateBps = _getRecycleRateForBoost(nftBoost);
-        // Same rates: No NFT=60%, Bronze=40%, Silver=30%, Gold=20%, Diamond=0%
+
+        // No-tutor penalty: +10% extra recycled
+        address tutor = ecosystem.tutorOf(msg.sender);
+        if (tutor == address(0)) {
+            penaltyRateBps += NO_TUTOR_EXTRA_RECYCLE_BPS;
+            if (penaltyRateBps > BPS) penaltyRateBps = BPS;
+        }
 
         uint256 penalty = amount * penaltyRateBps / BPS;
-
-        // ── Penalty distribution: recycle + tutor/burn (same as claims) ──
         uint256 recycleAmount;
-        uint256 burnAmount;
-        uint256 tutorAmount;
-        address tutor;
 
         if (penalty > 0) {
-            tutor = ecosystem.tutorOf(msg.sender);
-            if (tutor != address(0)) {
-                tutorAmount = penalty * TUTOR_PENALTY_BPS / BPS;
-            } else {
-                burnAmount = penalty * NO_TUTOR_BURN_PENALTY_BPS / BPS;
-            }
-            recycleAmount = penalty - tutorAmount - burnAmount;
-
-            // Burn
-            if (burnAmount > 0) {
-                bkcToken.burn(burnAmount);
-                totalBurnedOnClaim += burnAmount;
-            }
+            recycleAmount = penalty;
 
             // Recycle to stakers (before removing this user's pStake)
             if (recycleAmount > 0 && totalPStake > 0) {
                 accRewardPerShare += recycleAmount * PRECISION / totalPStake;
                 totalRewardsDistributed += recycleAmount;
                 totalRecycledOnClaim += recycleAmount;
-            }
-
-            // Tutor cut
-            if (tutorAmount > 0) {
-                bkcToken.transfer(tutor, tutorAmount);
-                totalTutorPayments += tutorAmount;
             }
 
             totalForceUnstakePenalties += penalty;
@@ -498,7 +478,7 @@ contract StakingPool is IStakingPool {
 
         emit ForceUnstaked(
             msg.sender, index, amountAfterPenalty, penalty,
-            recycleAmount, burnAmount, tutorAmount, tutor, operator
+            recycleAmount, 0, 0, tutor, operator
         );
     }
 
@@ -546,9 +526,9 @@ contract StakingPool is IStakingPool {
     ///      Recycled tokens stay in the contract and increase accRewardPerShare,
     ///      effectively redistributing them to all active stakers proportionally.
     ///
-    ///      With tutor: user pays 5% to tutor (no burn).
-    ///      Without tutor: user pays 10% to burn (deflationary penalty).
-    ///      NFT tier determines recycle rate (60%/40%/30%/20%/0%).
+    ///      V3: No tutor cut on claims, no burn. Only recycling.
+    ///      NFT tier determines base recycle rate (50%/30%/20%/10%/0%).
+    ///      Without tutor: +10% extra recycled.
     ///
     ///      Gas optimization: single loop for calculate + update debts.
     function _executeClaim(address user, address operator) internal {
@@ -557,37 +537,25 @@ contract StakingPool is IStakingPool {
         if (totalReward == 0) revert NothingToClaim();
         savedRewards[user] = 0;
 
-        // 2. Get NFT boost and recycle rate
+        // 2. Get NFT boost and base recycle rate
         uint256 nftBoost = _getUserBestBoost(user);
         uint256 recycleRateBps = _getRecycleRateForBoost(nftBoost);
 
-        // 3. Calculate recycle amount (returned to staker pool)
+        // 3. No-tutor penalty: +10% extra recycled
+        address tutor = ecosystem.tutorOf(user);
+        if (tutor == address(0)) {
+            recycleRateBps += NO_TUTOR_EXTRA_RECYCLE_BPS;
+            if (recycleRateBps > BPS) recycleRateBps = BPS;
+        }
+
+        // 4. Calculate recycle amount (returned to staker pool)
         uint256 recycleAmount = totalReward * recycleRateBps / BPS;
 
-        // 4. Tutor or burn
-        address tutor = ecosystem.tutorOf(user);
-        uint256 tutorAmount;
-        uint256 burnAmount;
+        // 5. User receives remainder (no tutor cut, no burn)
+        uint256 userReward = totalReward - recycleAmount;
 
-        if (tutor != address(0)) {
-            // With tutor: 5% to tutor, 0% burned
-            tutorAmount = totalReward * TUTOR_BPS / BPS;
-        } else {
-            // Without tutor: 10% burned (deflationary penalty)
-            burnAmount = totalReward * NO_TUTOR_BURN_BPS / BPS;
-        }
-
-        // 5. User receives remainder
-        uint256 userReward = totalReward - recycleAmount - tutorAmount - burnAmount;
-
-        // 6. Execute: burn, recycle, transfer
-        if (burnAmount > 0) {
-            bkcToken.burn(burnAmount);
-            totalBurnedOnClaim += burnAmount;
-        }
-
+        // 6. Execute: recycle + transfer
         if (recycleAmount > 0 && totalPStake > 0) {
-            // Recycle: increase accRewardPerShare (tokens stay in contract)
             accRewardPerShare += recycleAmount * PRECISION / totalPStake;
             totalRewardsDistributed += recycleAmount;
             totalRecycledOnClaim += recycleAmount;
@@ -597,14 +565,9 @@ contract StakingPool is IStakingPool {
             bkcToken.transfer(user, userReward);
         }
 
-        if (tutorAmount > 0) {
-            bkcToken.transfer(tutor, tutorAmount);
-            totalTutorPayments += tutorAmount;
-        }
-
         emit RewardsClaimed(
-            user, totalReward, recycleAmount, burnAmount,
-            tutorAmount, userReward, nftBoost, tutor, operator
+            user, totalReward, recycleAmount, 0,
+            0, userReward, nftBoost, tutor, operator
         );
     }
 
@@ -635,7 +598,7 @@ contract StakingPool is IStakingPool {
     }
 
     /// @notice Preview exactly what a claim would produce right now.
-    ///         Matches the frontend's previewClaim display.
+    ///         V3: No tutor cut, no burn — only recycling.
     function previewClaim(address user) external view returns (
         uint256 totalRewards,
         uint256 recycleAmount,
@@ -650,19 +613,21 @@ contract StakingPool is IStakingPool {
 
         nftBoost = _getUserBestBoost(user);
         recycleRateBps = _getRecycleRateForBoost(nftBoost);
-        recycleAmount = totalRewards * recycleRateBps / BPS;
 
+        // No-tutor penalty: +10% extra recycled
         address tutor = ecosystem.tutorOf(user);
-        if (tutor != address(0)) {
-            tutorCut = totalRewards * TUTOR_BPS / BPS;
-        } else {
-            burnAmount = totalRewards * NO_TUTOR_BURN_BPS / BPS;
+        if (tutor == address(0)) {
+            recycleRateBps += NO_TUTOR_EXTRA_RECYCLE_BPS;
+            if (recycleRateBps > BPS) recycleRateBps = BPS;
         }
 
-        userReceives = totalRewards - recycleAmount - tutorCut - burnAmount;
+        recycleAmount = totalRewards * recycleRateBps / BPS;
+        // V3: burnAmount = 0, tutorCut = 0
+        userReceives = totalRewards - recycleAmount;
     }
 
     /// @notice Preview exactly what a force unstake would produce.
+    ///         V3: No tutor cut, no burn — penalty is fully recycled.
     function previewForceUnstake(address user, uint256 index) external view returns (
         uint256 stakedAmount,
         uint256 totalPenalty,
@@ -681,17 +646,17 @@ contract StakingPool is IStakingPool {
 
         nftBoost = _getUserBestBoost(user);
         penaltyRateBps = _getRecycleRateForBoost(nftBoost);
-        totalPenalty = stakedAmount * penaltyRateBps / BPS;
 
-        if (totalPenalty > 0) {
-            address tutor = ecosystem.tutorOf(user);
-            if (tutor != address(0)) {
-                tutorCut = totalPenalty * TUTOR_PENALTY_BPS / BPS;
-            } else {
-                burnAmount = totalPenalty * NO_TUTOR_BURN_PENALTY_BPS / BPS;
-            }
-            recycleAmount = totalPenalty - tutorCut - burnAmount;
+        // No-tutor penalty: +10% extra recycled
+        address tutor = ecosystem.tutorOf(user);
+        if (tutor == address(0)) {
+            penaltyRateBps += NO_TUTOR_EXTRA_RECYCLE_BPS;
+            if (penaltyRateBps > BPS) penaltyRateBps = BPS;
         }
+
+        totalPenalty = stakedAmount * penaltyRateBps / BPS;
+        recycleAmount = totalPenalty; // V3: all penalty is recycled
+        // burnAmount = 0, tutorCut = 0
 
         userReceives = stakedAmount - totalPenalty;
     }

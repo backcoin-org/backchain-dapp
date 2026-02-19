@@ -1,9 +1,9 @@
 // =============================================================================
-// BACKCHAIN V10 — COMPREHENSIVE INTEGRATION TESTS
+// BACKCHAIN V11 — COMPREHENSIVE INTEGRATION TESTS
 // =============================================================================
-// Tests cross-contract flows for all 15 V10 smart contracts.
-// V10: ecosystem-wide tutor rewards (10% ETH off-the-top), uint32 multiplier,
-//      no buyback minimum, 5% caller reward, configurable swap target.
+// Tests cross-contract flows for all 16 V11 smart contracts.
+// V11: no burn/no tutor-cut on staking claims (only recycling), FortunePool
+//      revealDelay=2 + BKC_FEE_BPS=1000 (10%), NFTFusion splitTo 20% premium.
 // Uses ethers v6 + Hardhat + loadFixture for test isolation.
 // =============================================================================
 
@@ -32,7 +32,7 @@ function nftActionId(prefix: string, tier: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// Constants matching V10 contracts
+// Constants matching V11 contracts
 // ---------------------------------------------------------------------------
 const MAX_SUPPLY = ethers.parseEther("200000000"); // 200M
 const TGE_AMOUNT = ethers.parseEther("20000000"); // 20M
@@ -169,7 +169,7 @@ async function deployAllFixture() {
   await ecosystem.setBuybackMiner(buybackAddr);
   await ecosystem.setStakingPool(stakingAddr);
 
-  // V10 module configs — tutor 10% off-the-top, remaining 90% split per module
+  // V11 module configs — tutor 10% ETH off-the-top, remaining 90% split per module
   // No-custom modules: operator 15%, treasury 25%, buyback 50% (of remaining 90%)
   const defaultCfg = {
     active: true,
@@ -211,7 +211,7 @@ async function deployAllFixture() {
   await ecosystem.registerModule(notaryAddr, MOD_NOTARY, defaultCfg);
   await ecosystem.registerModule(charityAddr, MOD_CHARITY, charityCfg);
 
-  // V10: Enable ecosystem-wide tutor rewards (10% ETH off-the-top)
+  // V11: Enable ecosystem-wide tutor rewards (10% ETH off-the-top)
   await ecosystem.setTutorBps(1000);
 
   // StakingPool: set reward notifiers (BuybackMiner + Ecosystem)
@@ -314,7 +314,7 @@ async function deployAllFixture() {
 // TEST SUITES
 // ============================================================================
 
-describe("Backchain V10 — Integration Tests", function () {
+describe("Backchain V11 — Integration Tests", function () {
   // ══════════════════════════════════════════════════════════════════════════
   // 1. FULL DEPLOY & SETUP
   // ══════════════════════════════════════════════════════════════════════════
@@ -886,7 +886,7 @@ describe("Backchain V10 — Integration Tests", function () {
       expect(await f.stakingPool.delegationCount(f.alice.address)).to.equal(0);
     });
 
-    it("force unstake: 60% penalty (no NFT, no tutor) — recycled + burned", async function () {
+    it("force unstake: 60% penalty (no NFT, no tutor) — all recycled", async function () {
       const f = await loadFixture(deployAllFixture);
       const stakeAmt = ethers.parseEther("1000");
       const ethFee = ethers.parseEther("0.0004");
@@ -902,11 +902,10 @@ describe("Backchain V10 — Integration Tests", function () {
       const balAfter = await f.bkcToken.balanceOf(f.alice.address);
       const burnAfter = await f.bkcToken.totalBurned();
 
-      // No NFT = 60% penalty = 600 BKC
+      // V11: No NFT = 50% base + 10% no-tutor penalty = 60% penalty = 600 BKC
       const expectedPenalty = stakeAmt * 6000n / 10000n; // 600 BKC
-      // No tutor: 10% of penalty burned = 60 BKC
-      const expectedBurn = expectedPenalty * 1000n / 10000n; // 60 BKC
-      // Rest recycled: 600 - 60 = 540 BKC
+      // V11: NO burn — entire penalty is recycled, 0 BKC burned
+      const expectedBurn = 0n;
 
       expect(burnAfter - burnBefore).to.equal(expectedBurn);
       // Alice receives stakeAmt - penalty = 400 BKC
@@ -938,12 +937,13 @@ describe("Backchain V10 — Integration Tests", function () {
       const balAfter = await f.bkcToken.balanceOf(f.alice.address);
       const burnAfter = await f.bkcToken.totalBurned();
 
-      // Diamond = 0% penalty → full amount returned, nothing burned
+      // V11: Diamond + no tutor = 0% base + 10% no-tutor penalty = 10% recycled, 0% burned
       expect(burnAfter - burnBefore).to.equal(0n);
-      expect(balAfter - balBefore).to.equal(stakeAmt);
+      const expectedPenalty = stakeAmt * 1000n / 10000n; // 10% recycled
+      expect(balAfter - balBefore).to.equal(stakeAmt - expectedPenalty);
     });
 
-    it("force unstake: Gold NFT + tutor → 20% penalty, tutor gets 5% of penalty", async function () {
+    it("force unstake: Gold NFT + tutor → 10% penalty, tutor earns nothing", async function () {
       const f = await loadFixture(deployAllFixture);
       const ethFee = ethers.parseEther("0.0004");
 
@@ -968,13 +968,11 @@ describe("Backchain V10 — Integration Tests", function () {
       const bobAfter = await f.bkcToken.balanceOf(f.bob.address);
       const burnAfter = await f.bkcToken.totalBurned();
 
-      // Gold = 20% penalty = 200 BKC
-      // With tutor: 5% of penalty → Bob = 10 BKC, 0% burned, rest recycled = 190
-      const expectedPenalty = stakeAmt * 2000n / 10000n;
-      const expectedTutor = expectedPenalty * 500n / 10000n; // 10 BKC
-
-      expect(bobAfter - bobBefore).to.equal(expectedTutor);
-      expect(burnAfter - burnBefore).to.equal(0n); // No burn with tutor
+      // V11: Gold + tutor = 10% base recycled (no extra no-tutor penalty), 0 burn, 0 to tutor
+      // Tutor earns nothing from staking forceUnstake in V11
+      expect(bobAfter - bobBefore).to.equal(0n); // Tutor gets nothing
+      expect(burnAfter - burnBefore).to.equal(0n); // No burn
+      // User keeps 90% of principal (900 BKC of 1000 BKC staked)
     });
 
     it("force unstake: reverts without ETH fee", async function () {
@@ -1005,7 +1003,7 @@ describe("Backchain V10 — Integration Tests", function () {
       expect(preview.ethFeeRequired).to.equal(ethers.parseEther("0.0004"));
     });
 
-    it("claim with Diamond NFT: 0% recycle, 10% burn (no tutor)", async function () {
+    it("claim with Diamond NFT: 10% recycle (no tutor, no burn)", async function () {
       const f = await loadFixture(deployAllFixture);
 
       // Alice buys a Diamond NFT from NFTPool (tier 3)
@@ -1032,15 +1030,15 @@ describe("Backchain V10 — Integration Tests", function () {
       await f.stakingPool.connect(buybackSigner).notifyReward(rewardAmt);
       await ethers.provider.send("hardhat_stopImpersonatingAccount", [f.buybackAddr]);
 
-      // Preview claim: Diamond = 0% recycle, no tutor = 10% burn
+      // V11: Preview claim — Diamond = 0% base + 10% no-tutor penalty = 10% recycled, 0% burn
       const preview = await f.stakingPool.previewClaim(f.alice.address);
-      expect(preview.recycleRateBps).to.equal(0); // Diamond = 0% recycle
+      expect(preview.recycleRateBps).to.equal(1000); // Diamond + no tutor = 10% recycle
       expect(preview.nftBoost).to.equal(5000);
-      expect(preview.recycleAmount).to.equal(0n);
-      expect(preview.burnAmount).to.equal(preview.totalRewards * 1000n / 10000n); // 10% burn (no tutor)
+      expect(preview.recycleAmount).to.equal(preview.totalRewards * 1000n / 10000n); // 10% recycled
+      expect(preview.burnAmount).to.equal(0n); // V11: no burn
     });
 
-    it("tutor receives 5% BKC cut on claim", async function () {
+    it("tutor earns nothing on staking claim (V11)", async function () {
       const f = await loadFixture(deployAllFixture);
 
       // Set Bob as Alice's tutor
@@ -1060,13 +1058,17 @@ describe("Backchain V10 — Integration Tests", function () {
       await f.stakingPool.connect(buybackSigner).notifyReward(rewardAmt);
       await ethers.provider.send("hardhat_stopImpersonatingAccount", [f.buybackAddr]);
 
-      // Claim — Bob (tutor) should earn 5% of total rewards
+      // V11: Claim — Bob (tutor) earns NOTHING from staking claims
       const bobBefore = await f.bkcToken.balanceOf(f.bob.address);
+      const aliceBefore = await f.bkcToken.balanceOf(f.alice.address);
       await f.stakingPool.connect(f.alice).claimRewards();
       const bobAfter = await f.bkcToken.balanceOf(f.bob.address);
+      const aliceAfter = await f.bkcToken.balanceOf(f.alice.address);
 
-      // Bob should have received 5% tutor cut
-      expect(bobAfter).to.be.gt(bobBefore);
+      // V11: Tutor gets 0 BKC from staking claim — no tutor cut on claims
+      expect(bobAfter).to.equal(bobBefore);
+      // Alice gets more since no 5% tutor deduction (only recycle penalty applies)
+      expect(aliceAfter).to.be.gt(aliceBefore);
     });
   });
 
@@ -1084,7 +1086,7 @@ describe("Backchain V10 — Integration Tests", function () {
 
     it("executeBuyback: reverts when nothing accumulated", async function () {
       const f = await loadFixture(deployAllFixture);
-      // V10: no minimum threshold, but reverts when 0 accumulated
+      // V11: no minimum threshold, but reverts when 0 accumulated
       const accumulated = await f.ecosystem.buybackAccumulated();
       if (accumulated > 0n) {
         await f.buybackMiner.connect(f.alice).executeBuyback();
@@ -1098,7 +1100,7 @@ describe("Backchain V10 — Integration Tests", function () {
     it("executeBuyback: works with any amount > 0 (no minimum)", async function () {
       const f = await loadFixture(deployAllFixture);
 
-      // Generate a small fee — even tiny amounts should work in V10
+      // Generate a small fee — even tiny amounts should work in V11
       await f.agora
         .connect(f.alice)
         .createPost("QmSmallFee", 0, 0, f.operator.address, {
@@ -1132,7 +1134,7 @@ describe("Backchain V10 — Integration Tests", function () {
         await f.buybackMiner.connect(f.charlie).executeBuyback();
 
         const callerBalAfter = await ethers.provider.getBalance(f.charlie.address);
-        // V10: Caller earned 5% reward (minus gas)
+        // V11: Caller earned 5% reward (minus gas)
         expect(callerBalAfter).to.be.gt(callerBalBefore - ethers.parseEther("0.01"));
 
         // Stats updated
@@ -1397,8 +1399,8 @@ describe("Backchain V10 — Integration Tests", function () {
       expect(game.player).to.equal(f.bob.address);
       expect(game.status).to.equal(1); // COMMITTED
 
-      // Advance blocks past REVEAL_DELAY (5 blocks)
-      await mine(6);
+      // Advance blocks past revealDelay (2 blocks)
+      await mine(3);
 
       // Reveal
       await f.fortunePool.connect(f.bob).revealPlay(gameId, guesses, secret);
@@ -1425,8 +1427,8 @@ describe("Backchain V10 — Integration Tests", function () {
       await f.fortunePool.connect(f.bob).commitPlay(commitHash, wager, 1, ethers.ZeroAddress);
       const gameId = await f.fortunePool.activeGame(f.bob.address);
 
-      // Advance past REVEAL_DELAY + REVEAL_WINDOW (5 + 200 = 205 blocks)
-      await mine(206);
+      // Advance past revealDelay + REVEAL_WINDOW (2 + 200 = 202 blocks)
+      await mine(203);
 
       // Claim expired
       await f.fortunePool.connect(f.charlie).claimExpired(gameId);
@@ -1435,7 +1437,7 @@ describe("Backchain V10 — Integration Tests", function () {
       expect(game.status).to.equal(3); // EXPIRED
     });
 
-    it("BKC fee (20%) goes to ecosystem on commit", async function () {
+    it("BKC fee (10%) goes to ecosystem on commit", async function () {
       const f = await loadFixture(deployAllFixture);
 
       await f.bkcToken.connect(f.alice).approve(f.fortuneAddr, ethers.parseEther("10000"));
@@ -1452,7 +1454,7 @@ describe("Backchain V10 — Integration Tests", function () {
       await f.fortunePool.connect(f.bob).commitPlay(commitHash, wager, 1, ethers.ZeroAddress);
 
       const ecosystemBkcAfter = await f.ecosystem.totalBkcCollected();
-      const expectedFee = wager * 2000n / 10000n; // 20%
+      const expectedFee = wager * 1000n / 10000n; // 10%
       expect(ecosystemBkcAfter - ecosystemBkcBefore).to.equal(expectedFee);
     });
   });
@@ -2023,7 +2025,7 @@ describe("Backchain V10 — Integration Tests", function () {
       const buybackAccum = await f.ecosystem.buybackAccumulated();
 
       if (buybackAccum > 0n) {
-        // 3. Charlie triggers buyback (earns 5% reward in V10)
+        // 3. Charlie triggers buyback (earns 5% reward in V11)
         await f.buybackMiner.connect(f.charlie).executeBuyback();
 
         // 4. Staking pool should have received rewards
@@ -2068,23 +2070,27 @@ describe("Backchain V10 — Integration Tests", function () {
       await f.stakingPool.connect(buybackSigner).notifyReward(rewardAmt);
       await ethers.provider.send("hardhat_stopImpersonatingAccount", [f.buybackAddr]);
 
-      // 4. Preview claim — Gold = 20% recycle, no tutor = 10% burn
+      // 4. V11: Preview claim — Gold = 10% base + 10% no-tutor penalty = 20% recycle, 0% burn
       const preview = await f.stakingPool.previewClaim(f.alice.address);
-      expect(preview.recycleRateBps).to.equal(2000); // Gold = 20% recycle
+      expect(preview.recycleRateBps).to.equal(2000); // Gold + no tutor = 20% recycle
       expect(preview.nftBoost).to.equal(4000); // Gold
 
       // 5. Claim
       const burnBefore = await f.bkcToken.totalBurned();
+      const aliceBefore = await f.bkcToken.balanceOf(f.alice.address);
       await f.stakingPool.connect(f.alice).claimRewards();
       const burnAfter = await f.bkcToken.totalBurned();
+      const aliceAfter = await f.bkcToken.balanceOf(f.alice.address);
 
-      // No tutor: 10% of total burned, 20% recycled to stakers
+      // V11: No burn — entire penalty is recycled, nothing burned
+      expect(burnAfter - burnBefore).to.equal(0n);
+      // Alice receives totalRewards - 20% recycle = 80% of rewards (was 70% in V10)
       const totalReward = preview.totalRewards;
-      const expectedBurn = totalReward * 1000n / 10000n; // 10% burn (no tutor)
-      expect(burnAfter - burnBefore).to.equal(expectedBurn);
+      const expectedRecycle = totalReward * 2000n / 10000n; // 20% recycled
+      expect(aliceAfter - aliceBefore).to.equal(totalReward - expectedRecycle);
     });
 
-    it("tutor system integration: tutor earns BKC on staking claim", async function () {
+    it("tutor system integration: tutor earns nothing on staking claim (V11)", async function () {
       const f = await loadFixture(deployAllFixture);
 
       // 1. Set tutor
@@ -2104,15 +2110,15 @@ describe("Backchain V10 — Integration Tests", function () {
       await f.stakingPool.connect(buybackSigner).notifyReward(rewardAmt);
       await ethers.provider.send("hardhat_stopImpersonatingAccount", [f.buybackAddr]);
 
-      // 4. Claim — Charlie (tutor) earns 5% of total, no burn (tutor replaces burn)
+      // V11: 4. Claim — Charlie (tutor) earns NOTHING from staking claims, no burn either
       const charlieBefore = await f.bkcToken.balanceOf(f.charlie.address);
       const burnBefore = await f.bkcToken.totalBurned();
       await f.stakingPool.connect(f.alice).claimRewards();
       const charlieAfter = await f.bkcToken.balanceOf(f.charlie.address);
       const burnAfter = await f.bkcToken.totalBurned();
 
-      expect(charlieAfter).to.be.gt(charlieBefore); // Charlie earned tutor cut
-      expect(burnAfter).to.equal(burnBefore); // No burn when tutor is set
+      expect(charlieAfter).to.equal(charlieBefore); // V11: Tutor earns 0 from staking claims
+      expect(burnAfter).to.equal(burnBefore); // V11: No burn on staking claims
     });
 
     it("ecosystem module deauthorization blocks fee collection", async function () {
@@ -2183,10 +2189,10 @@ describe("Backchain V10 — Integration Tests", function () {
   });
 
   // ══════════════════════════════════════════════════════════════════════════
-  // 13. V10: TUTOR ETH DISTRIBUTION
+  // 13. V11: TUTOR ETH DISTRIBUTION
   // ══════════════════════════════════════════════════════════════════════════
 
-  describe("13. V10 Tutor ETH Distribution", function () {
+  describe("13. V11 Tutor ETH Distribution", function () {
     it("tutor earns 10% ETH on any ecosystem fee action", async function () {
       const f = await loadFixture(deployAllFixture);
 
@@ -2278,7 +2284,7 @@ describe("Backchain V10 — Integration Tests", function () {
       ).to.be.revertedWithCustomError(f.ecosystem, "InvalidFeeBps");
     });
 
-    it("dual earning: ETH tutor + BKC staking tutor", async function () {
+    it("dual earning: ETH tutor from modules + no BKC from staking (V11)", async function () {
       const f = await loadFixture(deployAllFixture);
 
       // Charlie is Alice's tutor
@@ -2292,9 +2298,9 @@ describe("Backchain V10 — Integration Tests", function () {
           value: ethers.parseEther("0.1"),
         });
       const charlieEthAfter = await f.ecosystem.pendingEth(f.charlie.address);
-      expect(charlieEthAfter).to.be.gt(charlieEthBefore); // ETH earned
+      expect(charlieEthAfter).to.be.gt(charlieEthBefore); // ETH earned from Agora
 
-      // 2. Alice stakes and claims → Charlie earns BKC tutor cut
+      // 2. Alice stakes and claims → V11: Charlie earns NOTHING from staking claims
       const stakeAmt = ethers.parseEther("1000");
       await f.bkcToken.connect(f.alice).approve(f.stakingAddr, stakeAmt);
       await f.stakingPool.connect(f.alice).delegate(stakeAmt, 30, ethers.ZeroAddress);
@@ -2311,15 +2317,16 @@ describe("Backchain V10 — Integration Tests", function () {
       const charlieBkcBefore = await f.bkcToken.balanceOf(f.charlie.address);
       await f.stakingPool.connect(f.alice).claimRewards();
       const charlieBkcAfter = await f.bkcToken.balanceOf(f.charlie.address);
-      expect(charlieBkcAfter).to.be.gt(charlieBkcBefore); // BKC earned
+      // V11: tutor earns nothing from staking claims
+      expect(charlieBkcAfter).to.equal(charlieBkcBefore);
     });
   });
 
   // ══════════════════════════════════════════════════════════════════════════
-  // 14. V10: AGORA GAS-BASED PRICING
+  // 14. V11: AGORA GAS-BASED PRICING
   // ══════════════════════════════════════════════════════════════════════════
 
-  describe("14. V10 Agora Gas-Based Pricing", function () {
+  describe("14. V11 Agora Gas-Based Pricing", function () {
     it("tipPost accepts any amount > 0", async function () {
       const f = await loadFixture(deployAllFixture);
 
@@ -2405,10 +2412,10 @@ describe("Backchain V10 — Integration Tests", function () {
   });
 
   // ══════════════════════════════════════════════════════════════════════════
-  // 15. V10: FEE CONFIG WITH uint32 MULTIPLIER
+  // 15. V11: FEE CONFIG WITH uint32 MULTIPLIER
   // ══════════════════════════════════════════════════════════════════════════
 
-  describe("15. V10 uint32 Multiplier", function () {
+  describe("15. V11 uint32 Multiplier", function () {
     it("accepts multiplier values > 65535 (uint16 max)", async function () {
       const f = await loadFixture(deployAllFixture);
 

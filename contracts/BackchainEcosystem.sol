@@ -119,14 +119,15 @@ contract BackchainEcosystem is IBackchainEcosystem {
     // FEE CONFIG (per action)
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @dev feeType: 0 = gas-based, 1 = value-based
+    /// @dev feeType: 0 = gas-based, 1 = value-based, 2 = fixed
     ///      Gas-based: fee = gasEstimate × tx.gasprice × bps × multiplier / BPS
     ///      Value-based: fee = txValue × bps / BPS
+    ///      Fixed: fee = uint256(gasEstimate) × uint256(multiplier) (direct wei amount)
     struct FeeConfig {
-        uint8  feeType;      // 0 = gas-based, 1 = value-based
-        uint16 bps;          // basis points (e.g., 100 = 1%)
-        uint32 multiplier;   // gas-based multiplier (uint32 for premium pricing on cheap L2)
-        uint32 gasEstimate;  // gas-based: estimated gas units for this action
+        uint8  feeType;      // 0 = gas-based, 1 = value-based, 2 = fixed
+        uint16 bps;          // basis points (e.g., 100 = 1%). Not used for feeType=2
+        uint32 multiplier;   // gas-based multiplier / fixed fee factor
+        uint32 gasEstimate;  // gas-based: gas units / fixed: fee base (wei)
     }
 
     mapping(bytes32 => FeeConfig) public feeConfigs;
@@ -269,12 +270,13 @@ contract BackchainEcosystem is IBackchainEcosystem {
     // ════════════════════════════════════════════════════════════════════════
 
     /// @notice Calculate the ETH fee for a given action.
-    /// @dev    Gas-based: fee = gasEstimate × tx.gasprice × bps × multiplier / BPS
-    ///         Value-based: fee = txValue × bps / BPS
+    /// @dev    Gas-based (0): fee = gasEstimate × tx.gasprice × bps × multiplier / BPS
+    ///         Value-based (1): fee = txValue × bps / BPS
+    ///         Fixed (2): fee = uint256(gasEstimate) × uint256(multiplier) (direct wei)
     ///
     ///         IMPORTANT: tx.gasprice is 0 in static calls (eth_call).
-    ///         Frontend should pass { gasPrice } override from provider.getFeeData()
-    ///         when calling this as a view for fee preview.
+    ///         Frontend should use calculateFeeClientSide for gas-based fees.
+    ///         Fixed fees (type 2) work correctly in static calls.
     ///
     /// @param actionId keccak256 of the action name (e.g., "BACKCHAT_POST")
     /// @param txValue  Transaction value (used only for value-based fees)
@@ -285,19 +287,21 @@ contract BackchainEcosystem is IBackchainEcosystem {
     ) external view override returns (uint256 fee) {
         FeeConfig memory cfg = feeConfigs[actionId];
 
-        // If bps is 0 or fee config not set, fee is naturally 0
-        if (cfg.bps == 0) return 0;
-
-        if (cfg.feeType == 0) {
+        if (cfg.feeType == 2) {
+            // Fixed: gasEstimate × multiplier (direct wei amount)
+            fee = uint256(cfg.gasEstimate) * uint256(cfg.multiplier);
+        } else if (cfg.feeType == 1) {
+            // Value-based: txValue × bps / BPS
+            if (cfg.bps == 0) return 0;
+            fee = txValue * uint256(cfg.bps) / BPS;
+        } else {
             // Gas-based: gasEstimate × gasPrice × bps × multiplier / BPS
+            if (cfg.bps == 0) return 0;
             fee = uint256(cfg.gasEstimate)
                 * tx.gasprice
                 * uint256(cfg.bps)
                 * uint256(cfg.multiplier)
                 / BPS;
-        } else {
-            // Value-based: txValue × bps / BPS
-            fee = txValue * uint256(cfg.bps) / BPS;
         }
     }
 
