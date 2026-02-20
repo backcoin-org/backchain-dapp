@@ -3,245 +3,425 @@
   "network": "arbitrumSepolia",
   "chainId": 421614,
   "deployer": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
-  "startTime": "2026-02-19T01:40:26.158Z",
-  "totalGasUsed": "29159795",
+  "startTime": "2026-02-20T20:12:02.702Z",
+  "totalGasUsed": "33841577",
   "deployments": [
     {
       "contractName": "BKCToken",
-      "address": "0x12834431b04E730682151ee451652888C533cEE3",
-      "txHash": "0xbecf293aee9535a49f9eb7ef7b020c332203e8508cfdfb0027cbacde7e037740",
-      "gasUsed": "1442915",
-      "blockNumber": 243747680,
-      "timestamp": "2026-02-19T01:40:30.035Z"
+      "address": "0xdB8C92372CF697E6Ef61505C7bD4358a89DE0087",
+      "txHash": "0x620a2ff50d3dc41d33360baa873348f5231b360c8334aba725414dfc2245452e",
+      "gasUsed": "1441177",
+      "blockNumber": 244164713,
+      "timestamp": "2026-02-20T20:12:05.473Z"
     },
     {
       "contractName": "BackchainEcosystem",
-      "address": "0x0c36eA7F304c50443BcF6e54C13B903277408C06",
-      "txHash": "0xd8e4ed45d46e0ae50d017f0d8c6343179a8d62a434f8280bf4425bd44cfe1d57",
-      "gasUsed": "2749219",
-      "blockNumber": 243747702,
-      "timestamp": "2026-02-19T01:40:35.435Z"
+      "address": "0xAfCc974E352A47E1b718d7D5a80769a51C224414",
+      "txHash": "0x5154576df4226e437ee0105ddebd07eb5b6c8bc636022ec6b1d67ddf5e167122",
+      "gasUsed": "2746353",
+      "blockNumber": 244164722,
+      "timestamp": "2026-02-20T20:12:09.651Z"
     },
     {
       "contractName": "LiquidityPool",
-      "address": "0xA2412012138981631002063fff1559548fF69139",
-      "txHash": "0x9f6912e5e760123a1c0ad3951e8446ec6e775db409464bdea0f00f7f8fd96879",
-      "gasUsed": "861833",
-      "blockNumber": 243747720,
-      "timestamp": "2026-02-19T01:40:39.287Z"
+      "address": "0x90cBcA868E476e165948D593EA3FBf47B374CD78",
+      "txHash": "0x72f5aba8acf1200710ac061e2ccfdd444d11a90e7b1e500add8e200a8353ce1c",
+      "gasUsed": "860844",
+      "blockNumber": 244164727,
+      "timestamp": "2026-02-20T20:12:13.657Z"
     },
     {
       "contractName": "StakingPool",
-      "address": "0x59A3431DeFdfb09f578b20252647859abAC89E3A",
-      "txHash": "0xc7832c478b6742f8875940d85ec426d290e864bf7f551248d53f1a67f1438b77",
-      "gasUsed": "2417644",
-      "blockNumber": 243747739,
-      "timestamp": "2026-02-19T01:40:45.395Z"
+      "address": "0x21bE770e45C516d628Db1a6E4b7bDF2F2Bffbd36",
+      "txHash": "0x088d1cfea7aa1d389b05e80606009be1474c4b37e2bf16e85ac5f85fda526464",
+      "gasUsed": "2734566",
+      "blockNumber": 244164738,
+      "timestamp": "2026-02-20T20:12:17.751Z"
     },
     {
       "contractName": "BuybackMiner",
-      "address": "0x4C01A3d624f98257c5cE6D5ae67471b46921d5D6",
-      "txHash": "0xf959848c67c3dbd81043048681cb38f874250a63aa90945ecec1afb6888987fa",
-      "gasUsed": "1475122",
-      "blockNumber": 243747760,
-      "timestamp": "2026-02-19T01:40:50.216Z"
+      "address": "0xaC1b1BF90e5F13f91aA9C7BEa7f8B48E59aaCB49",
+      "txHash": "0x701e35b85099772b9e45729a238755fa2aef5bed596ea9a1a04e06fb97ad8951",
+      "gasUsed": "1543684",
+      "blockNumber": 244164750,
+      "timestamp": "2026-02-20T20:12:21.920Z"
     },
     {
       "contractName": "RewardBooster",
-      "address": "0x6E7840942771D3ED69DCcd0A69b2775D26A3394a",
-      "txHash": "0xb5145c5fac0f1ad3b73c33ffa5d8b1bda21d3a6a179f150f289e5b35435b38be",
-      "gasUsed": "1493731",
-      "blockNumber": 243747774,
-      "timestamp": "2026-02-19T01:40:54.199Z"
+      "address": "0x44f457525ff2e2C2d0Eb89c56664D491C0Ea328d",
+      "txHash": "0x7203abefe32ccff00c3ee53d2aa6c925ce9df92cb4cb8250a01dcf9d00a6174b",
+      "gasUsed": "1492177",
+      "blockNumber": 244164763,
+      "timestamp": "2026-02-20T20:12:26.079Z"
     },
     {
       "contractName": "NFTFusion",
-      "address": "0x4Cf37FaBD25871A2E8BEeD10c2425c98137C73Af",
-      "txHash": "0xe1fed6a65573928c7f7f7b6406a1f76c658a8cc2188db662ddf80a773ca25684",
-      "gasUsed": "1675353",
-      "blockNumber": 243747790,
-      "timestamp": "2026-02-19T01:40:58.190Z"
+      "address": "0xcA9fD6057BbE4639dD74d0351786370115CDe9eB",
+      "txHash": "0xc431504e90a56ada486fd349b16c9b13bc3268965943d8319838333fb56ed5ba",
+      "gasUsed": "2014337",
+      "blockNumber": 244164769,
+      "timestamp": "2026-02-20T20:12:30.259Z"
     },
     {
       "contractName": "NFTPool_bronze",
-      "address": "0x46C95a01cd8E602f08b15d5Ee6Da7238F2838172",
-      "txHash": "0x410c388caea08adf54d4d701b716c7927356f4ab2b0db7983adab34e753ea3e2",
-      "gasUsed": "2560830",
-      "blockNumber": 243747817,
-      "timestamp": "2026-02-19T01:41:05.207Z"
+      "address": "0x106b8990e7e20D5105454D0D458dd5C01C12B47d",
+      "txHash": "0xa32ae6453d7cddbf18be760acba6e5a67a53a475d5056d615653e8fe873e3c68",
+      "gasUsed": "2558453",
+      "blockNumber": 244164783,
+      "timestamp": "2026-02-20T20:12:37.196Z"
     },
     {
       "contractName": "FortunePool",
-      "address": "0xEF3f5AFFEF940E7C14Af546de90fad1586361BF9",
-      "txHash": "0x361dc798bcc31bb218f087d0f9ef59998e7569fe382caccf4bbffab678b9566f",
-      "gasUsed": "1873859",
-      "blockNumber": 243747866,
-      "timestamp": "2026-02-19T01:41:17.590Z"
+      "address": "0xE1789ae54D59CD36936E63Ef535A3CC67F11b3fD",
+      "txHash": "0x5fecfb29431b63df10a9df661139d70b2fd6e4516409e5f05de75d1269ea7d8a",
+      "gasUsed": "1871591",
+      "blockNumber": 244164815,
+      "timestamp": "2026-02-20T20:12:49.593Z"
     },
     {
       "contractName": "Agora",
-      "address": "0x1b7158CeceB713cB516580C890CBA2A2A3C63bAa",
-      "txHash": "0x15fc06a72ea79881e08a43cdf17194b833b43297af0bbb293f82af9543c72cde",
-      "gasUsed": "4546831",
-      "blockNumber": 243747893,
-      "timestamp": "2026-02-19T01:41:24.520Z"
+      "address": "0x89475B92b2909b2d60d14A6AB1E313a22532d1a5",
+      "txHash": "0x593c871e02dd8652856337e2daade1c86d8de770af8db849d4a5f4a1e0da52e5",
+      "gasUsed": "4512621",
+      "blockNumber": 244164833,
+      "timestamp": "2026-02-20T20:12:56.841Z"
     },
     {
       "contractName": "Notary",
-      "address": "0x0a95481924aC1b0a7F42cCd16BD184C27145875C",
-      "txHash": "0x14206b1f54aec5c42ae770332813f6d6d782a6c0899cd9ef5021a90b6405b186",
-      "gasUsed": "2492017",
-      "blockNumber": 243747909,
-      "timestamp": "2026-02-19T01:41:28.628Z"
+      "address": "0xB3B1E02265F1DF1177BC3294B1F01fa550DB6df3",
+      "txHash": "0x8f0d224a3d02ef4de06ce37b18fe66cf5adac7fabfaa5e783adce700c9edff06",
+      "gasUsed": "2489410",
+      "blockNumber": 244164841,
+      "timestamp": "2026-02-20T20:13:01.010Z"
     },
     {
       "contractName": "CharityPool",
-      "address": "0x85cc6036fC91190887410a8bc73C2D2B4F513959",
-      "txHash": "0x2b42d19f18051e9a7747c4c71ebaf0b5f460236b073eeb37799b73fc1ddd2ec1",
-      "gasUsed": "1650727",
-      "blockNumber": 243747924,
-      "timestamp": "2026-02-19T01:41:32.528Z"
+      "address": "0xc8CAF220f2AA4696eFc4073Da64c785a868995dB",
+      "txHash": "0x38521bbd9b932990739041d527b216654f51dec572cf28f064d29e8966cc6a9d",
+      "gasUsed": "1648899",
+      "blockNumber": 244164850,
+      "timestamp": "2026-02-20T20:13:05.201Z"
     },
     {
       "contractName": "RentalManager",
-      "address": "0x567865f412FA7adFf8cF40c06Ee81AC6a8774Ec1",
-      "txHash": "0xcb30e7739f45034dfc889781f0021c3fa5851cd78ffbd099d7305acbf7fb17d3",
-      "gasUsed": "1639078",
-      "blockNumber": 243747937,
-      "timestamp": "2026-02-19T01:41:36.472Z"
+      "address": "0x091D2A824c697130da24d10e6c9938b8E316b281",
+      "txHash": "0xd4e0257c2e37f2c9f0e5c559ad6a7820dfdd687d04529dd3b4e70f853c36a257",
+      "gasUsed": "1637259",
+      "blockNumber": 244164862,
+      "timestamp": "2026-02-20T20:13:09.714Z"
     },
     {
       "contractName": "AirdropClaim",
-      "address": "0x3e5D20D75Dc8f6dbA67C1bB777972596c7D1c1B7",
-      "txHash": "0x15543cca14e33f17a9a8d1854487107e195a7283f1814efec760256682445152",
-      "gasUsed": "902654",
-      "blockNumber": 243747953,
-      "timestamp": "2026-02-19T01:41:40.312Z"
+      "address": "0xFd1E183e94b0e61A2026ab020125b97374b3eA1d",
+      "txHash": "0x878a3ac9f86e8c36de4e30bad55f9bbf92fdd826edeb6987419b29a481cfad6a",
+      "gasUsed": "901642",
+      "blockNumber": 244164876,
+      "timestamp": "2026-02-20T20:13:13.676Z"
+    },
+    {
+      "contractName": "SimpleBKCFaucet",
+      "address": "0xa5724Fae5250589b35Bcb8682dd07CCe4a2D1191",
+      "txHash": "0xafc01905b3902d7a6e55bf8d645a480884b3b9bf675ad9e4110b8e522a669dba",
+      "gasUsed": "803961",
+      "blockNumber": 244165009,
+      "timestamp": "2026-02-20T20:14:07.439Z"
+    },
+    {
+      "contractName": "BackchainGovernance",
+      "address": "0xf88373C30FAAe00A833248e0c12a58259b0d5952",
+      "txHash": "0x16a8587ef5d02f90296b37eaddbce82f35d751f0ae158a3f63833f7db1d36690",
+      "gasUsed": "1196012",
+      "blockNumber": 244165028,
+      "timestamp": "2026-02-20T20:14:13.767Z"
     }
   ],
   "transactions": [
     {
       "description": "RewardBooster.setFusionContract(NFTFusion)",
-      "txHash": "0xc137d3393954f3c485632222711c8ab17b3059a22c3a152445d0fe5d92b15433",
+      "txHash": "0x91c5b84e438165d61464f7b32d75df3201000f80ada4753f05671e1f2a652af2",
       "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
-      "to": "0x6E7840942771D3ED69DCcd0A69b2775D26A3394a",
-      "gasUsed": "45364",
-      "blockNumber": 243747806,
+      "to": "0x44f457525ff2e2C2d0Eb89c56664D491C0Ea328d",
+      "gasUsed": "45306",
+      "blockNumber": 244164780,
       "status": "success",
       "phase": "FASE 6b: NFTFusion",
-      "timestamp": "2026-02-19T01:41:01.909Z"
+      "timestamp": "2026-02-20T20:12:34.034Z"
     },
     {
       "description": "RewardBooster.configurePools([bronze, 0, 0, 0])",
-      "txHash": "0xf5c87519ec3356617a759996e8ae8422df041e03f02e936301cdfb4213a0f4fb",
+      "txHash": "0x8a0181e361b5c559b731c4492cec96373292b0d316bc75353fbec3c1e38471ae",
       "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
-      "to": "0x6E7840942771D3ED69DCcd0A69b2775D26A3394a",
-      "gasUsed": "53709",
-      "blockNumber": 243747834,
+      "to": "0x44f457525ff2e2C2d0Eb89c56664D491C0Ea328d",
+      "gasUsed": "53617",
+      "blockNumber": 244164792,
       "status": "success",
       "phase": "FASE 7: NFTPool Bronze",
-      "timestamp": "2026-02-19T01:41:09.046Z"
+      "timestamp": "2026-02-20T20:12:40.988Z"
     },
     {
       "description": "Approve BKC para bronze pool",
-      "txHash": "0x1b4670a87a5d63d6ea7d9ced9c20b33548dfaae94c9c2e0f6a5c454de88ec7c6",
+      "txHash": "0x076a790faed099bef95d5be4d92979dbd72c5dc125cc6f24cd3c6b37b1106da3",
       "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
-      "to": "0x12834431b04E730682151ee451652888C533cEE3",
-      "gasUsed": "46092",
-      "blockNumber": 243747845,
+      "to": "0xdB8C92372CF697E6Ef61505C7bD4358a89DE0087",
+      "gasUsed": "46033",
+      "blockNumber": 244164799,
       "status": "success",
       "phase": "FASE 7: NFTPool Bronze",
-      "timestamp": "2026-02-19T01:41:11.723Z"
+      "timestamp": "2026-02-20T20:12:43.698Z"
     },
     {
-      "description": "initializePool bronze: 0 real + 10000 mintable + 100 virtual + 1000000.0 BKC",
-      "txHash": "0x07ac26e2a5d9b6c5427df8924217999dffb737152e21912f3f9a5446b335932e",
+      "description": "initializePool bronze: 0 real + 10000 mintable + 100 virtual + 2000000.0 BKC",
+      "txHash": "0x3a1676a206224a57305d1e7ebabd284e65c2918e1b588894b4bd3f4b34419ca3",
       "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
-      "to": "0x46C95a01cd8E602f08b15d5Ee6Da7238F2838172",
-      "gasUsed": "130755",
-      "blockNumber": 243747855,
+      "to": "0x106b8990e7e20D5105454D0D458dd5C01C12B47d",
+      "gasUsed": "130683",
+      "blockNumber": 244164807,
       "status": "success",
       "phase": "FASE 7: NFTPool Bronze",
-      "timestamp": "2026-02-19T01:41:14.375Z"
+      "timestamp": "2026-02-20T20:12:46.435Z"
     },
     {
       "description": "FortunePool.setRevealDelay(2)",
-      "txHash": "0x3e601e7b5c0cb1d82de7f5b018b6bee602b9729243ce6d9249c7248c10d4bd8e",
+      "txHash": "0x5937c8afb25c63f278814af1f7b68fdc588b4ed55b49cda7abec5ed4feb35805",
       "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
-      "to": "0xEF3f5AFFEF940E7C14Af546de90fad1586361BF9",
-      "gasUsed": "24240",
-      "blockNumber": 243747882,
+      "to": "0xE1789ae54D59CD36936E63Ef535A3CC67F11b3fD",
+      "gasUsed": "24182",
+      "blockNumber": 244164828,
       "status": "success",
       "phase": "FASE 8: Módulos Restantes",
-      "timestamp": "2026-02-19T01:41:21.218Z"
+      "timestamp": "2026-02-20T20:12:53.443Z"
     },
     {
       "description": "Ecosystem.setBuybackMiner()",
-      "txHash": "0xe305c7c844603f49332443eaa0d3cfd85ad315a884b6ab6ecd39083cfbbe6185",
+      "txHash": "0x1353de7191bd68aec0f50a36dbe01b6103f9981b05f4068da7ce6e69edede031",
       "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
-      "to": "0x0c36eA7F304c50443BcF6e54C13B903277408C06",
-      "gasUsed": "47599",
-      "blockNumber": 243747967,
+      "to": "0xAfCc974E352A47E1b718d7D5a80769a51C224414",
+      "gasUsed": "47541",
+      "blockNumber": 244164882,
       "status": "success",
       "phase": "FASE 9: Configuração do Ecossistema",
-      "timestamp": "2026-02-19T01:41:43.834Z"
+      "timestamp": "2026-02-20T20:13:17.422Z"
     },
     {
       "description": "Ecosystem.setStakingPool()",
-      "txHash": "0xcfcf2b792f019aef32427b7e26be61b2b611dda172a2eb3e6c8fe165b1731b29",
+      "txHash": "0x7848b0090a9b895e0b174dfae6a45d30f1e93e8e0b0d8d07b2d39c5b0dcc5c5e",
       "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
-      "to": "0x0c36eA7F304c50443BcF6e54C13B903277408C06",
-      "gasUsed": "47797",
-      "blockNumber": 243747975,
+      "to": "0xAfCc974E352A47E1b718d7D5a80769a51C224414",
+      "gasUsed": "47739",
+      "blockNumber": 244164885,
       "status": "success",
       "phase": "FASE 9: Configuração do Ecossistema",
-      "timestamp": "2026-02-19T01:41:46.325Z"
+      "timestamp": "2026-02-20T20:13:20.144Z"
     },
     {
       "description": "Ecosystem.setTutorRelayer(deployer)",
-      "txHash": "0x348dec8eeebe1197b9d82dd8d9a1db9f13e47ee13307ce34f60227392fbde784",
+      "txHash": "0xdd39b2185425f34b171f2ebd8d552318ffccf4baf3ff6bf132654b62a24f7363",
       "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
-      "to": "0x0c36eA7F304c50443BcF6e54C13B903277408C06",
-      "gasUsed": "48545",
-      "blockNumber": 243747986,
+      "to": "0xAfCc974E352A47E1b718d7D5a80769a51C224414",
+      "gasUsed": "48487",
+      "blockNumber": 244164895,
       "status": "success",
       "phase": "FASE 9: Configuração do Ecossistema",
-      "timestamp": "2026-02-19T01:41:48.846Z"
+      "timestamp": "2026-02-20T20:13:22.699Z"
     },
     {
       "description": "Ecosystem.setTutorBps(500 = 5%)",
-      "txHash": "0xc4f750ed4fd0f0d8dbf90fcd5d2301b6bba36cac1d1aa0efb39bd152c22efa5f",
+      "txHash": "0xa3127983f55005cd74d55357611a4976ec8d583f212f64556057653e79adb247",
       "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
-      "to": "0x0c36eA7F304c50443BcF6e54C13B903277408C06",
-      "gasUsed": "31061",
-      "blockNumber": 243747997,
+      "to": "0xAfCc974E352A47E1b718d7D5a80769a51C224414",
+      "gasUsed": "31003",
+      "blockNumber": 244164901,
       "status": "success",
       "phase": "FASE 9: Configuração do Ecossistema",
-      "timestamp": "2026-02-19T01:41:51.596Z"
+      "timestamp": "2026-02-20T20:13:25.231Z"
     },
     {
       "description": "Ecosystem.registerModuleBatch() — 9 módulos",
-      "txHash": "0x933ee02b49c53ff79adfdcb5e9591e2e6bc731bbfa003a2dfb2b52f54dd0507c",
+      "txHash": "0x5a62af35b04fd14a6864b7483c2e57efd9f171bd9599a12284ed4e24e5d31af2",
       "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
-      "to": "0x0c36eA7F304c50443BcF6e54C13B903277408C06",
-      "gasUsed": "902820",
-      "blockNumber": 243748008,
+      "to": "0xAfCc974E352A47E1b718d7D5a80769a51C224414",
+      "gasUsed": "902486",
+      "blockNumber": 244164911,
       "status": "success",
       "phase": "FASE 9: Configuração do Ecossistema",
-      "timestamp": "2026-02-19T01:41:54.356Z"
+      "timestamp": "2026-02-20T20:13:27.799Z"
     },
     {
-      "description": "Ecosystem.setFeeConfigBatch() — 35 ações",
-      "txHash": "FAILED",
-      "from": "",
-      "to": "",
-      "gasUsed": "0",
-      "blockNumber": 0,
-      "status": "failed",
-      "error": "value out-of-bounds (argument=\"gasEstimate\", value=50000000000000, code=INVALID_ARGUMENT, version=6.15.0)",
+      "description": "Ecosystem.setFeeConfigBatch() — 45 ações",
+      "txHash": "0x9eb497296374c39e4218b2155beaf1d6b2bc1bae1471af8fb9490b020ecf2116",
+      "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
+      "to": "0xAfCc974E352A47E1b718d7D5a80769a51C224414",
+      "gasUsed": "1186241",
+      "blockNumber": 244164918,
+      "status": "success",
       "phase": "FASE 9b: Action Fee Configs",
-      "timestamp": "2026-02-19T01:41:55.376Z"
+      "timestamp": "2026-02-20T20:13:30.749Z"
+    },
+    {
+      "description": "Ecosystem.setBkcDistribution(500/0/9500/0)",
+      "txHash": "0x62b96369850f373e1974e6e9335859b4fb0a2ca5e7995460e329be1108fdba5a",
+      "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
+      "to": "0xAfCc974E352A47E1b718d7D5a80769a51C224414",
+      "gasUsed": "29642",
+      "blockNumber": 244164928,
+      "status": "success",
+      "phase": "FASE 9b: Action Fee Configs",
+      "timestamp": "2026-02-20T20:13:33.284Z"
+    },
+    {
+      "description": "StakingPool.setRewardNotifier(BuybackMiner, true)",
+      "txHash": "0xeede3a20a5eb7186fdf5fccb07c8aaf83236504a1b545a39c46e5c39ee04bf8c",
+      "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
+      "to": "0x21bE770e45C516d628Db1a6E4b7bDF2F2Bffbd36",
+      "gasUsed": "45637",
+      "blockNumber": 244164937,
+      "status": "success",
+      "phase": "FASE 10: StakingPool + BKCToken",
+      "timestamp": "2026-02-20T20:13:35.872Z"
+    },
+    {
+      "description": "StakingPool.setRewardNotifier(Ecosystem, true)",
+      "txHash": "0x9b9e7567f6477836e55cff85472edcdb405514d24cf97acae652cb4839785a1d",
+      "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
+      "to": "0x21bE770e45C516d628Db1a6E4b7bDF2F2Bffbd36",
+      "gasUsed": "45637",
+      "blockNumber": 244164943,
+      "status": "success",
+      "phase": "FASE 10: StakingPool + BKCToken",
+      "timestamp": "2026-02-20T20:13:38.392Z"
+    },
+    {
+      "description": "StakingPool.setRewardBooster(RewardBooster)",
+      "txHash": "0xba811adb36b71d9e61ad1ed383b55d282b6367eddf491936f2f57c0fd909b4e6",
+      "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
+      "to": "0x21bE770e45C516d628Db1a6E4b7bDF2F2Bffbd36",
+      "gasUsed": "28963",
+      "blockNumber": 244164949,
+      "status": "success",
+      "phase": "FASE 10: StakingPool + BKCToken",
+      "timestamp": "2026-02-20T20:13:40.915Z"
+    },
+    {
+      "description": "StakingPool.setDelegateForAuthorized(AirdropClaim, true)",
+      "txHash": "0x5e2725428a095a6fef4d78c32bf77e307a0413c9c7db0117b5558d002997d1e6",
+      "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
+      "to": "0x21bE770e45C516d628Db1a6E4b7bDF2F2Bffbd36",
+      "gasUsed": "46022",
+      "blockNumber": 244164952,
+      "status": "success",
+      "phase": "FASE 10: StakingPool + BKCToken",
+      "timestamp": "2026-02-20T20:13:43.446Z"
+    },
+    {
+      "description": "BKCToken.addMinter(BuybackMiner)",
+      "txHash": "0x4d160bd6e76999c37f939ff3aefa283aeacd0eee642f9e8bd51a524577519f78",
+      "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
+      "to": "0xdB8C92372CF697E6Ef61505C7bD4358a89DE0087",
+      "gasUsed": "47551",
+      "blockNumber": 244164959,
+      "status": "success",
+      "phase": "FASE 10: StakingPool + BKCToken",
+      "timestamp": "2026-02-20T20:13:46.098Z"
+    },
+    {
+      "description": "Approve BKC para FortunePool",
+      "txHash": "0x469b4e99ce36450a56e8727984c0db3ef09a6406147fa365b284e3af4b8a8df3",
+      "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
+      "to": "0xdB8C92372CF697E6Ef61505C7bD4358a89DE0087",
+      "gasUsed": "46021",
+      "blockNumber": 244164963,
+      "status": "success",
+      "phase": "FASE 11: Liquidez Inicial",
+      "timestamp": "2026-02-20T20:13:48.623Z"
+    },
+    {
+      "description": "FortunePool: 1000000.0 BKC",
+      "txHash": "0x7898afa78483731477fb98a5f4112b5cb78ac932a4827abff5f5ce6c9bb0c38c",
+      "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
+      "to": "0xE1789ae54D59CD36936E63Ef535A3CC67F11b3fD",
+      "gasUsed": "80960",
+      "blockNumber": 244164970,
+      "status": "success",
+      "phase": "FASE 11: Liquidez Inicial",
+      "timestamp": "2026-02-20T20:13:51.368Z"
+    },
+    {
+      "description": "Approve BKC para LiquidityPool",
+      "txHash": "0x0312440b4c10fa162814f54490eaa5f9e5379a87d837ca42a1ee5df8135e9a8c",
+      "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
+      "to": "0xdB8C92372CF697E6Ef61505C7bD4358a89DE0087",
+      "gasUsed": "46033",
+      "blockNumber": 244164976,
+      "status": "success",
+      "phase": "FASE 11: Liquidez Inicial",
+      "timestamp": "2026-02-20T20:13:54.035Z"
+    },
+    {
+      "description": "LiquidityPool: 4000000.0 BKC + 0.5 ETH",
+      "txHash": "0xa3e3d97ad3f5cc71bd2c314bba1103c0f5a7108cee9d2655c2eaa641e15f83b3",
+      "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
+      "to": "0x90cBcA868E476e165948D593EA3FBf47B374CD78",
+      "gasUsed": "161029",
+      "blockNumber": 244164980,
+      "status": "success",
+      "phase": "FASE 11: Liquidez Inicial",
+      "timestamp": "2026-02-20T20:13:56.557Z"
+    },
+    {
+      "description": "Approve BKC para Tutor Bonus Pool",
+      "txHash": "0x141e9ae81c2bcf9e58a99885ad7dae80ff0ad7f7f096b1dc1fd352b070fff465",
+      "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
+      "to": "0xdB8C92372CF697E6Ef61505C7bD4358a89DE0087",
+      "gasUsed": "46021",
+      "blockNumber": 244164985,
+      "status": "success",
+      "phase": "FASE 11: Liquidez Inicial",
+      "timestamp": "2026-02-20T20:13:59.093Z"
+    },
+    {
+      "description": "Ecosystem.fundTutorBonus(1000000.0 BKC)",
+      "txHash": "0x1faf3b5ced75c022cc5c61770df1a73f0dcd5d0641c83f363bd27d267f8ac775",
+      "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
+      "to": "0xAfCc974E352A47E1b718d7D5a80769a51C224414",
+      "gasUsed": "80828",
+      "blockNumber": 244164991,
+      "status": "success",
+      "phase": "FASE 11: Liquidez Inicial",
+      "timestamp": "2026-02-20T20:14:01.678Z"
+    },
+    {
+      "description": "AirdropClaim: 7000000.0 BKC (Phase 1+2)",
+      "txHash": "0x7cc5c6439b8bfd382ee9112e3baecfe35fe3ee762d086bd5aaff201647587e2a",
+      "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
+      "to": "0xdB8C92372CF697E6Ef61505C7bD4358a89DE0087",
+      "gasUsed": "51637",
+      "blockNumber": 244165000,
+      "status": "success",
+      "phase": "FASE 11: Liquidez Inicial",
+      "timestamp": "2026-02-20T20:14:04.424Z"
+    },
+    {
+      "description": "Faucet: 1.0 ETH (ETH-only, no BKC)",
+      "txHash": "0x764406a3bf0b2e8613456cdae3f6b4183bcf176ed74c15b73cb39546d52ed687",
+      "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
+      "to": "0xa5724Fae5250589b35Bcb8682dd07CCe4a2D1191",
+      "gasUsed": "22479",
+      "blockNumber": 244165022,
+      "status": "success",
+      "phase": "FASE 12: Faucet",
+      "timestamp": "2026-02-20T20:14:11.013Z"
+    },
+    {
+      "description": "Transfer 5000000.0 BKC → Treasury",
+      "txHash": "0x29839566fa3b2200b4dd68c3ec72e0bb63791d6269380c327da5605456764512",
+      "from": "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3",
+      "to": "0xdB8C92372CF697E6Ef61505C7bD4358a89DE0087",
+      "gasUsed": "46813",
+      "blockNumber": 244165034,
+      "status": "success",
+      "phase": "FASE 14: Transfer to Treasury",
+      "timestamp": "2026-02-20T20:14:17.744Z"
     }
   ],
-  "endTime": "2026-02-19T01:41:55.416Z"
+  "endTime": "2026-02-20T20:14:17.744Z"
 }
