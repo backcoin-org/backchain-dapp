@@ -400,25 +400,27 @@ function detectTutorFromURL() {
 // Tutor setup handled gaslessly by api/referral.js + app.js processTutorAfterConnect()
 
 async function loadTutorData() {
-    if (!State.isConnected || !State.userAddress) return { count: 0, tutor: null };
+    if (!State.isConnected || !State.userAddress) return { count: 0, tutor: null, pendingEth: 0n };
     try {
         const ecosystemAddr = addresses?.backchainEcosystem;
-        if (!ecosystemAddr) return { count: 0, tutor: null };
+        if (!ecosystemAddr) return { count: 0, tutor: null, pendingEth: 0n };
         const { ecosystemManagerABI } = await import('../config.js');
         const { NetworkManager } = await import('../modules/core/index.js');
         const provider = NetworkManager.getProvider();
         const eco = new ethers.Contract(ecosystemAddr, ecosystemManagerABI, provider);
-        const [count, tutor] = await Promise.all([
+        const [count, tutor, pending] = await Promise.all([
             eco.tutorCount(State.userAddress),
-            eco.tutorOf(State.userAddress)
+            eco.tutorOf(State.userAddress),
+            eco.pendingEth(State.userAddress)
         ]);
         return {
             count: Number(count),
-            tutor: tutor !== '0x0000000000000000000000000000000000000000' ? tutor : null
+            tutor: tutor !== '0x0000000000000000000000000000000000000000' ? tutor : null,
+            pendingEth: pending
         };
     } catch (e) {
         console.warn('[Tutor] Load failed:', e.message);
-        return { count: 0, tutor: null };
+        return { count: 0, tutor: null, pendingEth: 0n };
     }
 }
 
@@ -484,7 +486,12 @@ async function updateTutorWidget() {
 
     if (data.count > 0) {
         if (titleEl) titleEl.innerText = `${data.count} Student${data.count > 1 ? 's' : ''} Earning for You`;
-        if (descEl) descEl.innerText = "You earn 10% ETH on all fees + 5% BKC on staking rewards. Keep sharing!";
+        if (data.pendingEth > 0n) {
+            const pendingStr = Number(ethers.formatEther(data.pendingEth)).toFixed(6);
+            if (descEl) descEl.innerHTML = `Tutor earnings: <strong style="color:#f59e0b">${pendingStr} ETH</strong> available — <a href="#referral" style="color:#22d3ee;text-decoration:underline">withdraw</a>`;
+        } else {
+            if (descEl) descEl.innerText = "You earn 10% ETH on all fees + 5% BKC on staking rewards. Keep sharing!";
+        }
     } else {
         if (titleEl) titleEl.innerText = "Be Someone's Tutor";
         if (descEl) descEl.innerText = "Share your link. Earn 10% of all fees + 5% BKC from your students — forever.";
