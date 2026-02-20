@@ -19,8 +19,8 @@ const setCorsHeaders = (res) => {
     );
 };
 
-// --- Contract config ---
-const FAUCET_ADDRESS = '0x2483E352e276f684Be1A6a990253dE6da82c2173';
+// --- Contract config (env var overrides for each deploy) ---
+const FAUCET_ADDRESS = process.env.FAUCET_CONTRACT_ADDRESS || '0x2483E352e276f684Be1A6a990253dE6da82c2173';
 const FAUCET_ABI = [
     'function distributeTo(address recipient) external',
     'function canClaim(address user) view returns (bool)',

@@ -21,10 +21,9 @@ const setCorsHeaders = (res) => {
     );
 };
 
-// --- Contract config ---
-// NOTE: Update these addresses after every full redeploy
-const ECOSYSTEM_ADDRESS = '0x041ebC7c2281F987739f27646CD7d9d22D0F6678';
-const FAUCET_ADDRESS = '0x2483E352e276f684Be1A6a990253dE6da82c2173';
+// --- Contract config (env var overrides for each deploy) ---
+const ECOSYSTEM_ADDRESS = process.env.ECOSYSTEM_CONTRACT_ADDRESS || '0x0c36eA7F304c50443BcF6e54C13B903277408C06';
+const FAUCET_ADDRESS = process.env.FAUCET_CONTRACT_ADDRESS || '0x2483E352e276f684Be1A6a990253dE6da82c2173';
 
 const ECOSYSTEM_ABI = [
     'function setTutorFor(address _user, address _tutor) external',

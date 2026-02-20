@@ -16,8 +16,10 @@ const TS = {
     tutorCount: 0,
     tutor: null,
     tutorLink: '',
+    pendingEth: 0n,
     isLoading: false,
     isChangingTutor: false,
+    isWithdrawing: false,
 };
 
 // ============================================================================
@@ -71,12 +73,14 @@ async function loadTutorData() {
     try {
         const provider = NetworkManager.getProvider();
         const eco = new ethers.Contract(addresses.backchainEcosystem, ecosystemManagerABI, provider);
-        const [count, tutor] = await Promise.all([
+        const [count, tutor, pending] = await Promise.all([
             eco.tutorCount(State.userAddress),
-            eco.tutorOf(State.userAddress)
+            eco.tutorOf(State.userAddress),
+            eco.pendingEth(State.userAddress)
         ]);
         TS.tutorCount = Number(count);
         TS.tutor = tutor !== ethers.ZeroAddress ? tutor : null;
+        TS.pendingEth = pending;
         TS.tutorLink = `${window.location.origin}/#dashboard?ref=${State.userAddress}`;
     } catch (e) {
         console.warn('[Tutor] Load failed:', e.message);
@@ -163,6 +167,38 @@ function render(isActive) {
                 <div class="text-xs text-zinc-400">Status</div>
             </div>
         </div>
+
+        <!-- ====== TUTOR EARNINGS ====== -->
+        ${isConnected ? `
+        <div class="mb-8">
+            <div class="bg-gradient-to-r from-amber-900/20 to-zinc-800/40 border border-amber-500/30 rounded-2xl p-5 sm:p-6">
+                <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-wallet text-amber-400"></i> Your Earnings
+                </h2>
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <div class="text-3xl font-extrabold text-amber-400 mb-1" id="tutor-pending-eth">${ethers.formatEther(TS.pendingEth)} ETH</div>
+                        <div class="text-xs text-zinc-400">Accumulated from student activity</div>
+                    </div>
+                    <button id="tutor-withdraw-btn" class="shrink-0 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl px-5 py-3 text-sm hover:shadow-lg hover:shadow-amber-500/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                        ${TS.pendingEth === 0n ? 'disabled' : ''}>
+                        <i class="fa-solid fa-arrow-right-from-bracket mr-1"></i> Withdraw
+                    </button>
+                </div>
+                ${TS.pendingEth === 0n && TS.tutorCount === 0 ? `
+                <div class="bg-black/20 rounded-xl p-3 flex items-start gap-2">
+                    <i class="fa-solid fa-circle-info text-zinc-500 mt-0.5 text-xs"></i>
+                    <p class="text-zinc-500 text-xs">Share your tutor link to start earning. You'll receive a cut of every fee your students pay.</p>
+                </div>
+                ` : TS.pendingEth === 0n ? `
+                <div class="bg-black/20 rounded-xl p-3 flex items-start gap-2">
+                    <i class="fa-solid fa-circle-info text-zinc-500 mt-0.5 text-xs"></i>
+                    <p class="text-zinc-500 text-xs">Your students haven't generated fees yet. Earnings appear here automatically as they use the protocol.</p>
+                </div>
+                ` : ''}
+            </div>
+        </div>
+        ` : ''}
 
         <!-- ====== HOW IT WORKS — Visual Steps ====== -->
         <div class="mb-8">
@@ -526,6 +562,7 @@ function setupEventListeners() {
         if (target.closest('#tutor-share-whatsapp')) { shareWhatsApp(); return; }
         if (target.closest('#tutor-share-native')) { shareNative(); return; }
         if (target.closest('#tutor-set-btn')) { handleSetTutor(); return; }
+        if (target.closest('#tutor-withdraw-btn')) { handleWithdrawEth(); return; }
     });
 }
 
@@ -582,6 +619,43 @@ async function handleSetTutor() {
 
     btn.disabled = false;
     btn.innerHTML = '<i class="fa-solid fa-graduation-cap mr-1"></i> Set';
+}
+
+// ============================================================================
+// WITHDRAW ETH EARNINGS
+// ============================================================================
+async function handleWithdrawEth() {
+    if (TS.pendingEth === 0n) { showToast('No earnings to withdraw', 'info'); return; }
+    if (TS.isWithdrawing) return;
+
+    const btn = document.getElementById('tutor-withdraw-btn');
+    TS.isWithdrawing = true;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Withdrawing...';
+    }
+
+    try {
+        const signer = await new ethers.BrowserProvider(window.ethereum).getSigner();
+        const eco = new ethers.Contract(addresses.backchainEcosystem, ecosystemManagerABI, signer);
+        const tx = await eco.withdrawEth();
+        await tx.wait();
+
+        const amount = ethers.formatEther(TS.pendingEth);
+        TS.pendingEth = 0n;
+        showToast(`Withdrew ${amount} ETH!`, 'success');
+
+        const pendingEl = document.getElementById('tutor-pending-eth');
+        if (pendingEl) pendingEl.textContent = '0.0 ETH';
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Withdrawn!'; }
+    } catch (e) {
+        console.error('[Tutor] Withdraw failed:', e);
+        const msg = e.reason || e.message || 'Withdraw failed';
+        showToast(msg.includes('user rejected') ? 'Transaction cancelled' : msg, 'error');
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-arrow-right-from-bracket mr-1"></i> Withdraw'; }
+    }
+
+    TS.isWithdrawing = false;
 }
 
 // ============================================================================
