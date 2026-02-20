@@ -210,6 +210,16 @@ export {
     getVersion as backchatGetVersion
 } from './agora-tx.js';
 
+// AirdropClaim (Merkle-based token distribution + auto-staking)
+export {
+    AirdropClaimTx,
+    claimAirdrop,
+    getClaimInfo as airdropGetClaimInfo,
+    verifyProof as airdropVerifyProof,
+    getAirdropStats,
+    getMerkleProof
+} from './airdrop-claim-tx.js';
+
 // ============================================================================
 // CONVENIENCE OBJECT
 // ============================================================================
@@ -227,7 +237,8 @@ export const Transactions = {
     Faucet: (async () => (await import('./faucet-tx.js')).FaucetTx)(),
     Fusion: (async () => (await import('./fusion-tx.js')).FusionTx)(),
     Buyback: (async () => (await import('./buyback-tx.js')).BuybackTx)(),
-    Agora: (async () => (await import('./agora-tx.js')).BackchatTx)()
+    Agora: (async () => (await import('./agora-tx.js')).BackchatTx)(),
+    AirdropClaim: (async () => (await import('./airdrop-claim-tx.js')).AirdropClaimTx)()
 };
 
 export default Transactions;

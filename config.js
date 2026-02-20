@@ -308,6 +308,7 @@ export async function loadAddresses() {
         addresses.faucet = json.faucet || json.simpleBkcFaucet;
         addresses.backchainGovernance = json.backchainGovernance;
         addresses.nftFusion = json.nftFusion;
+        addresses.airdropClaim = json.airdropClaim;
         addresses.treasuryWallet = json.treasuryWallet;
 
         // Pool address (single Bronze pool — V3 on-demand minting)
@@ -916,6 +917,31 @@ export const agoraABI = [
     "event ProfileBoosted(address indexed user, uint256 daysAdded, uint64 expiresAt, address operator)",
     "event BadgeObtained(address indexed user, uint8 tier, uint64 expiresAt, address operator)",
     "event BatchExecuted(address indexed user, uint256 attempted, uint256 succeeded, address operator)"
+];
+
+// AirdropClaim — Merkle-based token distribution with auto-staking
+export const airdropClaimABI = [
+    // Write
+    "function claim(uint256 amount, bytes32[] merkleProof, address operator) external payable",
+
+    // Read — User
+    "function hasClaimed(address user) view returns (bool)",
+    "function getClaimInfo(address user) view returns (bool claimed, uint256 claimFee, uint256 lockDays, uint256 phase)",
+    "function verifyProof(address user, uint256 amount, bytes32[] merkleProof) view returns (bool)",
+
+    // Read — Global
+    "function availableBalance() view returns (uint256)",
+    "function currentPhase() view returns (uint256)",
+    "function totalClaimed() view returns (uint256)",
+    "function totalClaimCount() view returns (uint256)",
+    "function merkleRoot() view returns (bytes32)",
+    "function claimFee() view returns (uint256)",
+    "function lockDays() view returns (uint256)",
+    "function claimDeadline() view returns (uint256)",
+
+    // Events
+    "event Claimed(address indexed user, uint256 indexed phase, uint256 amount, uint256 feePaid, address operator)",
+    "event PhaseStarted(uint256 indexed phase, bytes32 merkleRoot, uint256 claimDeadline)"
 ];
 
 // Campaign Status Enum (V9: ACTIVE → CLOSED → WITHDRAWN)

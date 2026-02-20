@@ -7,6 +7,7 @@ import { showToast, closeModal, openModal } from '../ui-feedback.js';
 import { formatAddress, renderNoData, formatBigNumber, renderLoading, renderError } from '../utils.js';
 import { NetworkManager } from '../modules/core/index.js';
 import { addresses, contractAddresses, agoraABI } from '../config.js';
+import { AirdropClaimTx } from '../modules/transactions/airdrop-claim-tx.js';
 
 // ==========================================================
 //  1. CONSTANTES E HELPERS
@@ -111,7 +112,11 @@ let airdropState = {
     // Agora integration
     agoraHasProfile: false,
     agoraUsername: null,
-    agoraPosts: []
+    agoraPosts: [],
+    // On-chain claim
+    claimInfo: null,     // { claimed, claimFee, lockDays, phase, isActive, availableBalance, ... }
+    claimProof: null,    // { amount, proof } from merkle tree
+    claimLoading: false
 };
 
 // ==========================================================
@@ -433,6 +438,28 @@ async function loadAgoraData() {
     }
 }
 
+// --- On-Chain Claim Data ---
+async function loadClaimData() {
+    airdropState.claimInfo = null;
+    airdropState.claimProof = null;
+
+    if (!State.isConnected || !State.userAddress) return;
+    if (!AirdropClaimTx.getAirdropClaimAddress()) return;
+
+    try {
+        const info = await AirdropClaimTx.getClaimInfo(State.userAddress);
+        airdropState.claimInfo = info;
+
+        // If active phase and not yet claimed, try to fetch proof
+        if (info && info.isActive && !info.claimed) {
+            const proof = await AirdropClaimTx.getMerkleProof(State.userAddress, info.phase);
+            airdropState.claimProof = proof;
+        }
+    } catch (e) {
+        console.warn('[Airdrop] Claim data load failed:', e.message);
+    }
+}
+
 // =======================================================
 //  4. COMPONENTES DE RENDERIZACAO (UI) — V6.0 REDESIGN
 // =======================================================
@@ -550,6 +577,128 @@ function renderHeader() {
 //  EARN TAB — Single scrollable page, no sub-tabs
 // =======================================================
 
+// --- ON-CHAIN CLAIM SECTION ---
+function renderClaimSection() {
+    const info = airdropState.claimInfo;
+    if (!info) return ''; // Contract not configured or load failed
+
+    const ethers = window.ethers;
+
+    // Phase not active — no merkle root set
+    if (!info.isActive) {
+        return `
+            <div class="bg-gradient-to-br from-emerald-900/20 to-zinc-900/80 border border-emerald-500/20 rounded-2xl p-4 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+                <div class="flex items-center gap-3 mb-2">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                        <i class="fa-solid fa-gift text-emerald-400"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-white">Token Claim</h3>
+                        <p class="text-zinc-500 text-[10px]">Phase ${info.phase || 0} completed</p>
+                    </div>
+                </div>
+                <div class="bg-zinc-800/50 rounded-xl p-3 text-center">
+                    <p class="text-zinc-400 text-xs">No active claim phase right now</p>
+                    <p class="text-zinc-600 text-[10px] mt-1">Next phase will be announced on Telegram</p>
+                </div>
+                ${info.totalClaimCount > 0 ? `
+                <div class="flex items-center justify-center gap-4 mt-3 text-[10px] text-zinc-500">
+                    <span>${info.totalClaimCount} claims</span>
+                    <span>${Number(ethers.formatEther(info.totalClaimed)).toLocaleString()} BKC distributed</span>
+                </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    // Already claimed this phase
+    if (info.claimed) {
+        return `
+            <div class="bg-gradient-to-br from-emerald-900/20 to-zinc-900/80 border border-emerald-500/30 rounded-2xl p-4 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+                <div class="flex items-center gap-3 mb-2">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                        <i class="fa-solid fa-check-circle text-emerald-400"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-white">Phase ${info.phase} Claimed</h3>
+                        <p class="text-emerald-400 text-[10px]">Tokens auto-staked for ${info.lockDays} days</p>
+                    </div>
+                </div>
+                <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-center">
+                    <p class="text-emerald-300 text-xs font-medium">You've already claimed your allocation!</p>
+                    <p class="text-zinc-500 text-[10px] mt-1">Tokens are earning staking rewards</p>
+                </div>
+            </div>
+        `;
+    }
+
+    // Active phase, not claimed — check if user has proof
+    const proof = airdropState.claimProof;
+    const availableBKC = Number(ethers.formatEther(info.availableBalance)).toLocaleString();
+
+    if (!proof) {
+        // User not on the merkle tree for this phase
+        return `
+            <div class="bg-gradient-to-br from-emerald-900/20 to-zinc-900/80 border border-emerald-500/20 rounded-2xl p-4 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+                <div class="flex items-center gap-3 mb-2">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center airdrop-pulse-glow">
+                        <i class="fa-solid fa-gift text-emerald-400"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-white">Phase ${info.phase} Active</h3>
+                        <p class="text-emerald-400 text-[10px]">${availableBKC} BKC available</p>
+                    </div>
+                </div>
+                <div class="bg-zinc-800/50 rounded-xl p-3 text-center">
+                    <p class="text-zinc-400 text-xs">Your wallet is not eligible for this phase</p>
+                    <p class="text-zinc-600 text-[10px] mt-1">Keep earning points — higher ranks qualify for future phases!</p>
+                </div>
+            </div>
+        `;
+    }
+
+    // User IS eligible — show claim button
+    const claimAmountFormatted = Number(ethers.formatEther(proof.amount)).toLocaleString();
+    const isSubmitting = airdropState.claimLoading;
+
+    return `
+        <div class="bg-gradient-to-br from-emerald-900/30 to-zinc-900/80 border border-emerald-500/40 rounded-2xl p-4 relative overflow-hidden airdrop-pulse-glow">
+            <div class="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                    <i class="fa-solid fa-gift text-emerald-400 airdrop-bounce"></i>
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-white">Phase ${info.phase} — Claim Available!</h3>
+                    <p class="text-emerald-400 text-[10px]">Your allocation is ready</p>
+                </div>
+            </div>
+
+            <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 text-center mb-3">
+                <p class="text-zinc-400 text-[10px] uppercase tracking-wider mb-1">Your Allocation</p>
+                <p class="text-2xl font-black text-emerald-300">${claimAmountFormatted} <span class="text-sm text-emerald-500">BKC</span></p>
+                <p class="text-zinc-500 text-[10px] mt-1">Auto-staked for ${info.lockDays} days</p>
+            </div>
+
+            <button id="claim-airdrop-btn"
+                    class="w-full cta-mega text-black font-bold py-3 rounded-xl text-sm transition-all ${isSubmitting ? 'opacity-60 cursor-not-allowed' : ''}"
+                    ${isSubmitting ? 'disabled' : ''}>
+                ${isSubmitting
+                    ? '<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Claiming...'
+                    : '<i class="fa-solid fa-rocket mr-2"></i> Claim & Auto-Stake'
+                }
+            </button>
+
+            <p class="text-zinc-600 text-[10px] mt-2 text-center">
+                <i class="fa-solid fa-lock mr-1"></i> Tokens are locked for ${info.lockDays} days while earning staking rewards
+            </p>
+        </div>
+    `;
+}
+
 function renderEarnTab() {
     if (!airdropState.isConnected) {
         return `
@@ -572,6 +721,7 @@ function renderEarnTab() {
 
     return `
         <div class="px-4 space-y-4 airdrop-fade-up pb-24">
+            ${renderClaimSection()}
             ${renderActionRequiredBanner()}
             ${renderYourRankSnippet()}
             ${renderPostSection()}
@@ -1506,6 +1656,37 @@ async function handleTaskClick(e) {
     } catch (err) { if(!err.message.includes("Cooldown")) showToast(err.message, "error"); }
 }
 
+async function handleClaimAirdrop() {
+    const info = airdropState.claimInfo;
+    const proof = airdropState.claimProof;
+    if (!info || !proof || info.claimed || !info.isActive) return;
+
+    airdropState.claimLoading = true;
+    updateContent();
+
+    try {
+        await AirdropClaimTx.claimAirdrop({
+            amount: proof.amount,
+            merkleProof: proof.proof,
+            button: document.getElementById('claim-airdrop-btn'),
+            onSuccess: async () => {
+                airdropState.claimLoading = false;
+                // Reload claim data to reflect claimed status
+                await loadClaimData();
+                updateContent();
+            },
+            onError: () => {
+                airdropState.claimLoading = false;
+                updateContent();
+            }
+        });
+    } catch (e) {
+        console.error('[Airdrop] Claim error:', e);
+        airdropState.claimLoading = false;
+        updateContent();
+    }
+}
+
 function checkAndShowVerificationModal() {
     const readyToVerify = getActionRequiredItems();
 
@@ -1563,7 +1744,7 @@ export const AirdropPage = {
         try {
             const minLoadingTime = new Promise(resolve => setTimeout(resolve, 1500));
 
-            await Promise.all([loadAirdropData(), loadAgoraData(), minLoadingTime]);
+            await Promise.all([loadAirdropData(), loadAgoraData(), loadClaimData(), minLoadingTime]);
 
             const loader = document.getElementById('loading-state');
             const mainArea = document.getElementById('airdrop-main');
@@ -1603,6 +1784,7 @@ export const AirdropPage = {
             if(e.target.closest('.nav-pill-btn')) handleTabSwitch(e);
             if(e.target.closest('#history-toggle-btn')) handleHistoryToggle();
             if(e.target.closest('#action-required-btn')) handleActionRequiredClick();
+            if(e.target.closest('#claim-airdrop-btn')) handleClaimAirdrop();
             if(e.target.closest('#rank-snippet-btn')) { airdropState.activeTab = 'ranking'; updateContent(); }
 
             // Navigate to Agora
