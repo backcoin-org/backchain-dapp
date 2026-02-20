@@ -840,6 +840,9 @@ export const agoraABI = [
     "function blockUser(address user) external",
     "function unblockUser(address user) external",
 
+    // ── Batch Actions (V3: cart system) ──
+    "function batchActions(tuple(uint8 actionType, uint256 targetId)[] actions, address operator) external payable",
+
     // ── Reports ──
     "function reportPost(uint256 postId, uint8 category, address operator) external payable",
     "function hasReported(uint256 postId, address user) view returns (bool)",
@@ -911,7 +914,8 @@ export const agoraABI = [
     "event ProfileUpdated(address indexed user, string metadataURI)",
     "event PostPinned(address indexed user, uint256 indexed postId)",
     "event ProfileBoosted(address indexed user, uint256 daysAdded, uint64 expiresAt, address operator)",
-    "event BadgeObtained(address indexed user, uint8 tier, uint64 expiresAt, address operator)"
+    "event BadgeObtained(address indexed user, uint8 tier, uint64 expiresAt, address operator)",
+    "event BatchExecuted(address indexed user, uint256 attempted, uint256 succeeded, address operator)"
 ];
 
 // Campaign Status Enum (V9: ACTIVE → CLOSED → WITHDRAWN)

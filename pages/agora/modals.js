@@ -47,8 +47,7 @@ export function renderModals() {
                     <button class="bc-modal-x" onclick="AgoraPage.closeModal('downvote')"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="bc-modal-inner">
-                    <p class="bc-modal-desc">Downvote this post. You can only downvote each post once. A small ecosystem fee applies.</p>
-                    <div class="bc-fee-row"><span class="bc-fee-label">Fee</span><span class="bc-fee-val">~${formatETH(BC.fees.downvote)} BNB</span></div>
+                    <p class="bc-modal-desc">Downvote this post. You can only downvote each post once.</p>
                     <button class="bc-btn bc-btn-outline" style="width:100%;margin-top:20px;justify-content:center;border-color:var(--bc-purple);color:var(--bc-purple);" onclick="AgoraPage.confirmDownvote()"><i class="fa-solid fa-arrow-down"></i> Downvote</button>
                 </div>
             </div>

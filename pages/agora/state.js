@@ -137,6 +137,10 @@ export const BC = {
     liveViewerCount: 0,
     activeRooms: new Map(),
     watchingStreamId: null,
+    // Action Cart (batch actions)
+    actionCart: [],        // { type: 'like'|'follow'|'downvote', targetId, label }
+    cartVisible: false,
+    cartSubmitting: false,
     // Render callback — set by AgoraPage.js orchestrator
     _render: () => {}
 };

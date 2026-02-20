@@ -182,6 +182,7 @@ export {
     downvote,
     follow,
     unfollow,
+    batchActions,
     blockUser,
     unblockUser,
     deletePost,

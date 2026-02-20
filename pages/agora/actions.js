@@ -146,23 +146,22 @@ export async function doLike(postId) {
         showToast('You can\'t like your own post', 'error');
         return;
     }
+    // Check if already in cart
+    if (BC.actionCart.some(a => a.type === 'like' && String(a.targetId) === String(postId))) {
+        showToast('Already in cart', 'info');
+        return;
+    }
     // Optimistic UI
     if (myAddr) {
         if (!BC.likesMap.has(postId)) BC.likesMap.set(postId, new Set());
         BC.likesMap.get(postId).add(myAddr);
-        BC._render();
     }
-    await BackchatTx.like({
-        postId,
-        operator: getOperatorAddress(),
-        onSuccess: () => showToast('Liked!', 'success'),
-        onError: (err) => {
-            console.error('[Agora] Like failed:', err);
-            showToast('Like failed — check console for details', 'error');
-            BC.likesMap.get(postId)?.delete(myAddr);
-            BC._render();
-        }
-    });
+    // Add to cart
+    const postLabel = `Post #${postId}`;
+    BC.actionCart.push({ type: 'like', targetId: String(postId), label: postLabel });
+    _saveCart();
+    showToast('Like added to cart', 'success');
+    BC._render();
 }
 
 export async function doSuperLike(postId, amount) {
@@ -178,17 +177,23 @@ export async function doSuperLike(postId, amount) {
 }
 
 export async function doDownvote(postId) {
-    await BackchatTx.downvote({
-        postId,
-        operator: getOperatorAddress(),
-        onSuccess: async () => {
-            showToast('Downvoted', 'success');
-            await loadPosts();
-        },
-        onError: (err) => {
-            showToast(err?.shortMessage || err?.message || 'Downvote failed', 'error');
-        }
-    });
+    const myAddr = State.userAddress?.toLowerCase();
+    const post = BC.postsById.get(postId);
+    if (post && post.author?.toLowerCase() === myAddr) {
+        showToast('You can\'t downvote your own post', 'error');
+        return;
+    }
+    // Check if already in cart
+    if (BC.actionCart.some(a => a.type === 'downvote' && String(a.targetId) === String(postId))) {
+        showToast('Already in cart', 'info');
+        return;
+    }
+    // Add to cart
+    const postLabel = `Post #${postId}`;
+    BC.actionCart.push({ type: 'downvote', targetId: String(postId), label: postLabel });
+    _saveCart();
+    showToast('Downvote added to cart', 'success');
+    BC._render();
 }
 
 export async function doDeletePost(postId) {
@@ -262,15 +267,24 @@ export async function doPinPost(postId) {
 }
 
 export async function doFollow(address) {
-    await BackchatTx.follow({
-        toFollow: address,
-        operator: getOperatorAddress(),
-        onSuccess: () => {
-            BC.following.add(address.toLowerCase());
-            showToast('Followed!', 'success');
-            BC._render();
-        }
-    });
+    const myAddr = State.userAddress?.toLowerCase();
+    if (address.toLowerCase() === myAddr) {
+        showToast('You can\'t follow yourself', 'error');
+        return;
+    }
+    // Check if already in cart
+    if (BC.actionCart.some(a => a.type === 'follow' && a.targetId.toLowerCase() === address.toLowerCase())) {
+        showToast('Already in cart', 'info');
+        return;
+    }
+    // Optimistic UI
+    BC.following.add(address.toLowerCase());
+    // Add to cart
+    const name = getProfileName(address);
+    BC.actionCart.push({ type: 'follow', targetId: address, label: name });
+    _saveCart();
+    showToast('Follow added to cart', 'success');
+    BC._render();
 }
 
 export async function doUnfollow(address) {
@@ -751,6 +765,128 @@ async function _uploadVOD() {
         _recordedChunks = [];
         _mediaRecorder = null;
     }
+}
+
+// ============================================================================
+// ACTION CART
+// ============================================================================
+
+const CART_STORAGE_KEY = 'agora_action_cart';
+
+function _saveCart() {
+    try {
+        localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(BC.actionCart));
+    } catch (_) {}
+}
+
+export function restoreCart() {
+    try {
+        const saved = localStorage.getItem(CART_STORAGE_KEY);
+        if (!saved) return;
+        const items = JSON.parse(saved);
+        if (!Array.isArray(items) || items.length === 0) return;
+        BC.actionCart = items;
+        // Re-apply optimistic UI
+        const myAddr = State.userAddress?.toLowerCase();
+        if (myAddr) {
+            for (const item of items) {
+                if (item.type === 'like') {
+                    const postId = item.targetId;
+                    if (!BC.likesMap.has(postId)) BC.likesMap.set(postId, new Set());
+                    BC.likesMap.get(postId).add(myAddr);
+                } else if (item.type === 'follow') {
+                    BC.following.add(item.targetId.toLowerCase());
+                }
+            }
+        }
+    } catch (_) {}
+}
+
+export function removeFromCart(index) {
+    const item = BC.actionCart[index];
+    if (!item) return;
+    const myAddr = State.userAddress?.toLowerCase();
+    // Revert optimistic UI
+    if (item.type === 'like' && myAddr) {
+        BC.likesMap.get(item.targetId)?.delete(myAddr);
+    } else if (item.type === 'follow' && myAddr) {
+        BC.following.delete(item.targetId.toLowerCase());
+    }
+    BC.actionCart.splice(index, 1);
+    _saveCart();
+    if (BC.actionCart.length === 0) BC.cartVisible = false;
+    BC._render();
+}
+
+export function clearCart() {
+    const myAddr = State.userAddress?.toLowerCase();
+    // Revert all optimistic UI
+    if (myAddr) {
+        for (const item of BC.actionCart) {
+            if (item.type === 'like') {
+                BC.likesMap.get(item.targetId)?.delete(myAddr);
+            } else if (item.type === 'follow') {
+                BC.following.delete(item.targetId.toLowerCase());
+            }
+        }
+    }
+    BC.actionCart = [];
+    BC.cartVisible = false;
+    _saveCart();
+    showToast('Cart cleared', 'info');
+    BC._render();
+}
+
+export function toggleCart() {
+    BC.cartVisible = !BC.cartVisible;
+    BC._render();
+}
+
+export function getCartFeeTotal() {
+    const ethers = window.ethers;
+    let likes = 0, follows = 0, downvotes = 0;
+    for (const item of BC.actionCart) {
+        if (item.type === 'like') likes++;
+        else if (item.type === 'follow') follows++;
+        else if (item.type === 'downvote') downvotes++;
+    }
+    const total = BC.fees.like * BigInt(likes) + BC.fees.follow * BigInt(follows) + BC.fees.downvote * BigInt(downvotes);
+    return { total, formatted: ethers.formatEther(total), likes, follows, downvotes };
+}
+
+export async function submitCart() {
+    if (BC.actionCart.length === 0) { showToast('Cart is empty', 'info'); return; }
+    if (BC.cartSubmitting) return;
+
+    BC.cartSubmitting = true;
+    BC._render();
+
+    const { total } = getCartFeeTotal();
+    const items = [...BC.actionCart];
+
+    await BackchatTx.batchActions({
+        actions: items,
+        totalFee: total,
+        operator: getOperatorAddress(),
+        onSuccess: async () => {
+            BC.actionCart = [];
+            BC.cartVisible = false;
+            BC.cartSubmitting = false;
+            _saveCart();
+            showToast(`${items.length} actions registered on blockchain!`, 'success');
+            await loadPosts();
+            BC._render();
+        },
+        onError: (err) => {
+            console.error('[Agora] Batch failed:', err);
+            BC.cartSubmitting = false;
+            showToast(err?.shortMessage || err?.message || 'Batch transaction failed', 'error');
+            BC._render();
+        }
+    });
+
+    BC.cartSubmitting = false;
+    BC._render();
 }
 
 // ============================================================================

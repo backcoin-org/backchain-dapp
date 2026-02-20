@@ -581,7 +581,48 @@ export async function tipPost({
 }
 
 // ============================================================================
-// 8. READ FUNCTIONS
+// 8. BATCH ACTIONS (Cart System)
+// ============================================================================
+
+/**
+ * V3: Execute multiple likes/follows/downvotes in a single transaction.
+ * @param {Array} actions - [{ type: 'like'|'follow'|'downvote', targetId }]
+ * @param {BigInt} totalFee - Pre-calculated total ETH fee
+ */
+export async function batchActions({
+    actions, totalFee, operator,
+    button = null, onSuccess = null, onError = null
+}) {
+    let storedOperator = operator;
+
+    // Map to contract format: actionType 1=like, 2=follow, 3=downvote
+    const TYPE_MAP = { like: 1, follow: 2, downvote: 3 };
+    const contractActions = actions.map(a => ({
+        actionType: TYPE_MAP[a.type],
+        targetId: a.type === 'follow'
+            ? BigInt(a.targetId)  // address → uint256
+            : BigInt(a.targetId)  // postId → uint256
+    }));
+
+    return await txEngine.execute({
+        name: 'BatchActions', button,
+        skipSimulation: true,
+        fixedGasLimit: 300000n + 150000n * BigInt(actions.length),
+        getContract: async (signer) => getAgoraContract(signer),
+        method: 'batchActions',
+        args: () => [contractActions, resolveOperator(storedOperator)],
+        value: totalFee,
+
+        validate: async () => {
+            if (!actions || actions.length === 0) throw new Error('No actions to submit');
+            if (actions.length > 50) throw new Error('Max 50 actions per batch');
+        },
+        onSuccess, onError
+    });
+}
+
+// ============================================================================
+// 9. READ FUNCTIONS
 // ============================================================================
 
 export async function getUsernamePrice(length) {
@@ -781,6 +822,8 @@ export const BackchatTx = {
     createPost, createReply, createRepost, editPost, deletePost, pinPost, changeTag,
     // Engagement
     like, superLike, downvote, follow, unfollow,
+    // Batch (Cart System)
+    batchActions,
     // Social (V3)
     blockUser, unblockUser,
     // Reports, Boosts, Tips

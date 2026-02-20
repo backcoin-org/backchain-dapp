@@ -7,7 +7,7 @@ import { BC, getMaxContent } from './state.js';
 import { getProfileName, getInitials } from './utils.js';
 import { injectStyles } from './styles.js';
 import { loadFees, loadUserStatus, loadGlobalStats, loadProfiles, loadPosts, loadSocialGraph, loadBlockedAuthors, loadActiveRooms } from './data-loader.js';
-import { navigateView, goBack, doCreatePost, doCreateReply, doLike, doFollow, doUnfollow, doDeletePost, doPinPost, doBlockUser, doUnblockUser, handleImageSelect, removeImage, onWizUsernameInput, doCreateProfile, goLive, endLive, watchLive, leaveLive, sharePost, closeModal, togglePostMenu, openChangeTag, selectNewTag, confirmChangeTag } from './actions.js';
+import { navigateView, goBack, doCreatePost, doCreateReply, doLike, doFollow, doUnfollow, doDeletePost, doPinPost, doBlockUser, doUnblockUser, handleImageSelect, removeImage, onWizUsernameInput, doCreateProfile, goLive, endLive, watchLive, leaveLive, sharePost, closeModal, togglePostMenu, openChangeTag, selectNewTag, confirmChangeTag, restoreCart, removeFromCart, clearCart, toggleCart, submitCart, getCartFeeTotal } from './actions.js';
 import { renderCompose } from './composer.js';
 import { renderFeed, renderDiscover, renderTagBar, renderLanguageBar, renderLiveStreamBar } from './feed.js';
 import { renderProfile, renderUserProfile, renderProfileSetup } from './profile.js';
@@ -88,10 +88,84 @@ function renderContent() {
             content = renderCompose() + renderLanguageBar() + renderTagBar() + renderFeed();
     }
     container.innerHTML = content;
+    container.style.paddingBottom = BC.actionCart.length > 0 ? '80px' : '';
+    // Update cart bar without full re-render
+    const existingCart = document.querySelector('.bc-cart-bar');
+    const cartHTML = renderCartBar();
+    if (cartHTML && !existingCart) {
+        const section = document.getElementById('agora');
+        if (section) section.insertAdjacentHTML('afterend', cartHTML);
+    } else if (existingCart) {
+        if (!cartHTML) { existingCart.remove(); }
+        else { existingCart.outerHTML = cartHTML; }
+    }
 }
 
 // Connect BC._render to renderContent so modules can trigger re-renders
 BC._render = renderContent;
+
+// ============================================================================
+// CART BAR
+// ============================================================================
+
+function renderCartBar() {
+    if (BC.actionCart.length === 0) return '';
+    const count = BC.actionCart.length;
+
+    const ICONS = { like: 'fa-heart', follow: 'fa-user-plus', downvote: 'fa-arrow-down' };
+    const ICON_CLASS = { like: 'like', follow: 'follow', downvote: 'downvote' };
+    const LABELS = { like: 'Like', follow: 'Follow', downvote: 'Downvote' };
+
+    let panelHTML = '';
+    if (BC.cartVisible) {
+        const itemsHTML = BC.actionCart.map((item, i) => `
+            <div class="bc-cart-item">
+                <div class="bc-cart-item-info">
+                    <div class="bc-cart-item-icon ${ICON_CLASS[item.type]}"><i class="fa-solid ${ICONS[item.type]}"></i></div>
+                    <div>
+                        <div class="bc-cart-item-label">${LABELS[item.type]} — ${item.label}</div>
+                        <div class="bc-cart-item-type">${item.type}</div>
+                    </div>
+                </div>
+                <button class="bc-cart-item-remove" onclick="event.stopPropagation(); AgoraPage.removeFromCart(${i})" title="Remove">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>`).join('');
+
+        panelHTML = `
+            <div class="bc-cart-panel">
+                <div class="bc-cart-header">
+                    <span class="bc-cart-title">Action Cart (${count})</span>
+                    <button class="bc-cart-clear" onclick="AgoraPage.clearCart()"><i class="fa-solid fa-trash"></i> Clear All</button>
+                </div>
+                ${itemsHTML}
+                <div class="bc-cart-footer">
+                    <div class="bc-cart-warning"><i class="fa-solid fa-circle-info"></i> Not registered on blockchain yet</div>
+                </div>
+            </div>`;
+    }
+
+    return `
+        <div class="bc-cart-bar">
+            ${BC.cartVisible ? panelHTML : ''}
+            <div class="bc-cart-summary" onclick="AgoraPage.toggleCart()">
+                <div class="bc-cart-info">
+                    <span class="bc-cart-badge">${count}</span>
+                    <span class="bc-cart-label"><strong>${count} action${count !== 1 ? 's' : ''}</strong> not on blockchain yet</span>
+                </div>
+                <div class="bc-cart-actions">
+                    <button class="bc-cart-submit-btn" onclick="event.stopPropagation(); AgoraPage.submitCart()" ${BC.cartSubmitting ? 'disabled' : ''}>
+                        ${BC.cartSubmitting
+                            ? '<i class="fa-solid fa-spinner fa-spin"></i> Registering...'
+                            : '<i class="fa-solid fa-link"></i> Register'}
+                    </button>
+                    <button class="bc-cart-toggle" onclick="event.stopPropagation(); AgoraPage.toggleCart()">
+                        <i class="fa-solid fa-chevron-${BC.cartVisible ? 'down' : 'up'}"></i>
+                    </button>
+                </div>
+            </div>
+        </div>`;
+}
 
 // ============================================================================
 // MAIN RENDER
@@ -104,8 +178,9 @@ function render() {
     section.innerHTML = `
         <div class="bc-shell">
             ${renderHeader()}
-            <div id="backchat-content"></div>
+            <div id="backchat-content" style="${BC.actionCart.length > 0 ? 'padding-bottom:80px;' : ''}"></div>
         </div>
+        ${renderCartBar()}
         ${renderModals()}`;
     renderContent();
 }
@@ -186,6 +261,8 @@ export const AgoraPage = {
             loadActiveRooms()
         ]);
         await loadBlockedAuthors();
+        restoreCart();
+        renderContent();
         checkDeepLink();
     },
 
@@ -293,6 +370,12 @@ export const AgoraPage = {
     previewAvatar,
     openEditPost,
     confirmEditPost,
+
+    // Action Cart
+    removeFromCart,
+    clearCart,
+    toggleCart,
+    submitCart,
 
     // Live streaming
     goLive,
