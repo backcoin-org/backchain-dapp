@@ -61,22 +61,22 @@ const FLAG_IMAGES = {
 
 let currentLang = 'en';
 
-// Tier definitions — match V9 contract exactly
+// Tier definitions — match V11 contract (3.2x/16x/80x, 80% EV)
 const TIERS = [
     {
-        id: 0, name: "Easy", emoji: "🍀", range: 4, multiplier: 3, chance: "25%",
+        id: 0, name: "Easy", emoji: "🍀", range: 4, multiplier: 3.2, chance: "25%",
         color: "emerald", hex: "#10b981",
         bgFrom: "from-emerald-500/20", bgTo: "to-green-600/10",
         borderColor: "border-emerald-500/50", textColor: "text-emerald-400"
     },
     {
-        id: 1, name: "Medium", emoji: "⚡", range: 20, multiplier: 15, chance: "5%",
+        id: 1, name: "Medium", emoji: "⚡", range: 20, multiplier: 16, chance: "5%",
         color: "violet", hex: "#8b5cf6",
         bgFrom: "from-violet-500/20", bgTo: "to-purple-600/10",
         borderColor: "border-violet-500/50", textColor: "text-violet-400"
     },
     {
-        id: 2, name: "Hard", emoji: "👑", range: 100, multiplier: 75, chance: "1%",
+        id: 2, name: "Hard", emoji: "👑", range: 100, multiplier: 80, chance: "1%",
         color: "amber", hex: "#f59e0b",
         bgFrom: "from-amber-500/20", bgTo: "to-orange-600/10",
         borderColor: "border-amber-500/50", textColor: "text-amber-400"
@@ -84,8 +84,8 @@ const TIERS = [
 ];
 
 // Derived constants from TIERS (not hardcoded)
-const COMBO_MAX_MULTIPLIER = TIERS.reduce((sum, t) => sum + t.multiplier, 0); // 93
-const JACKPOT_MULTIPLIER = TIERS[2].multiplier; // 75
+const COMBO_MAX_MULTIPLIER = TIERS.reduce((sum, t) => sum + t.multiplier, 0); // 99.2
+const JACKPOT_MULTIPLIER = TIERS[2].multiplier; // 80
 const JACKPOT_RANGE = TIERS[2].range; // 100
 
 // Combo win probability: chance of matching at least 1 tier
