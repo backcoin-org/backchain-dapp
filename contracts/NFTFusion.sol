@@ -113,6 +113,16 @@ contract NFTFusion is INFTFusion {
         address operator
     );
 
+    event BulkFused(
+        address indexed user,
+        uint256 inputCount,
+        uint8 sourceTier,
+        uint256 outputCount,
+        uint8 targetTier,
+        uint256 totalFee,
+        address operator
+    );
+
     // ════════════════════════════════════════════════════════════════════════
     // ERRORS
     // ════════════════════════════════════════════════════════════════════════
@@ -122,6 +132,7 @@ contract NFTFusion is INFTFusion {
     error MaxTierReached();
     error MinTierReached();
     error InvalidTargetTier();
+    error InvalidInputCount();
     error SameToken();
     error InsufficientFee();
     error Reentrancy();
@@ -202,6 +213,86 @@ contract NFTFusion is INFTFusion {
             msg.sender, tokenId1, tokenId2,
             newTokenId, sourceTier, resultTier, operator
         );
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // BULK FUSE (N → N/2^levels higher)
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Fuse multiple same-tier NFTs up to a target tier in one transaction.
+    ///         Burns all inputs, skips intermediate mints, charges ALL individual fees.
+    ///         e.g., 4 Bronze → 1 Gold (charges 2 Bronze fuse fees + 1 Silver fuse fee)
+    ///              16 Bronze → 2 Diamond (charges 8 Bronze + 4 Silver + 2 Gold fees)
+    ///
+    /// @param tokenIds   All NFTs to fuse (must all be same tier)
+    /// @param targetTier Target tier (must be > source tier, max DIAMOND)
+    /// @param operator   Frontend operator earning commission
+    /// @return newTokenIds All newly minted target-tier NFTs
+    function bulkFuse(
+        uint256[] calldata tokenIds,
+        uint8 targetTier,
+        address operator
+    ) external payable nonReentrant returns (uint256[] memory newTokenIds) {
+        uint256 inputCount = tokenIds.length;
+        if (inputCount < 2) revert InvalidInputCount();
+        if (targetTier > TIER_DIAMOND) revert MaxTierReached();
+
+        IERC721Fusion nft = IERC721Fusion(address(booster));
+
+        // Verify all tokens are owned by caller and same tier
+        uint8 sourceTier = booster.tokenTier(tokenIds[0]);
+        if (sourceTier >= targetTier) revert InvalidTargetTier();
+
+        uint8 levels = targetTier - sourceTier;
+
+        // inputCount must be divisible by 2^levels to produce whole outputs
+        uint256 divisor = 1 << levels;
+        if (inputCount % divisor != 0) revert InvalidInputCount();
+        uint256 outputCount = inputCount / divisor;
+
+        // Verify ownership and tier for all tokens, then burn
+        for (uint256 i; i < inputCount;) {
+            if (nft.ownerOf(tokenIds[i]) != msg.sender) revert NotNFTOwner();
+            if (booster.tokenTier(tokenIds[i]) != sourceTier) revert TierMismatch();
+
+            // Check for duplicate tokenIds
+            for (uint256 j; j < i;) {
+                if (tokenIds[j] == tokenIds[i]) revert SameToken();
+                unchecked { ++j; }
+            }
+
+            nft.transferFrom(msg.sender, address(this), tokenIds[i]);
+            booster.fusionBurn(tokenIds[i]);
+            unchecked { ++i; }
+        }
+
+        // Calculate total fee: sum of individual fusion fees at each level
+        uint256 totalFee = _getBulkFuseFee(sourceTier, targetTier, inputCount);
+        if (msg.value < totalFee) revert InsufficientFee();
+
+        // Mint output NFTs at target tier
+        newTokenIds = new uint256[](outputCount);
+        for (uint256 i; i < outputCount;) {
+            newTokenIds[i] = booster.fusionMint(msg.sender, targetTier);
+            unchecked { ++i; }
+        }
+
+        // Stats: count each intermediate fusion
+        for (uint8 t = sourceTier; t < targetTier;) {
+            uint256 fusionsAtLevel = inputCount / (1 << (t - sourceTier + 1));
+            totalFusions += fusionsAtLevel;
+            fusionsByTier[t] += fusionsAtLevel;
+            unchecked { ++t; }
+        }
+
+        // ETH fee to ecosystem
+        if (msg.value > 0) {
+            ecosystem.collectFee{value: msg.value}(
+                msg.sender, operator, address(0), MODULE_ID, 0
+            );
+        }
+
+        emit BulkFused(msg.sender, inputCount, sourceTier, outputCount, targetTier, totalFee, operator);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -411,6 +502,12 @@ contract NFTFusion is INFTFusion {
         } catch {}
     }
 
+    /// @notice Estimate total ETH fee for a bulk fuse operation.
+    ///         Charges individual fusion fees at each level.
+    function getBulkFuseFee(uint8 fromTier, uint8 toTier, uint256 inputCount) external view returns (uint256) {
+        return _getBulkFuseFee(fromTier, toTier, inputCount);
+    }
+
     function version() external pure returns (string memory) {
         return "3.0.0";
     }
@@ -438,6 +535,16 @@ contract NFTFusion is INFTFusion {
         for (uint8 t = sourceTier; t > targetTier;) {
             total += _getSplitFee(t);
             unchecked { --t; }
+        }
+    }
+
+    /// @dev Sum of fusion fees at each level for bulk fuse.
+    ///      e.g., 8 Bronze → Diamond: 4 fusions×Bronze fee + 2×Silver fee + 1×Gold fee
+    function _getBulkFuseFee(uint8 fromTier, uint8 toTier, uint256 inputCount) internal view returns (uint256 total) {
+        for (uint8 t = fromTier; t < toTier;) {
+            uint256 fusionsAtLevel = inputCount / (1 << (t - fromTier + 1));
+            total += _getFusionFee(t) * fusionsAtLevel;
+            unchecked { ++t; }
         }
     }
 }

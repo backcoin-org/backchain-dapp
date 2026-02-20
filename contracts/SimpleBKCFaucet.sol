@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "./IBackchain.sol";
-
 // ============================================================================
-// SIMPLE BKC FAUCET — TESTNET UTILITY
+// SIMPLE BKC FAUCET — TESTNET ETH FAUCET
 // ============================================================================
 //
-// Distributes BKC tokens + ETH to testnet users.
+// Distributes ETH to testnet users so they can interact with the ecosystem.
+// Users who want BKC can buy it on the LiquidityPool and stake.
+//
 // Two distribution modes:
 //
 //   1. Relayer mode  — relayer calls distributeTo() paying gas for the user.
@@ -26,15 +26,13 @@ contract SimpleBKCFaucet {
     // IMMUTABLE
     // ════════════════════════════════════════════════════════════════════════
 
-    IBKCToken public immutable bkcToken;
-    address   public immutable deployer;
+    address public immutable deployer;
 
     // ════════════════════════════════════════════════════════════════════════
     // CONFIG (admin-adjustable)
     // ════════════════════════════════════════════════════════════════════════
 
     address public relayer;
-    uint256 public tokensPerClaim;
     uint256 public ethPerClaim;
     uint256 public cooldown;
     bool    public paused;
@@ -46,7 +44,6 @@ contract SimpleBKCFaucet {
     mapping(address => uint256) public lastClaimTime;
     mapping(address => uint256) public claimCount;
 
-    uint256 public totalTokensDistributed;
     uint256 public totalEthDistributed;
     uint256 public totalClaims;
     uint256 public totalUniqueUsers;
@@ -57,17 +54,11 @@ contract SimpleBKCFaucet {
     // EVENTS
     // ════════════════════════════════════════════════════════════════════════
 
-    event Claimed(
-        address indexed recipient, uint256 tokens, uint256 eth,
-        address indexed via
-    );
-    event ConfigUpdated(
-        address relayer, uint256 tokensPerClaim, uint256 ethPerClaim,
-        uint256 cooldown
-    );
+    event Claimed(address indexed recipient, uint256 eth, address indexed via);
+    event ConfigUpdated(address relayer, uint256 ethPerClaim, uint256 cooldown);
     event Paused(bool isPaused);
-    event FundsDeposited(address indexed sender, uint256 eth, uint256 tokens);
-    event FundsWithdrawn(address indexed to, uint256 eth, uint256 tokens);
+    event FundsDeposited(address indexed sender, uint256 eth);
+    event FundsWithdrawn(address indexed to, uint256 eth);
 
     // ════════════════════════════════════════════════════════════════════════
     // ERRORS
@@ -78,7 +69,6 @@ contract SimpleBKCFaucet {
     error ZeroAddress();
     error FaucetPaused();
     error CooldownActive(uint256 remaining);
-    error InsufficientTokens();
     error InsufficientETH();
     error TransferFailed();
     error Reentrancy();
@@ -104,25 +94,21 @@ contract SimpleBKCFaucet {
     // ════════════════════════════════════════════════════════════════════════
 
     constructor(
-        address _bkcToken,
         address _relayer,
-        uint256 _tokensPerClaim,
         uint256 _ethPerClaim,
         uint256 _cooldown
     ) {
-        bkcToken       = IBKCToken(_bkcToken);
-        deployer       = msg.sender;
-        relayer        = _relayer;
-        tokensPerClaim = _tokensPerClaim;
-        ethPerClaim    = _ethPerClaim;
-        cooldown       = _cooldown;
+        deployer    = msg.sender;
+        relayer     = _relayer;
+        ethPerClaim = _ethPerClaim;
+        cooldown    = _cooldown;
     }
 
     // ════════════════════════════════════════════════════════════════════════
     // CLAIM — DIRECT (user pays own gas)
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Claim BKC + ETH directly. User pays gas.
+    /// @notice Claim ETH directly. User pays gas.
     function claim() external nonReentrant {
         if (paused) revert FaucetPaused();
         _distribute(msg.sender);
@@ -159,15 +145,13 @@ contract SimpleBKCFaucet {
 
     function setConfig(
         address _relayer,
-        uint256 _tokensPerClaim,
         uint256 _ethPerClaim,
         uint256 _cooldown
     ) external onlyDeployer {
-        relayer        = _relayer;
-        tokensPerClaim = _tokensPerClaim;
-        ethPerClaim    = _ethPerClaim;
-        cooldown       = _cooldown;
-        emit ConfigUpdated(_relayer, _tokensPerClaim, _ethPerClaim, _cooldown);
+        relayer     = _relayer;
+        ethPerClaim = _ethPerClaim;
+        cooldown    = _cooldown;
+        emit ConfigUpdated(_relayer, _ethPerClaim, _cooldown);
     }
 
     function setPaused(bool _paused) external onlyDeployer {
@@ -179,18 +163,16 @@ contract SimpleBKCFaucet {
         lastClaimTime[user] = 0;
     }
 
-    /// @notice Withdraw all remaining funds to deployer.
+    /// @notice Withdraw all remaining ETH to deployer.
     function withdrawAll() external onlyDeployer nonReentrant {
-        uint256 tokenBal = bkcToken.balanceOf(address(this));
-        uint256 ethBal   = address(this).balance;
+        uint256 ethBal = address(this).balance;
 
-        if (tokenBal > 0) bkcToken.transfer(deployer, tokenBal);
         if (ethBal > 0) {
             (bool ok, ) = deployer.call{value: ethBal}("");
             if (!ok) revert TransferFailed();
         }
 
-        emit FundsWithdrawn(deployer, ethBal, tokenBal);
+        emit FundsWithdrawn(deployer, ethBal);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -223,26 +205,21 @@ contract SimpleBKCFaucet {
     }
 
     function getFaucetStatus() external view returns (
-        uint256 ethBalance, uint256 tokenBalance,
-        uint256 ethPerDrip, uint256 tokensPerDrip,
-        uint256 estimatedEthClaims, uint256 estimatedTokenClaims
+        uint256 ethBalance, uint256 ethPerDrip, uint256 estimatedClaims
     ) {
-        ethBalance    = address(this).balance;
-        tokenBalance  = bkcToken.balanceOf(address(this));
-        ethPerDrip    = ethPerClaim;
-        tokensPerDrip = tokensPerClaim;
-        estimatedEthClaims   = ethPerClaim > 0 ? ethBalance / ethPerClaim : type(uint256).max;
-        estimatedTokenClaims = tokensPerClaim > 0 ? tokenBalance / tokensPerClaim : type(uint256).max;
+        ethBalance = address(this).balance;
+        ethPerDrip = ethPerClaim;
+        estimatedClaims = ethPerClaim > 0 ? ethBalance / ethPerClaim : type(uint256).max;
     }
 
     function getStats() external view returns (
-        uint256 tokens, uint256 eth, uint256 claims, uint256 users
+        uint256 eth, uint256 claims, uint256 users
     ) {
-        return (totalTokensDistributed, totalEthDistributed, totalClaims, totalUniqueUsers);
+        return (totalEthDistributed, totalClaims, totalUniqueUsers);
     }
 
     function version() external pure returns (string memory) {
-        return "1.0.0";
+        return "2.0.0";
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -254,8 +231,6 @@ contract SimpleBKCFaucet {
         if (last > 0 && (block.timestamp - last) < cooldown)
             revert CooldownActive(cooldown - (block.timestamp - last));
 
-        if (bkcToken.balanceOf(address(this)) < tokensPerClaim)
-            revert InsufficientTokens();
         if (address(this).balance < ethPerClaim)
             revert InsufficientETH();
 
@@ -263,17 +238,12 @@ contract SimpleBKCFaucet {
         lastClaimTime[recipient] = block.timestamp;
         claimCount[recipient]++;
         totalClaims++;
-        totalTokensDistributed += tokensPerClaim;
-        totalEthDistributed    += ethPerClaim;
+        totalEthDistributed += ethPerClaim;
 
-        bkcToken.transfer(recipient, tokensPerClaim);
+        (bool ok, ) = recipient.call{value: ethPerClaim}("");
+        if (!ok) revert TransferFailed();
 
-        if (ethPerClaim > 0) {
-            (bool ok, ) = recipient.call{value: ethPerClaim}("");
-            if (!ok) revert TransferFailed();
-        }
-
-        emit Claimed(recipient, tokensPerClaim, ethPerClaim, msg.sender);
+        emit Claimed(recipient, ethPerClaim, msg.sender);
     }
 
     function _canClaim(address user) internal view returns (bool) {
@@ -287,6 +257,6 @@ contract SimpleBKCFaucet {
     // ════════════════════════════════════════════════════════════════════════
 
     receive() external payable {
-        emit FundsDeposited(msg.sender, msg.value, 0);
+        emit FundsDeposited(msg.sender, msg.value);
     }
 }

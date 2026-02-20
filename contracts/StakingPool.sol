@@ -51,7 +51,7 @@ contract StakingPool is IStakingPool {
     uint256 private constant PRECISION = 1e18;
 
     // No-tutor penalty: +10% extra recycled (incentivizes having a tutor)
-    uint256 public constant NO_TUTOR_EXTRA_RECYCLE_BPS = 1000; // 10%
+    // NOTE: Moved to configurable storage variable below (noTutorExtraRecycleBps)
 
     // Lock duration limits
     uint256 public constant MIN_LOCK_DAYS = 1;
@@ -69,12 +69,13 @@ contract StakingPool is IStakingPool {
     uint256 public constant BOOST_GOLD    = 4000;
     uint256 public constant BOOST_DIAMOND = 5000;
 
-    // ── Recycle Rates per Tier (with tutor — basis points recycled to stakers) ──
-    uint256 public constant RECYCLE_RATE_NO_NFT  = 5000; // 50% (user keeps 50%)
-    uint256 public constant RECYCLE_RATE_BRONZE  = 3000; // 30% (user keeps 70%)
-    uint256 public constant RECYCLE_RATE_SILVER  = 2000; // 20% (user keeps 80%)
-    uint256 public constant RECYCLE_RATE_GOLD    = 1000; // 10% (user keeps 90%)
-    uint256 public constant RECYCLE_RATE_DIAMOND = 0;    // 0%  (user keeps 100%)
+    // ── Recycle Rates per Tier (configurable — basis points recycled to stakers) ──
+    uint16 public recycleNoNft  = 5000;  // 50% (user keeps 50%)
+    uint16 public recycleBronze = 3000;  // 30% (user keeps 70%)
+    uint16 public recycleSilver = 2000;  // 20% (user keeps 80%)
+    uint16 public recycleGold   = 1000;  // 10% (user keeps 90%)
+    uint16 public recycleDiamond = 0;    // 0%  (user keeps 100%)
+    uint16 public noTutorExtraRecycleBps = 1000; // 10% extra recycled without tutor
 
     // ════════════════════════════════════════════════════════════════════════
     // IMMUTABLE ADDRESSES
@@ -204,6 +205,8 @@ contract StakingPool is IStakingPool {
     event RewardBoosterUpdated(address indexed oldBooster, address indexed newBooster);
     event ForceUnstakeEthFeeUpdated(uint256 oldFee, uint256 newFee);
     event DelegateForAuthorizationSet(address indexed contractAddr, bool authorized);
+    event RewardsCompounded(address indexed user, uint256 netAmount, uint256 lockDays, uint256 recycledAmount, address operator);
+    event RecycleRatesUpdated(uint16[5] rates, uint16 noTutorExtra);
 
     // ════════════════════════════════════════════════════════════════════════
     // ERRORS
@@ -262,6 +265,18 @@ contract StakingPool is IStakingPool {
         if (msg.sender != deployer) revert NotAuthorized();
         isDelegateForAuthorized[_contract] = _authorized;
         emit DelegateForAuthorizationSet(_contract, _authorized);
+    }
+
+    /// @notice Update recycle rates per NFT tier + no-tutor penalty. All values in basis points.
+    function setRecycleRates(uint16[5] calldata rates, uint16 noTutorExtra) external {
+        if (msg.sender != deployer) revert NotAuthorized();
+        recycleNoNft  = rates[0];
+        recycleBronze = rates[1];
+        recycleSilver = rates[2];
+        recycleGold   = rates[3];
+        recycleDiamond = rates[4];
+        noTutorExtraRecycleBps = noTutorExtra;
+        emit RecycleRatesUpdated(rates, noTutorExtra);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -431,7 +446,7 @@ contract StakingPool is IStakingPool {
         // No-tutor penalty: +10% extra recycled
         address tutor = ecosystem.tutorOf(msg.sender);
         if (tutor == address(0)) {
-            penaltyRateBps += NO_TUTOR_EXTRA_RECYCLE_BPS;
+            penaltyRateBps += noTutorExtraRecycleBps;
             if (penaltyRateBps > BPS) penaltyRateBps = BPS;
         }
 
@@ -517,6 +532,69 @@ contract StakingPool is IStakingPool {
         _executeClaim(msg.sender, address(0));
     }
 
+    /// @notice Compound rewards: claim all pending, apply recycle, create NEW delegation.
+    ///         Instead of transferring BKC to user, auto-delegates the net amount.
+    ///
+    /// @param lockDays  Lock duration for the new compound delegation
+    /// @param operator  Frontend operator address
+    function compoundRewards(uint256 lockDays, address operator) external payable {
+        if (lockDays < MIN_LOCK_DAYS) revert LockTooShort();
+        if (lockDays > MAX_LOCK_DAYS) revert LockTooLong();
+
+        // 1. Calculate pending + update debts (same as _executeClaim)
+        uint256 totalReward = _calculateAndUpdateDebts(msg.sender) + savedRewards[msg.sender];
+        if (totalReward == 0) revert NothingToClaim();
+        savedRewards[msg.sender] = 0;
+
+        // 2. Apply recycle rate (same logic as _executeClaim)
+        uint256 nftBoost = _getUserBestBoost(msg.sender);
+        uint256 recycleRateBps = _getRecycleRateForBoost(nftBoost);
+
+        address tutor = ecosystem.tutorOf(msg.sender);
+        if (tutor == address(0)) {
+            recycleRateBps += noTutorExtraRecycleBps;
+            if (recycleRateBps > BPS) recycleRateBps = BPS;
+        }
+
+        uint256 recycleAmount = totalReward * recycleRateBps / BPS;
+        uint256 netAmount = totalReward - recycleAmount;
+        if (netAmount == 0) revert ZeroAmount();
+
+        // 3. Recycle tokens back to stakers
+        if (recycleAmount > 0 && totalPStake > 0) {
+            accRewardPerShare += recycleAmount * PRECISION / totalPStake;
+            totalRewardsDistributed += recycleAmount;
+            totalRecycledOnClaim += recycleAmount;
+        }
+
+        // 4. Create NEW delegation with net amount (tokens stay in contract)
+        uint256 pStake = _calculatePStake(netAmount, lockDays);
+        uint256 idx = _delegations[msg.sender].length;
+
+        _delegations[msg.sender].push(Delegation({
+            amount:     uint128(netAmount),
+            pStake:     uint128(pStake),
+            lockEnd:    uint64(block.timestamp + (lockDays * 1 days)),
+            lockDays:   uint64(lockDays),
+            rewardDebt: pStake * accRewardPerShare / PRECISION
+        }));
+
+        userTotalPStake[msg.sender] += pStake;
+        totalPStake += pStake;
+        totalBkcDelegated += netAmount;
+
+        // 5. ETH fee → ecosystem (optional)
+        if (msg.value > 0) {
+            ecosystem.collectFee{value: msg.value}(
+                msg.sender, operator, address(0), MODULE_ID, 0
+            );
+            totalEthFeesCollected += msg.value;
+        }
+
+        emit RewardsCompounded(msg.sender, netAmount, lockDays, recycleAmount, operator);
+        emit Delegated(msg.sender, idx, netAmount, pStake, lockDays, operator);
+    }
+
     // ════════════════════════════════════════════════════════════════════════
     // INTERNAL: EXECUTE CLAIM (V2 — Recycle + Tutor)
     // ════════════════════════════════════════════════════════════════════════
@@ -541,10 +619,10 @@ contract StakingPool is IStakingPool {
         uint256 nftBoost = _getUserBestBoost(user);
         uint256 recycleRateBps = _getRecycleRateForBoost(nftBoost);
 
-        // 3. No-tutor penalty: +10% extra recycled
+        // 3. No-tutor penalty: extra recycled (configurable)
         address tutor = ecosystem.tutorOf(user);
         if (tutor == address(0)) {
-            recycleRateBps += NO_TUTOR_EXTRA_RECYCLE_BPS;
+            recycleRateBps += noTutorExtraRecycleBps;
             if (recycleRateBps > BPS) recycleRateBps = BPS;
         }
 
@@ -617,7 +695,7 @@ contract StakingPool is IStakingPool {
         // No-tutor penalty: +10% extra recycled
         address tutor = ecosystem.tutorOf(user);
         if (tutor == address(0)) {
-            recycleRateBps += NO_TUTOR_EXTRA_RECYCLE_BPS;
+            recycleRateBps += noTutorExtraRecycleBps;
             if (recycleRateBps > BPS) recycleRateBps = BPS;
         }
 
@@ -650,7 +728,7 @@ contract StakingPool is IStakingPool {
         // No-tutor penalty: +10% extra recycled
         address tutor = ecosystem.tutorOf(user);
         if (tutor == address(0)) {
-            penaltyRateBps += NO_TUTOR_EXTRA_RECYCLE_BPS;
+            penaltyRateBps += noTutorExtraRecycleBps;
             if (penaltyRateBps > BPS) penaltyRateBps = BPS;
         }
 
@@ -705,7 +783,7 @@ contract StakingPool is IStakingPool {
     /// @notice Map a boost value to its corresponding recycle rate
     /// @param boostBps Boost in basis points (0, 1000, 2500, 4000, 5000)
     /// @return recycleRateBps Recycle rate in basis points
-    function getRecycleRateForBoost(uint256 boostBps) external pure returns (uint256) {
+    function getRecycleRateForBoost(uint256 boostBps) external view returns (uint256) {
         return _getRecycleRateForBoost(boostBps);
     }
 
@@ -821,13 +899,13 @@ contract StakingPool is IStakingPool {
         }
     }
 
-    /// @dev Map boost value to recycle rate. Uses tiered brackets.
-    function _getRecycleRateForBoost(uint256 boostBps) internal pure returns (uint256) {
-        if (boostBps >= BOOST_DIAMOND) return RECYCLE_RATE_DIAMOND; // 0%
-        if (boostBps >= BOOST_GOLD)    return RECYCLE_RATE_GOLD;    // 20%
-        if (boostBps >= BOOST_SILVER)  return RECYCLE_RATE_SILVER;  // 30%
-        if (boostBps >= BOOST_BRONZE)  return RECYCLE_RATE_BRONZE;  // 40%
-        return RECYCLE_RATE_NO_NFT;                                  // 60%
+    /// @dev Map boost value to recycle rate. Uses tiered brackets (configurable storage).
+    function _getRecycleRateForBoost(uint256 boostBps) internal view returns (uint256) {
+        if (boostBps >= BOOST_DIAMOND) return recycleDiamond;
+        if (boostBps >= BOOST_GOLD)    return recycleGold;
+        if (boostBps >= BOOST_SILVER)  return recycleSilver;
+        if (boostBps >= BOOST_BRONZE)  return recycleBronze;
+        return recycleNoNft;
     }
 
     // ════════════════════════════════════════════════════════════════════════

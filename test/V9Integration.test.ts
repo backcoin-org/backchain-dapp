@@ -146,12 +146,10 @@ async function deployAllFixture() {
   await governance.waitForDeployment();
   const govAddr = await governance.getAddress();
 
-  // ── 14. SimpleBKCFaucet ──
+  // ── 14. SimpleBKCFaucet (ETH-only) ──
   const Faucet = await ethers.getContractFactory("contracts/SimpleBKCFaucet.sol:SimpleBKCFaucet");
   const faucet = await Faucet.deploy(
-    bkcAddr,
     relayer.address,
-    ethers.parseEther("100"), // 100 BKC per claim
     ethers.parseEther("0.01"), // 0.01 ETH per claim
     3600 // 1 hour cooldown
   );
@@ -262,8 +260,7 @@ async function deployAllFixture() {
   await bkcToken.approve(lpAddr, lpBkc);
   await liquidityPool.addLiquidity(lpBkc, 0, { value: lpEth });
 
-  // ── Fund faucet ──
-  await bkcToken.connect(treasury).transfer(faucetAddr, ethers.parseEther("10000"));
+  // ── Fund faucet (ETH only) ──
   await deployer.sendTransaction({ to: faucetAddr, value: ethers.parseEther("1") });
 
   // ── Give Alice & Bob some BKC for testing ──
@@ -583,7 +580,7 @@ describe("Backchain V11 — Integration Tests", function () {
       const f = await loadFixture(deployAllFixture);
 
       // Alice sets Bob as tutor
-      await f.ecosystem.connect(f.alice).setTutor(f.bob.address, { value: ethers.parseEther("0.00002") });
+      await f.ecosystem.connect(f.alice).setTutor(f.bob.address, { value: ethers.parseEther("0.00003") });
       expect(await f.ecosystem.tutorOf(f.alice.address)).to.equal(f.bob.address);
       expect(await f.ecosystem.tutorCount(f.bob.address)).to.equal(1);
     });
@@ -591,23 +588,23 @@ describe("Backchain V11 — Integration Tests", function () {
     it("tutor cannot be self", async function () {
       const f = await loadFixture(deployAllFixture);
       await expect(
-        f.ecosystem.connect(f.alice).setTutor(f.alice.address, { value: ethers.parseEther("0.00002") })
+        f.ecosystem.connect(f.alice).setTutor(f.alice.address, { value: ethers.parseEther("0.00003") })
       ).to.be.revertedWithCustomError(f.ecosystem, "CannotTutorSelf");
     });
 
     it("tutor can be changed with higher fee", async function () {
       const f = await loadFixture(deployAllFixture);
       // First set: 0.00002 ETH
-      await f.ecosystem.connect(f.alice).setTutor(f.bob.address, { value: ethers.parseEther("0.00002") });
+      await f.ecosystem.connect(f.alice).setTutor(f.bob.address, { value: ethers.parseEther("0.00003") });
       expect(await f.ecosystem.tutorOf(f.alice.address)).to.equal(f.bob.address);
 
-      // Change with same fee reverts (need 0.0001 ETH to change)
+      // Change with same fee reverts (need 0.0002 ETH to change)
       await expect(
-        f.ecosystem.connect(f.alice).setTutor(f.charlie.address, { value: ethers.parseEther("0.00002") })
+        f.ecosystem.connect(f.alice).setTutor(f.charlie.address, { value: ethers.parseEther("0.00003") })
       ).to.be.revertedWithCustomError(f.ecosystem, "InsufficientTutorFee");
 
       // Change with correct higher fee succeeds
-      await f.ecosystem.connect(f.alice).setTutor(f.charlie.address, { value: ethers.parseEther("0.0001") });
+      await f.ecosystem.connect(f.alice).setTutor(f.charlie.address, { value: ethers.parseEther("0.0002") });
       expect(await f.ecosystem.tutorOf(f.alice.address)).to.equal(f.charlie.address);
 
       // Old tutor count decremented, new tutor count incremented
@@ -954,7 +951,7 @@ describe("Backchain V11 — Integration Tests", function () {
       await pool2.connect(f.alice).buyNFT(0, ethers.ZeroAddress);
 
       // Set Bob as tutor
-      await f.ecosystem.connect(f.alice).setTutor(f.bob.address, { value: ethers.parseEther("0.00002") });
+      await f.ecosystem.connect(f.alice).setTutor(f.bob.address, { value: ethers.parseEther("0.00003") });
 
       const stakeAmt = ethers.parseEther("1000");
       await f.bkcToken.connect(f.alice).approve(f.stakingAddr, stakeAmt);
@@ -1042,7 +1039,7 @@ describe("Backchain V11 — Integration Tests", function () {
       const f = await loadFixture(deployAllFixture);
 
       // Set Bob as Alice's tutor
-      await f.ecosystem.connect(f.alice).setTutor(f.bob.address, { value: ethers.parseEther("0.00002") });
+      await f.ecosystem.connect(f.alice).setTutor(f.bob.address, { value: ethers.parseEther("0.00003") });
 
       // Stake
       const stakeAmt = ethers.parseEther("1000");
@@ -1710,17 +1707,17 @@ describe("Backchain V11 — Integration Tests", function () {
       });
     });
 
-    describe("SimpleBKCFaucet", function () {
-      it("direct claim gives BKC + ETH", async function () {
+    describe("SimpleBKCFaucet (ETH-only)", function () {
+      it("direct claim gives ETH", async function () {
         const f = await loadFixture(deployAllFixture);
 
-        const bkcBefore = await f.bkcToken.balanceOf(f.charlie.address);
         const ethBefore = await ethers.provider.getBalance(f.charlie.address);
-
         await f.faucet.connect(f.charlie).claim();
+        const ethAfter = await ethers.provider.getBalance(f.charlie.address);
 
-        const bkcAfter = await f.bkcToken.balanceOf(f.charlie.address);
-        expect(bkcAfter - bkcBefore).to.equal(ethers.parseEther("100"));
+        // Charlie received 0.01 ETH minus gas cost, so balance should increase
+        // We just check totalEthDistributed to avoid gas cost complexity
+        expect(await f.faucet.totalEthDistributed()).to.equal(ethers.parseEther("0.01"));
       });
 
       it("cooldown prevents repeat claims", async function () {
@@ -1747,11 +1744,11 @@ describe("Backchain V11 — Integration Tests", function () {
       it("relayer distribution", async function () {
         const f = await loadFixture(deployAllFixture);
 
-        const bkcBefore = await f.bkcToken.balanceOf(f.alice.address);
+        const ethBefore = await ethers.provider.getBalance(f.alice.address);
         await f.faucet.connect(f.relayer).distributeTo(f.alice.address);
-        const bkcAfter = await f.bkcToken.balanceOf(f.alice.address);
+        const ethAfter = await ethers.provider.getBalance(f.alice.address);
 
-        expect(bkcAfter - bkcBefore).to.equal(ethers.parseEther("100"));
+        expect(ethAfter - ethBefore).to.equal(ethers.parseEther("0.01"));
       });
 
       it("non-relayer cannot distribute", async function () {
@@ -2094,7 +2091,7 @@ describe("Backchain V11 — Integration Tests", function () {
       const f = await loadFixture(deployAllFixture);
 
       // 1. Set tutor
-      await f.ecosystem.connect(f.alice).setTutor(f.charlie.address, { value: ethers.parseEther("0.00002") });
+      await f.ecosystem.connect(f.alice).setTutor(f.charlie.address, { value: ethers.parseEther("0.00003") });
 
       // 2. Stake
       const stakeAmt = ethers.parseEther("2000");
@@ -2197,7 +2194,7 @@ describe("Backchain V11 — Integration Tests", function () {
       const f = await loadFixture(deployAllFixture);
 
       // Set Charlie as Alice's tutor
-      await f.ecosystem.connect(f.alice).setTutor(f.charlie.address, { value: ethers.parseEther("0.00002") });
+      await f.ecosystem.connect(f.alice).setTutor(f.charlie.address, { value: ethers.parseEther("0.00003") });
 
       const charliePendingBefore = await f.ecosystem.pendingEth(f.charlie.address);
 
@@ -2245,7 +2242,7 @@ describe("Backchain V11 — Integration Tests", function () {
     it("tutor earns on Notary certification", async function () {
       const f = await loadFixture(deployAllFixture);
 
-      await f.ecosystem.connect(f.alice).setTutor(f.bob.address, { value: ethers.parseEther("0.00002") });
+      await f.ecosystem.connect(f.alice).setTutor(f.bob.address, { value: ethers.parseEther("0.00003") });
 
       const bobPendingBefore = await f.ecosystem.pendingEth(f.bob.address);
 
@@ -2288,7 +2285,7 @@ describe("Backchain V11 — Integration Tests", function () {
       const f = await loadFixture(deployAllFixture);
 
       // Charlie is Alice's tutor
-      await f.ecosystem.connect(f.alice).setTutor(f.charlie.address, { value: ethers.parseEther("0.00002") });
+      await f.ecosystem.connect(f.alice).setTutor(f.charlie.address, { value: ethers.parseEther("0.00003") });
 
       // 1. Alice creates Agora post → Charlie earns ETH tutor cut
       const charlieEthBefore = await f.ecosystem.pendingEth(f.charlie.address);

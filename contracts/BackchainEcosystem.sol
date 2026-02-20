@@ -80,8 +80,8 @@ contract BackchainEcosystem is IBackchainEcosystem {
     // TUTOR BKC BONUS (welcome gift for new users)
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice BKC bonus for the tutored user (default 0.1 BKC)
-    uint256 public tutorBonusAmount = 0.1e18;
+    /// @notice BKC bonus for the tutored user (default 1 BKC)
+    uint256 public tutorBonusAmount = 1e18;
 
     /// @notice BKC reserved for tutor bonuses (funded by owner/anyone)
     uint256 public tutorBonusPool;
@@ -89,11 +89,11 @@ contract BackchainEcosystem is IBackchainEcosystem {
     /// @notice Total bonuses paid out
     uint256 public tutorBonusesPaid;
 
-    /// @notice ETH fee to set tutor first time (~$0.05 anti-spam). Goes to buyback.
-    uint256 public tutorFee = 0.00002 ether;
+    /// @notice ETH fee to set tutor first time (~$0.02 anti-spam). Goes to buyback.
+    uint256 public tutorFee = 0.00003 ether;
 
-    /// @notice ETH fee to CHANGE tutor (5x higher than first-time fee)
-    uint256 public changeTutorFee = 0.0001 ether;
+    /// @notice ETH fee to CHANGE tutor (~7x higher than first-time fee)
+    uint256 public changeTutorFee = 0.0002 ether;
 
     // ════════════════════════════════════════════════════════════════════════
     // MODULE REGISTRY
@@ -136,10 +136,10 @@ contract BackchainEcosystem is IBackchainEcosystem {
     // BKC FEE DISTRIBUTION PARAMS (Tier 2 modules)
     // ════════════════════════════════════════════════════════════════════════
 
-    uint16 public bkcBurnBps     = 0;      // 0% burn (deflation via StakingPool claims)
-    uint16 public bkcOperatorBps = 1500;   // 15% to frontend operator
-    uint16 public bkcStakerBps   = 7000;   // 70% to stakers
-    uint16 public bkcTreasuryBps = 1500;   // 15% to treasury
+    uint16 public bkcBurnBps     = 500;    // 5% burn (constant deflation)
+    uint16 public bkcOperatorBps = 0;      // 0% — operators earn only BNB/ETH
+    uint16 public bkcStakerBps   = 9500;   // 95% to stakers (max incentive)
+    uint16 public bkcTreasuryBps = 0;      // 0% — treasury earns only BNB/ETH
     // must sum to BPS (10000)
 
     // ════════════════════════════════════════════════════════════════════════

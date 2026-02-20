@@ -338,7 +338,6 @@ contract Agora {
     error AlreadyReported();
     error AlreadyFollowing();
     error NotFollowing();
-    error SelfAction();
     error UsernameTaken();
     error InvalidUsername();
     error AlreadyHasProfile();
@@ -533,7 +532,6 @@ contract Agora {
     ///         Post author earns custom recipient share.
     function like(uint256 postId, address operator) external payable {
         Post storage p = _requireActivePost(postId);
-        if (p.author == msg.sender) revert SelfAction();
         if (hasLiked[postId][msg.sender]) revert AlreadyLiked();
 
         uint256 fee = ecosystem.calculateFee(ACTION_LIKE, 0);
@@ -558,7 +556,6 @@ contract Agora {
     ///         Total ETH tracked in superLikeTotal[postId].
     function superLike(uint256 postId, address operator) external payable {
         Post storage p = _requireActivePost(postId);
-        if (p.author == msg.sender) revert SelfAction();
         if (msg.value == 0) revert InvalidAmount();
 
         superLikeCount[postId]++;
@@ -576,7 +573,6 @@ contract Agora {
     ///         Negative community signal. Author earns NOTHING.
     function downvote(uint256 postId, address operator) external payable {
         Post storage p = _requireActivePost(postId);
-        if (p.author == msg.sender) revert SelfAction();
         if (hasDownvoted[postId][msg.sender]) revert AlreadyDownvoted();
 
         uint256 fee = ecosystem.calculateFee(ACTION_DOWNVOTE, 0);
@@ -602,7 +598,6 @@ contract Agora {
     /// @notice Follow a user. On-chain state + counts.
     ///         Followed user earns custom recipient share.
     function follow(address user, address operator) external payable {
-        if (user == msg.sender) revert SelfAction();
         if (isFollowing[msg.sender][user]) revert AlreadyFollowing();
 
         uint256 fee = ecosystem.calculateFee(ACTION_FOLLOW, 0);
@@ -711,7 +706,6 @@ contract Agora {
             uint256 postId = action.targetId;
             Post storage p = posts[postId];
             if (p.author == address(0) || p.deleted) return false;
-            if (p.author == msg.sender) return false;
             if (hasLiked[postId][msg.sender]) return false;
 
             hasLiked[postId][msg.sender] = true;
@@ -722,7 +716,6 @@ contract Agora {
 
         } else if (action.actionType == BATCH_FOLLOW) {
             address user = address(uint160(action.targetId));
-            if (user == msg.sender) return false;
             if (isFollowing[msg.sender][user]) return false;
 
             isFollowing[msg.sender][user] = true;
@@ -736,7 +729,6 @@ contract Agora {
             uint256 postId = action.targetId;
             Post storage p = posts[postId];
             if (p.author == address(0) || p.deleted) return false;
-            if (p.author == msg.sender) return false;
             if (hasDownvoted[postId][msg.sender]) return false;
 
             hasDownvoted[postId][msg.sender] = true;
@@ -760,7 +752,6 @@ contract Agora {
         if (msg.value < fee) revert InsufficientFee();
 
         Post storage p = _requireActivePost(postId);
-        if (p.author == msg.sender) revert SelfAction();
         if (hasReported[postId][msg.sender]) revert AlreadyReported();
 
         hasReported[postId][msg.sender] = true;
@@ -811,7 +802,6 @@ contract Agora {
     ///         Author earns via ecosystem's custom recipient share.
     function tipPost(uint256 postId, address operator) external payable {
         Post storage p = _requireActivePost(postId);
-        if (p.author == msg.sender) revert SelfAction();
         if (msg.value == 0) revert InvalidAmount();
 
         tipTotal[postId] += msg.value;

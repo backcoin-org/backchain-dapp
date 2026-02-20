@@ -15,9 +15,9 @@ import "./IBackchain.sol";
 //   3. REVEAL: Player reveals guesses + secret, contract rolls & pays
 //
 // Tiers (hardcoded):
-//   Tier 0 — range 1-4,   pays  3.2x (25% chance, 80% EV)
-//   Tier 1 — range 1-20,  pays  16x  (5% chance,  80% EV)
-//   Tier 2 — range 1-100, pays  80x  (1% chance,  80% EV)
+//   Tier 0 — range 1-5,   pays  2x   (20% chance, 40% EV)
+//   Tier 1 — range 1-10,  pays  5x   (10% chance, 50% EV)
+//   Tier 2 — range 1-150, pays  100x (0.67% chance, 66.7% EV)
 //
 // Economics:
 //   - 10% BKC fee on wager → ecosystem (stakers/treasury/operator)
@@ -488,9 +488,9 @@ contract FortunePool {
     // ════════════════════════════════════════════════════════════════════════
 
     function _tierData(uint8 tier_) internal pure returns (uint256 range, uint256 multiplierBps) {
-        if (tier_ == 0) return (4,   32_000);    // 3.2x (V3: was 3x, 80% EV)
-        if (tier_ == 1) return (20,  160_000);   // 16x  (V3: was 15x, 80% EV)
-        if (tier_ == 2) return (100, 800_000);   // 80x  (V3: was 75x, 80% EV)
+        if (tier_ == 0) return (5,     20_000);    // 2x,   1 in 5   (20% win, 40% EV)
+        if (tier_ == 1) return (10,    50_000);    // 5x,   1 in 10  (10% win, 50% EV)
+        if (tier_ == 2) return (150, 1_000_000);   // 100x, 1 in 150 (0.67% win, 66.7% EV)
         revert InvalidTier();
     }
 

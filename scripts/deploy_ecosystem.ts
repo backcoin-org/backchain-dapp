@@ -195,17 +195,28 @@ const NFT_POOL_VIRTUAL_RESERVES  = 100;    // Phantom depth — keeps spread ≤
 // ════════════════════════════════════════════════════════════════════════════
 
 const LIQUIDITY_CONFIG = {
+    // ── Official Token Distribution (20M TGE) ──
+    // Airdrop 1:        3,500,000 BKC
+    // Airdrop 2:        3,500,000 BKC
+    // Fortune:          1,000,000 BKC
+    // NFT Pool Bronze:  2,000,000 BKC
+    // Liquidity Pool:   4,000,000 BKC
+    // Reserve/Burn:     5,000,000 BKC → Treasury
+    // Referral (1 BKC): 1,000,000 BKC
+    // Total:           20,000,000 BKC ✓
     FORTUNE_POOL: 1_000_000n * 10n**18n,
-    FAUCET_BKC: 4_000_000n * 10n**18n,
     // Single Bronze pool with on-demand minting (V3)
-    NFT_POOL_BKC: 1_000_000n * 10n**18n,  // 1M BKC (price ≈ 100 BKC/NFT)
+    NFT_POOL_BKC: 2_000_000n * 10n**18n,  // 2M BKC
     // LiquidityPool: ETH + BKC initial liquidity (define o preço inicial)
-    LIQUIDITY_POOL_BKC: 2_000_000n * 10n**18n,
-    LIQUIDITY_POOL_ETH: "0.5", // 0.5 ETH → preço inicial: 0.00000025 ETH/BKC
-    // Referral BKC bonus pool (welcome gift for referred users)
-    REFERRAL_BONUS_BKC: 100_000n * 10n**18n,
-    // AirdropClaim: Phase 1 deposit (3.5M BKC — Phase 2 stays in treasury)
+    LIQUIDITY_POOL_BKC: 4_000_000n * 10n**18n,
+    LIQUIDITY_POOL_ETH: "0.5", // 0.5 ETH → preço inicial: 0.000000125 ETH/BKC
+    // Referral BKC bonus pool (1 BKC per referred wallet = 1M wallets max)
+    REFERRAL_BONUS_BKC: 1_000_000n * 10n**18n,
+    // AirdropClaim: Phase 1 deposit (3.5M BKC)
     AIRDROP_PHASE1_BKC: 3_500_000n * 10n**18n,
+    // AirdropClaim: Phase 2 deposit (3.5M BKC — funded at deploy, activated later)
+    AIRDROP_PHASE2_BKC: 3_500_000n * 10n**18n,
+    // Remaining 5M goes to Treasury as technical reserve/burn
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -213,7 +224,6 @@ const LIQUIDITY_CONFIG = {
 // ════════════════════════════════════════════════════════════════════════════
 
 const FAUCET_CONFIG = {
-    TOKENS_PER_REQUEST: 20n * 10n**18n,
     ETH_PER_REQUEST: 1n * 10n**15n,  // 0.001 ETH per claim
     COOLDOWN_SECONDS: 86400, // 24h
 };
@@ -279,74 +289,94 @@ const FIXED = (weiAmount: bigint) => ({
     feeType: FEE_TYPE_FIXED, bps: 0, multiplier: 1, gasEstimate: Number(weiAmount)
 });
 
-// Fee levels (individually configurable post-deploy via setFeeConfig)
-const FIXED_SOCIAL    = FIXED(50000000000000n);   // 0.00005 ETH (~$0.10)
-const FIXED_CONTENT   = FIXED(100000000000000n);  // 0.0001 ETH  (~$0.20)
-const FIXED_FINANCIAL = FIXED(200000000000000n);   // 0.0002 ETH  (~$0.40)
-const FIXED_PREMIUM   = FIXED(500000000000000n);   // 0.0005 ETH  (~$1.00)
+// V12 Fee tiers (individually configurable post-deploy via setFeeConfig)
+// Values in native token (ETH on testnet, BNB on opBNB mainnet)
+const FIXED_MICRO     = FIXED(30000000000000n);    // 0.00003  (~$0.02)
+const FIXED_SOCIAL    = FIXED(80000000000000n);    // 0.00008  (~$0.05)
+const FIXED_CONTENT   = FIXED(200000000000000n);   // 0.0002   (~$0.12)
+const FIXED_FINANCIAL = FIXED(500000000000000n);    // 0.0005   (~$0.30)
+const FIXED_PREMIUM   = FIXED(1000000000000000n);   // 0.001    (~$0.60)
+const FIXED_HIGH      = FIXED(5000000000000000n);   // 0.005    (~$3.00)
+
+// Staking-specific fees (higher to feed buyback)
+const FIXED_STAKE_DELEGATE = FIXED(150000000000000n);    // 0.00015  (~$0.09)
+const FIXED_STAKE_CLAIM    = FIXED(400000000000000n);    // 0.0004   (~$0.24)
+const FIXED_STAKE_FORCE    = FIXED(1700000000000000n);   // 0.0017   (~$1.00)
 
 // Badge tiers (annual subscriptions — fixed prices)
-const FIXED_BADGE_VERIFIED = FIXED(30000000000000000n);   // 0.03 ETH  (~$60/year)
-const FIXED_BADGE_PREMIUM  = FIXED(150000000000000000n);  // 0.15 ETH  (~$300/year)
-const FIXED_BADGE_ELITE    = FIXED(375000000000000000n);  // 0.375 ETH (~$750/year)
+const FIXED_BADGE_VERIFIED = FIXED(50000000000000000n);   // 0.05   (~$30/year)
+const FIXED_BADGE_PREMIUM  = FIXED(250000000000000000n);  // 0.25   (~$150/year)
+const FIXED_BADGE_ELITE    = FIXED(600000000000000000n);  // 0.6    (~$360/year)
 
 // Todas as ações do ecossistema e suas taxas (V11: fixed fees)
 // Nota: ações com string usam ethers.id(), ações NFT usam abi.encode(string, uint8)
 const ACTION_FEE_CONFIGS: Record<string, { feeType: number; bps: number; multiplier: number; gasEstimate: number }> = {
-    // StakingPool
-    "STAKING_DELEGATE":       FIXED_SOCIAL,
-    "STAKING_CLAIM":          FIXED_CONTENT,
-    "STAKING_FORCE_UNSTAKE":  FIXED_FINANCIAL,
-    // Agora (social)
-    "AGORA_POST":             FIXED_CONTENT,
-    "AGORA_POST_IMAGE":       FIXED_CONTENT,
-    "AGORA_POST_VIDEO":       FIXED_CONTENT,
-    "AGORA_LIVE":             FIXED_CONTENT,
-    "AGORA_REPLY":            FIXED_SOCIAL,
-    "AGORA_REPOST":           FIXED_SOCIAL,
-    "AGORA_LIKE":             FIXED_SOCIAL,
-    "AGORA_FOLLOW":           FIXED_SOCIAL,
-    "AGORA_DOWNVOTE":         FIXED_SOCIAL,
-    "AGORA_REPORT":           FIXED_CONTENT,
-    "AGORA_PROFILE_BOOST":    FIXED_PREMIUM,
-    "AGORA_BADGE_VERIFIED":   FIXED_BADGE_VERIFIED,
-    "AGORA_BADGE_PREMIUM":    FIXED_BADGE_PREMIUM,
-    "AGORA_BADGE_ELITE":      FIXED_BADGE_ELITE,
-    // FortunePool (per tier)
-    "FORTUNE_TIER0":          FIXED_SOCIAL,
-    "FORTUNE_TIER1":          FIXED_CONTENT,
-    "FORTUNE_TIER2":          FIXED_FINANCIAL,
-    // Notary
-    "NOTARY_CERTIFY":         FIXED_FINANCIAL,
-    // CharityPool
-    "CHARITY_CREATE":         FIXED_FINANCIAL,
-    "CHARITY_BOOST":          FIXED_CONTENT,
-    // RentalManager
-    "RENTAL_BOOST":           FIXED_PREMIUM,
+    // ── StakingPool (higher fees to feed buyback) ──
+    "STAKING_DELEGATE":       FIXED_STAKE_DELEGATE,  // 0.00015 (~$0.09)
+    "STAKING_CLAIM":          FIXED_STAKE_CLAIM,     // 0.0004  (~$0.24)
+    "STAKING_FORCE_UNSTAKE":  FIXED_STAKE_FORCE,     // 0.0017  (~$1.00)
+    // ── Agora (social — micro fees for high volume) ──
+    "AGORA_LIKE":             FIXED_MICRO,     // 0.00003 (~$0.02)
+    "AGORA_FOLLOW":           FIXED_MICRO,     // 0.00003 (~$0.02)
+    "AGORA_REPLY":            FIXED_MICRO,     // 0.00003 (~$0.02)
+    "AGORA_REPOST":           FIXED_MICRO,     // 0.00003 (~$0.02)
+    "AGORA_DOWNVOTE":         FIXED_SOCIAL,    // 0.00008 (~$0.05)
+    "AGORA_REPORT":           FIXED_SOCIAL,    // 0.00008 (~$0.05)
+    "AGORA_POST":             FIXED_CONTENT,   // 0.0002  (~$0.12)
+    "AGORA_POST_IMAGE":       FIXED_CONTENT,   // 0.0002  (~$0.12)
+    "AGORA_POST_VIDEO":       FIXED_CONTENT,   // 0.0002  (~$0.12)
+    "AGORA_LIVE":             FIXED_FINANCIAL,  // 0.0005  (~$0.30)
+    "AGORA_BOOST_STD":        FIXED_PREMIUM,   // 0.001   (~$0.60)
+    "AGORA_BOOST_FEAT":       FIXED_HIGH,      // 0.005   (~$3.00)
+    "AGORA_PROFILE_BOOST":    FIXED_PREMIUM,   // 0.001   (~$0.60)
+    "AGORA_BADGE_VERIFIED":   FIXED_BADGE_VERIFIED,  // 0.05  (~$30)
+    "AGORA_BADGE_PREMIUM":    FIXED_BADGE_PREMIUM,   // 0.25  (~$150)
+    "AGORA_BADGE_ELITE":      FIXED_BADGE_ELITE,     // 0.6   (~$360)
+    // ── FortunePool (tier 0 most expensive — easiest to win) ──
+    "FORTUNE_TIER0":          FIXED_CONTENT,   // 0.0002  (~$0.12) — 1/5 odds
+    "FORTUNE_TIER1":          FIXED_SOCIAL,    // 0.00008 (~$0.05) — 1/10 odds
+    "FORTUNE_TIER2":          FIXED_MICRO,     // 0.00003 (~$0.02) — 1/150 odds
+    // ── Notary ──
+    "NOTARY_CERTIFY":         FIXED_FINANCIAL, // 0.0005  (~$0.30)
+    "NOTARY_BOOST":           FIXED_CONTENT,   // 0.0002  (~$0.12)
+    "NOTARY_TRANSFER":        FIXED_CONTENT,   // 0.0002  (~$0.12)
+    // ── CharityPool ──
+    "CHARITY_CREATE":         FIXED_FINANCIAL, // 0.0005  (~$0.30)
+    "CHARITY_BOOST":          FIXED_CONTENT,   // 0.0002  (~$0.12)
+    // ── RentalManager ──
+    "RENTAL_BOOST":           FIXED_PREMIUM,   // 0.001   (~$0.60)
     // (RENTAL_RENT e CHARITY_DONATE são value-based, definidos separadamente)
-    // AirdropClaim
-    "AIRDROP_CLAIM":          FIXED_FINANCIAL,
-    // NFTFusion (fuse 2→1 up, split 1→2 down)
-    "FUSION_BRONZE":          FIXED_FINANCIAL,
-    "FUSION_SILVER":          FIXED_FINANCIAL,
-    "FUSION_GOLD":            FIXED_FINANCIAL,
-    "SPLIT_SILVER":           FIXED_FINANCIAL,
-    "SPLIT_GOLD":             FIXED_FINANCIAL,
-    "SPLIT_DIAMOND":          FIXED_FINANCIAL,
+    // ── AirdropClaim ──
+    "AIRDROP_CLAIM":          FIXED_SOCIAL,    // 0.00008 (~$0.05) — barato para adoção
+    // ── NFTFusion (ascending fees by tier) ──
+    "FUSION_BRONZE":          FIXED_CONTENT,   // 0.0002  (~$0.12)
+    "FUSION_SILVER":          FIXED_FINANCIAL,  // 0.0005  (~$0.30)
+    "FUSION_GOLD":            FIXED_PREMIUM,   // 0.001   (~$0.60)
+    "SPLIT_SILVER":           FIXED_FINANCIAL,  // 0.0005  (~$0.30)
+    "SPLIT_GOLD":             FIXED_PREMIUM,   // 0.001   (~$0.60)
+    "SPLIT_DIAMOND":          FIXED_HIGH,      // 0.005   (~$3.00)
 };
 
-// Ações value-based (unchanged)
+// Ações value-based (percentage of transaction value)
 const VALUE_FEE_CONFIGS: Record<string, { bps: number }> = {
-    "CHARITY_DONATE": { bps: 300 },    // 3% da doação (V11: was 5%)
-    "RENTAL_RENT":    { bps: 1000 },   // 10% do custo de aluguel (V11: was 20%)
+    "CHARITY_DONATE": { bps: 300 },    // 3% da doação
+    "RENTAL_RENT":    { bps: 2000 },   // 20% do custo de aluguel
 };
 
-// NFTPool actions (usam abi.encode, não keccak256 de string simples)
-// Keep value-based for NFT pool (percentage of trade value)
-const NFT_FEE_CONFIG = {
-    BUY:  FIXED_FINANCIAL,
-    SELL: FIXED_FINANCIAL,
-};
+// NFTPool actions (per-tier, sell 2x buy for price stability)
+// Uses abi.encode("NFT_BUY_T"|"NFT_SELL_T", tier) for action IDs
+const NFT_BUY_FEES = [
+    FIXED_SOCIAL,     // T0 Bronze: 0.00008 (~$0.05)
+    FIXED_CONTENT,    // T1 Silver: 0.0002  (~$0.12)
+    FIXED_FINANCIAL,  // T2 Gold:   0.0005  (~$0.30)
+    FIXED_PREMIUM,    // T3 Diamond: 0.001  (~$0.60)
+];
+const NFT_SELL_FEES = [
+    FIXED(160000000000000n),    // T0 Bronze: 0.00016 (~$0.10) = 2x buy
+    FIXED(400000000000000n),    // T1 Silver: 0.0004  (~$0.24) = 2x buy
+    FIXED(1000000000000000n),   // T2 Gold:   0.001   (~$0.60) = 2x buy
+    FIXED(2000000000000000n),   // T3 Diamond: 0.002  (~$1.20) = 2x buy
+];
 
 // ════════════════════════════════════════════════════════════════════════════
 //                    🔥 BKC DISTRIBUTION (burn / operator / stakers / treasury)
@@ -355,10 +385,10 @@ const NFT_FEE_CONFIG = {
 // V11: No burn in ecosystem — deflation via StakingPool recycling only
 
 const BKC_DISTRIBUTION = {
-    burnBps: 0,         // 0% burn in ecosystem (burn happens on StakingPool claims)
-    operatorBps: 1500,  // 15% to frontend operator
-    stakerBps: 7000,    // 70% to stakers via notifyReward
-    treasuryBps: 1500,  // 15% to treasury
+    burnBps: 500,       // 5% burn (constant deflation)
+    operatorBps: 0,     // 0% — operators earn only ETH/BNB
+    stakerBps: 9500,    // 95% to stakers via notifyReward
+    treasuryBps: 0,     // 0% — treasury earns only ETH/BNB
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -923,18 +953,18 @@ async function main() {
             feeConfigs.push([FEE_TYPE_VALUE, cfg.bps, 0, 0]);
         }
 
-        // 3) NFTPool actions — only Bronze (tier 0) since single-pool design
+        // 3) NFTPool actions — per-tier buy/sell (sell 2x buy for stability)
         const abiCoder = ethers.AbiCoder.defaultAbiCoder();
-        {
-            const buyActionId = ethers.keccak256(abiCoder.encode(["string", "uint8"], ["NFT_BUY_T", 0]));
+        for (let tier = 0; tier < 4; tier++) {
+            const buyFee = NFT_BUY_FEES[tier];
+            const buyActionId = ethers.keccak256(abiCoder.encode(["string", "uint8"], ["NFT_BUY_T", tier]));
             actionIds.push(buyActionId);
-            feeConfigs.push([NFT_FEE_CONFIG.BUY.feeType, NFT_FEE_CONFIG.BUY.bps,
-                             NFT_FEE_CONFIG.BUY.multiplier, NFT_FEE_CONFIG.BUY.gasEstimate]);
+            feeConfigs.push([buyFee.feeType, buyFee.bps, buyFee.multiplier, buyFee.gasEstimate]);
 
-            const sellActionId = ethers.keccak256(abiCoder.encode(["string", "uint8"], ["NFT_SELL_T", 0]));
+            const sellFee = NFT_SELL_FEES[tier];
+            const sellActionId = ethers.keccak256(abiCoder.encode(["string", "uint8"], ["NFT_SELL_T", tier]));
             actionIds.push(sellActionId);
-            feeConfigs.push([NFT_FEE_CONFIG.SELL.feeType, NFT_FEE_CONFIG.SELL.bps,
-                             NFT_FEE_CONFIG.SELL.multiplier, NFT_FEE_CONFIG.SELL.gasEstimate]);
+            feeConfigs.push([sellFee.feeType, sellFee.bps, sellFee.multiplier, sellFee.gasEstimate]);
         }
 
         console.log(`   📋 Configurando ${actionIds.length} action fees...`);
@@ -1052,13 +1082,15 @@ async function main() {
             `Ecosystem.fundTutorBonus(${ethers.formatEther(tutorBonusBkc)} BKC)`
         );
 
-        // Fund AirdropClaim with Phase 1 tokens (3.5M BKC)
+        // Fund AirdropClaim with Phase 1 + Phase 2 tokens (3.5M + 3.5M = 7M BKC)
         const airdropPhase1Bkc = LIQUIDITY_CONFIG.AIRDROP_PHASE1_BKC;
+        const airdropPhase2Bkc = LIQUIDITY_CONFIG.AIRDROP_PHASE2_BKC;
+        const airdropTotalBkc = airdropPhase1Bkc + airdropPhase2Bkc;
         await sendTxWithRetry(
-            async () => await bkc.transfer(airdropAddr, airdropPhase1Bkc),
-            `AirdropClaim: ${ethers.formatEther(airdropPhase1Bkc)} BKC (Phase 1)`
+            async () => await bkc.transfer(airdropAddr, airdropTotalBkc),
+            `AirdropClaim: ${ethers.formatEther(airdropTotalBkc)} BKC (Phase 1+2)`
         );
-        console.log(`   ℹ️  AirdropClaim funded. setMerkleRoot() needed to activate Phase 1.`);
+        console.log(`   ℹ️  AirdropClaim funded with ${ethers.formatEther(airdropTotalBkc)} BKC. setMerkleRoot() needed to activate each phase.`);
 
         // ══════════════════════════════════════════════════════════════════════
         // FASE 12: Faucet (testnet only)
@@ -1071,30 +1103,25 @@ async function main() {
             console.log("   FASE 12: Deploy SimpleBKCFaucet (Testnet)");
             console.log("═══════════════════════════════════════════════════════════════════════");
 
-            // SimpleBKCFaucet constructor(address _bkcToken, address _relayer, uint256 _tokensPerClaim, uint256 _ethPerClaim, uint256 _cooldown)
+            // SimpleBKCFaucet V2: ETH-only (no BKC distribution)
+            // constructor(address _relayer, uint256 _ethPerClaim, uint256 _cooldown)
             const SimpleBKCFaucet = await ethers.getContractFactory("SimpleBKCFaucet");
             const { contract: faucet, address: fAddr } = await deployContractWithRetry(
                 SimpleBKCFaucet,
-                [bkcAddr, deployerAddr, FAUCET_CONFIG.TOKENS_PER_REQUEST, FAUCET_CONFIG.ETH_PER_REQUEST, FAUCET_CONFIG.COOLDOWN_SECONDS],
+                [deployerAddr, FAUCET_CONFIG.ETH_PER_REQUEST, FAUCET_CONFIG.COOLDOWN_SECONDS],
                 "SimpleBKCFaucet"
             );
             faucetAddr = fAddr;
             addresses.simpleBkcFaucet = faucetAddr;
             updateAddressJSON("simpleBkcFaucet", faucetAddr);
 
-            // Fund Faucet com BKC
-            await sendTxWithRetry(
-                async () => await bkc.transfer(faucetAddr!, LIQUIDITY_CONFIG.FAUCET_BKC),
-                `Faucet: ${ethers.formatEther(LIQUIDITY_CONFIG.FAUCET_BKC)} BKC`
-            );
-
-            // Fund Faucet com ETH (1 ETH para testnet)
+            // Fund Faucet com ETH apenas (1 ETH para testnet)
             await sendTxWithRetry(
                 async () => await deployer.sendTransaction({
                     to: faucetAddr!,
                     value: ethers.parseEther("1.0")
                 }),
-                "Faucet: 1.0 ETH"
+                "Faucet: 1.0 ETH (ETH-only, no BKC)"
             );
         }
 
@@ -1169,10 +1196,10 @@ async function main() {
         console.log(`   FortunePool:    ${ethers.formatEther(fortuneBkc)} BKC`);
         console.log(`   LiquidityPool:  ${ethers.formatEther(lpBkc)} BKC`);
         const airdropBkc = await bkc.balanceOf(airdropAddr);
-        console.log(`   AirdropClaim:   ${ethers.formatEther(airdropBkc)} BKC`);
+        console.log(`   AirdropClaim:   ${ethers.formatEther(airdropBkc)} BKC (Phase 1+2)`);
         if (faucetAddr) {
-            const faucetBkc = await bkc.balanceOf(faucetAddr);
-            console.log(`   Faucet:         ${ethers.formatEther(faucetBkc)} BKC`);
+            const faucetEth = await ethers.provider.getBalance(faucetAddr);
+            console.log(`   Faucet:         ${ethers.formatEther(faucetEth)} ETH (ETH-only)`);
         }
 
         console.log("\n🎨 NFT POOL (Single Bronze):");
@@ -1196,7 +1223,7 @@ async function main() {
         console.log(`   BKC Distribution: ${BKC_DISTRIBUTION.operatorBps/100}% operator / ${BKC_DISTRIBUTION.stakerBps/100}% stakers / ${BKC_DISTRIBUTION.treasuryBps/100}% treasury`);
         console.log(`   Staking: V2 Recycle Model (60/40/30/20/0% per NFT tier, 10% burn if no tutor)`);
         console.log(`   Rental: 20% ecosystem fee (standard split, owner gets rentalCost directly)`);
-        console.log(`   Tutor Bonus Pool: ${ethers.formatEther(LIQUIDITY_CONFIG.REFERRAL_BONUS_BKC)} BKC`);
+        console.log(`   Tutor Bonus Pool: ${ethers.formatEther(LIQUIDITY_CONFIG.REFERRAL_BONUS_BKC)} BKC (1 BKC/wallet, ~1M wallets)`);
 
         printTransactionSummary();
 

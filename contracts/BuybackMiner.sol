@@ -78,6 +78,7 @@ contract BuybackMiner is IBuybackMiner {
 
     address public owner;
     address public pendingOwner;
+    bool public paused;
 
     // ════════════════════════════════════════════════════════════════════════
     // STATS (lifetime counters — packed into 2 structs for fewer SSTOREs)
@@ -128,6 +129,7 @@ contract BuybackMiner is IBuybackMiner {
     error SlippageExceeded();
     error TransferFailed();
     error InsufficientFee();
+    error BuybackPaused();
     error NotOwner();
     error NotPendingOwner();
     error ZeroAddress();
@@ -158,6 +160,7 @@ contract BuybackMiner is IBuybackMiner {
     ///         Fee is ADDED to buyback, amplifying BKC purchase.
     ///         Caller earns 5% of total ETH (ecosystem + fee) as incentive.
     function executeBuyback() external payable override {
+        if (paused) revert BuybackPaused();
         if (msg.value < executionFee) revert InsufficientFee();
         _executeBuyback(0);
     }
@@ -166,6 +169,7 @@ contract BuybackMiner is IBuybackMiner {
     ///         Same as executeBuyback() but reverts if total BKC output
     ///         (purchased + mined) is less than minTotalBkcOut.
     function executeBuybackWithSlippage(uint256 minTotalBkcOut) external payable {
+        if (paused) revert BuybackPaused();
         if (msg.value < executionFee) revert InsufficientFee();
         _executeBuyback(minTotalBkcOut);
     }
@@ -425,6 +429,8 @@ contract BuybackMiner is IBuybackMiner {
 
     event SwapTargetUpdated(address indexed oldPool, address indexed newPool);
     event ExecutionFeeUpdated(uint256 oldFee, uint256 newFee);
+    event BuybackPausedEvent(address indexed by);
+    event BuybackUnpaused(address indexed by);
     event OwnershipTransferStarted(address indexed currentOwner, address indexed newOwner);
     event OwnershipTransferred(address indexed oldOwner, address indexed newOwner);
 
@@ -446,6 +452,18 @@ contract BuybackMiner is IBuybackMiner {
     function setExecutionFee(uint256 _fee) external onlyOwner {
         emit ExecutionFeeUpdated(executionFee, _fee);
         executionFee = _fee;
+    }
+
+    /// @notice Pause buyback execution. ETH still accumulates in ecosystem.
+    function pause() external onlyOwner {
+        paused = true;
+        emit BuybackPausedEvent(msg.sender);
+    }
+
+    /// @notice Resume buyback execution.
+    function unpause() external onlyOwner {
+        paused = false;
+        emit BuybackUnpaused(msg.sender);
     }
 
     /// @notice Initiate ownership transfer. New owner must call acceptOwnership().
