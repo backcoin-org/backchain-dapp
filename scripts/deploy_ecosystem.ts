@@ -284,10 +284,23 @@ const FEE_TYPE_FIXED = 2;
 
 // ── V11 Fixed Fee Tiers ──
 // feeType=2: fee = gasEstimate × multiplier (direct wei amount)
-// Using multiplier=1 and gasEstimate=fee_in_wei for simplicity
-const FIXED = (weiAmount: bigint) => ({
-    feeType: FEE_TYPE_FIXED, bps: 0, multiplier: 1, gasEstimate: Number(weiAmount)
-});
+// Both gasEstimate and multiplier are uint32 (max ~4.3e9).
+// Split weiAmount into gasEstimate × multiplier where both fit in uint32.
+const UINT32_MAX = 4_294_967_295n;
+const FIXED = (weiAmount: bigint) => {
+    // Try 1e6 multiplier first (works up to ~4.3e15 ≈ 0.0043 ETH)
+    let multiplier = 1_000_000n;
+    let gasEst = weiAmount / multiplier;
+    if (gasEst > UINT32_MAX) {
+        // Fallback to 1e9 multiplier (works up to ~4.3e18 ≈ 4.3 ETH)
+        multiplier = 1_000_000_000n;
+        gasEst = weiAmount / multiplier;
+    }
+    if (gasEst * multiplier !== weiAmount) {
+        throw new Error(`FIXED: cannot split ${weiAmount} into uint32 × uint32`);
+    }
+    return { feeType: FEE_TYPE_FIXED, bps: 0, multiplier: Number(multiplier), gasEstimate: Number(gasEst) };
+};
 
 // V12 Fee tiers (individually configurable post-deploy via setFeeConfig)
 // Values in native token (ETH on testnet, BNB on opBNB mainnet)
