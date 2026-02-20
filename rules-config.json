@@ -2,23 +2,9 @@
   "VERSION": "10.0.0",
   "DESCRIPTION": "Backchain Ecosystem V10.0 - All Immutable Contracts + Ecosystem-wide Referral",
   "NETWORK": "arbitrumSepolia",
-  "CREATED_AT": "2026-02-18T20:23:13.394Z",
+  "CREATED_AT": "2026-02-19T01:40:26.362Z",
   "wallets": {
     "TREASURY": "0xc93030333E3a235c2605BcB7C7330650B600B6D0",
     "MULTISIG_ADMIN": "DEPLOYER"
-  },
-  "feeConfigs": {
-    "totalActions": "34",
-    "gasBased": "30",
-    "valueBased": "2",
-    "nftActions": "2",
-    "fusionActions": "6"
-  },
-  "LAST_UPDATED": "2026-02-18T20:24:49.530Z",
-  "bkcDistribution": {
-    "burnBps": "0",
-    "operatorBps": "1500",
-    "stakerBps": "7000",
-    "treasuryBps": "1500"
   }
 }
