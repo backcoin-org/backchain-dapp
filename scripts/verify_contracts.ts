@@ -1,6 +1,6 @@
 // scripts/verify_contracts.ts
 // ════════════════════════════════════════════════════════════════════════════
-// VERIFICAÇÃO DE CONTRATOS V9.0 — Todos imutáveis (sem proxy)
+// VERIFICAÇÃO DE CONTRATOS V12.0 — Todos imutáveis (sem proxy) — Sepolia
 // ════════════════════════════════════════════════════════════════════════════
 
 import { HardhatRuntimeEnvironment } from "hardhat/types";
@@ -9,18 +9,25 @@ import path from "path";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Delay entre verificações para evitar rate limit do Arbiscan
+// Delay entre verificações para evitar rate limit do Etherscan
 const VERIFY_DELAY_MS = 5000;
 
 // Treasury address usado no deploy
 const TREASURY_ADDRESS = "0xc93030333E3a235c2605BcB7C7330650B600B6D0";
 
-// Faucet config usada no deploy
+// Faucet config usada no deploy (V12: SimpleBKCFaucet só recebe 3 args)
 const FAUCET_CONFIG = {
-  TOKENS_PER_REQUEST: BigInt("20000000000000000000"),   // 20e18
-  ETH_PER_REQUEST: BigInt("1000000000000000"),           // 1e15
+  ETH_PER_REQUEST: BigInt("1000000000000000"),           // 1e15 (0.001 ETH)
   COOLDOWN_SECONDS: 86400,
 };
+
+// NFTPool config
+const NFT_POOL_VIRTUAL_RESERVES = 100;
+const NFT_POOL_MINTABLE_RESERVES = 10_000;
+
+// Notary baseURI (testnet)
+const NOTARY_BASE_URI_TESTNET = "https://backchain-dapp.vercel.app/api/cert-metadata/";
+const NOTARY_BASE_URI_MAINNET = "https://backcoin.org/api/cert-metadata/";
 
 // Governance config
 const TIMELOCK_DELAY_SECONDS = 3600;
@@ -79,7 +86,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   const deployerAddr = deployer.address;
 
   console.log(`\n${"=".repeat(70)}`);
-  console.log(`VERIFICAÇÃO DE CONTRATOS V9.0 — ${networkName.toUpperCase()}`);
+  console.log(`VERIFICAÇÃO DE CONTRATOS V12.0 — ${networkName.toUpperCase()}`);
   console.log(`Todos os contratos são IMUTÁVEIS (sem proxy)`);
   console.log(`${"=".repeat(70)}`);
   console.log(`Deployer: ${deployerAddr}`);
@@ -183,7 +190,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   if (addr.pool_bronze) {
     const r = await verifyContract(hre, "NFTPool_bronze", addr.pool_bronze,
       "contracts/NFTPool.sol:NFTPool",
-      [addr.backchainEcosystem, addr.bkcToken, addr.rewardBooster, 0, 0, 10000]);
+      [addr.backchainEcosystem, addr.bkcToken, addr.rewardBooster, 0, NFT_POOL_VIRTUAL_RESERVES, NFT_POOL_MINTABLE_RESERVES]);
     results.push(r);
     await sleep(VERIFY_DELAY_MS);
   }
@@ -211,10 +218,12 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     await sleep(VERIFY_DELAY_MS);
   }
 
-  // Notary constructor(address _ecosystem)
+  // Notary constructor(address _ecosystem, string memory baseTokenURI_)
   if (addr.notary) {
+    const isMainnet = networkName === "opbnbMainnet" || networkName === "mainnet";
+    const notaryBaseURI = isMainnet ? NOTARY_BASE_URI_MAINNET : NOTARY_BASE_URI_TESTNET;
     const r = await verifyContract(hre, "Notary", addr.notary,
-      "contracts/Notary.sol:Notary", [addr.backchainEcosystem]);
+      "contracts/Notary.sol:Notary", [addr.backchainEcosystem, notaryBaseURI]);
     results.push(r);
     await sleep(VERIFY_DELAY_MS);
   }
@@ -242,11 +251,11 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   console.log("AUXILIARES: Faucet + Governance");
   console.log("=".repeat(70));
 
-  // SimpleBKCFaucet constructor(address _bkcToken, address _relayer, uint256 _tokensPerClaim, uint256 _ethPerClaim, uint256 _cooldown)
+  // SimpleBKCFaucet constructor(address _relayer, uint256 _ethPerClaim, uint256 _cooldown)
   if (addr.simpleBkcFaucet) {
     const r = await verifyContract(hre, "SimpleBKCFaucet", addr.simpleBkcFaucet,
       "contracts/SimpleBKCFaucet.sol:SimpleBKCFaucet",
-      [addr.bkcToken, deployerAddr, FAUCET_CONFIG.TOKENS_PER_REQUEST, FAUCET_CONFIG.ETH_PER_REQUEST, FAUCET_CONFIG.COOLDOWN_SECONDS]);
+      [deployerAddr, FAUCET_CONFIG.ETH_PER_REQUEST, FAUCET_CONFIG.COOLDOWN_SECONDS]);
     results.push(r);
     await sleep(VERIFY_DELAY_MS);
   }
@@ -289,9 +298,13 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     failed.forEach(r => console.log(`   XX  ${r.name}`));
   }
 
-  const explorerBase = networkName === "opbnbMainnet"
-    ? "https://opbnbscan.com/address"
-    : "https://testnet.opbnbscan.com/address";
+  const explorerMap: Record<string, string> = {
+    sepolia: "https://sepolia.etherscan.io/address",
+    opbnbTestnet: "https://testnet.opbnbscan.com/address",
+    opbnbMainnet: "https://opbnbscan.com/address",
+    arbitrumSepolia: "https://sepolia.arbiscan.io/address",
+  };
+  const explorerBase = explorerMap[networkName] || "https://sepolia.etherscan.io/address";
 
   console.log("\n" + "=".repeat(70));
   console.log("LINKS EXPLORER");
@@ -325,7 +338,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   console.log("VERIFICAÇÃO CONCLUÍDA!");
   console.log("=".repeat(70));
   console.log(`
-   V9.0: Todos os contratos são imutáveis (sem proxy).
+   V12.0: Todos os contratos são imutáveis (sem proxy).
    Para re-verificar um contrato manualmente:
    npx hardhat verify --network ${networkName} <ADDRESS> [constructor args...]
 `);

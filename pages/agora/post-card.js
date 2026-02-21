@@ -19,8 +19,7 @@ export function renderPostMenu(post) {
     if (!State.isConnected) return '';
     const isOwn = post.author?.toLowerCase() === State.userAddress?.toLowerCase();
     const isBlocked = BC.blockedAuthors.has(post.author?.toLowerCase());
-    const canEdit = isOwn && post.editedAt === 0 && post.timestamp > 0 &&
-        (Math.floor(Date.now() / 1000) - post.timestamp) < 900;
+    const canEdit = isOwn;
     return `
         <div class="bc-post-menu-wrap">
             <button class="bc-post-menu-btn" onclick="event.stopPropagation(); AgoraPage.togglePostMenu('${post.id}')" title="Options">
@@ -108,7 +107,7 @@ export function renderPost(post, index = 0, options = {}) {
                         ${badged ? `<i class="fa-solid fa-circle-check bc-verified-icon" title="${['Verified','Premium','Elite'][BC.badgeTier] || 'Verified'}" style="${BC.badgeTier === 2 ? 'color:#a855f7' : BC.badgeTier === 1 ? 'color:#f59e0b' : ''}"></i>` : ''}
                         ${username ? `<span class="bc-post-time">@${username}</span>` : ''}
                         <span class="bc-post-time">&middot; ${formatTimeAgo(post.timestamp)}</span>
-                        ${isEdited ? '<span class="bc-post-time" title="Edited">(edited)</span>' : ''}
+                        ${isEdited ? `<span class="bc-post-time bc-edited-hint" title="Edited ${formatTimeAgo(post.editedAt)}">&#9998; edited</span>` : ''}
                         ${post.tag > 0 ? `<span class="bc-tag-badge" style="color:${tagInfo.color};border-color:${tagInfo.color}30"><i class="fa-solid ${tagInfo.icon}"></i> ${tagInfo.name}</span>` : ''}
                         ${BC.activeRooms.has(String(post.id)) ? '<span class="bc-live-badge"><span class="bc-live-badge-dot"></span> LIVE</span>' : ''}
                     </div>

@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { State } from '../../state.js';
-import { BC, TAGS, getMaxContent } from './state.js';
+import { BC, TAGS, CONTENT_LIMITS, getMaxContent } from './state.js';
 import { getInitials, formatETH } from './utils.js';
 
 // ============================================================================
@@ -21,6 +21,41 @@ function renderComposeTagPicker() {
 }
 
 // ============================================================================
+// UPGRADE HINT
+// ============================================================================
+
+function _renderUpgradeHint() {
+    // Elite (tier 2) = max tier, no upsell needed
+    if (BC.hasBadge && BC.badgeTier >= 2) return '';
+
+    const currentLimit = getMaxContent();
+    let nextTierName, nextLimit, icon, color;
+
+    if (!BC.hasBadge) {
+        nextTierName = 'Verified';
+        nextLimit = CONTENT_LIMITS.verified;
+        icon = 'fa-circle-check';
+        color = '#3b82f6';
+    } else if (BC.badgeTier === 0) {
+        nextTierName = 'Premium';
+        nextLimit = CONTENT_LIMITS.premium;
+        icon = 'fa-circle-check';
+        color = '#eab308';
+    } else {
+        nextTierName = 'Elite';
+        nextLimit = CONTENT_LIMITS.elite;
+        icon = 'fa-gem';
+        color = '#a855f7';
+    }
+
+    return `<div class="bc-upgrade-hint" onclick="AgoraPage.openBadge()">
+        <i class="fa-solid ${icon}" style="color:${color};font-size:11px;"></i>
+        <span>Up to ${nextLimit.toLocaleString()} chars with <strong style="color:${color}">${nextTierName}</strong></span>
+        <i class="fa-solid fa-chevron-right" style="font-size:9px;opacity:0.5;"></i>
+    </div>`;
+}
+
+// ============================================================================
 // COMPOSE BOX
 // ============================================================================
 
@@ -35,6 +70,8 @@ export function renderCompose() {
                 <i class="fa-solid fa-user-plus"></i> Create Profile
             </button>
         </div>` : '';
+
+    const upgradeHint = _renderUpgradeHint();
 
     return `
         ${profileBanner}
@@ -55,6 +92,7 @@ export function renderCompose() {
                     ${renderComposeTagPicker()}
                 </div>
             </div>
+            ${upgradeHint}
             <div class="bc-compose-divider"></div>
             <div class="bc-compose-bottom">
                 <div class="bc-compose-tools">

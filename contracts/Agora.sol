@@ -486,7 +486,6 @@ contract Agora {
 
         Post storage p = _requireActivePost(postId);
         if (p.author != msg.sender) revert NotAuthor();
-        if (block.timestamp > uint256(p.createdAt) + EDIT_WINDOW) revert EditWindowClosed();
 
         p.editedAt = uint32(block.timestamp);
         emit PostEdited(postId, msg.sender, newContentHash);

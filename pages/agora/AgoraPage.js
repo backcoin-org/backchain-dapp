@@ -236,6 +236,12 @@ function _updateCharCount(textarea) {
     else if (len > maxLen * 0.9) counter.classList.add('warn');
     textarea.style.height = 'auto';
     textarea.style.height = Math.min(textarea.scrollHeight, 400) + 'px';
+
+    // Show upgrade hint when approaching limit (not elite)
+    const hint = document.querySelector('.bc-upgrade-hint');
+    if (hint) {
+        hint.style.display = (len > maxLen * 0.8 && (!BC.hasBadge || BC.badgeTier < 2)) ? 'flex' : '';
+    }
 }
 
 // Close post menus on click outside

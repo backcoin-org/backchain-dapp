@@ -61,18 +61,28 @@ export function renderModals() {
                     <button class="bc-modal-x" onclick="AgoraPage.closeModal('badge')"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="bc-modal-inner">
-                    <p class="bc-modal-desc">Get a verified badge for 1 year. Higher tiers = more prestige.</p>
+                    <p class="bc-modal-desc">Get a verified badge for 1 year. Higher tiers unlock longer posts and more prestige.</p>
                     <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
-                        <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:space-between;padding:12px 16px;" onclick="AgoraPage.confirmBadge(0)">
-                            <span><i class="fa-solid fa-circle-check" style="color:#3b82f6"></i> Verified</span><span style="color:var(--bc-text-3)">0.02 BNB/year</span>
+                        <button class="bc-btn bc-btn-outline bc-badge-option" style="width:100%;padding:12px 16px;${BC.badgeTier === 0 && BC.hasBadge ? 'border-color:#3b82f6;opacity:0.5;' : ''}" onclick="AgoraPage.confirmBadge(0)">
+                            <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+                                <span><i class="fa-solid fa-circle-check" style="color:#3b82f6"></i> Verified</span><span style="color:var(--bc-text-3)">0.02 BNB/yr</span>
+                            </div>
+                            <div style="font-size:10px;color:var(--bc-text-3);margin-top:4px;text-align:left;">Up to 5,000 chars per post${BC.hasBadge && BC.badgeTier >= 0 ? ' <span style="color:#3b82f6">&#10003; current</span>' : ''}</div>
                         </button>
-                        <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:space-between;padding:12px 16px;border-color:#eab308;" onclick="AgoraPage.confirmBadge(1)">
-                            <span><i class="fa-solid fa-circle-check" style="color:#eab308"></i> Premium</span><span style="color:var(--bc-text-3)">0.1 BNB/year</span>
+                        <button class="bc-btn bc-btn-outline bc-badge-option" style="width:100%;padding:12px 16px;border-color:#eab308;${BC.badgeTier === 1 && BC.hasBadge ? 'opacity:0.5;' : ''}" onclick="AgoraPage.confirmBadge(1)">
+                            <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+                                <span><i class="fa-solid fa-circle-check" style="color:#eab308"></i> Premium</span><span style="color:var(--bc-text-3)">0.1 BNB/yr</span>
+                            </div>
+                            <div style="font-size:10px;color:var(--bc-text-3);margin-top:4px;text-align:left;">Up to 20,000 chars per post${BC.hasBadge && BC.badgeTier >= 1 ? ' <span style="color:#eab308">&#10003; current</span>' : ''}</div>
                         </button>
-                        <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:space-between;padding:12px 16px;border-color:#a855f7;" onclick="AgoraPage.confirmBadge(2)">
-                            <span><i class="fa-solid fa-gem" style="color:#a855f7"></i> Elite</span><span style="color:var(--bc-text-3)">0.25 BNB/year</span>
+                        <button class="bc-btn bc-btn-outline bc-badge-option" style="width:100%;padding:12px 16px;border-color:#a855f7;" onclick="AgoraPage.confirmBadge(2)">
+                            <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+                                <span><i class="fa-solid fa-gem" style="color:#a855f7"></i> Elite</span><span style="color:var(--bc-text-3)">0.25 BNB/yr</span>
+                            </div>
+                            <div style="font-size:10px;color:var(--bc-text-3);margin-top:4px;text-align:left;">Up to 50,000 chars per post${BC.hasBadge && BC.badgeTier >= 2 ? ' <span style="color:#a855f7">&#10003; current</span>' : ''}</div>
                         </button>
                     </div>
+                    <div style="font-size:10px;color:var(--bc-text-3);text-align:center;opacity:0.6;">Without badge: 2,000 chars per post</div>
                 </div>
             </div>
         </div>
