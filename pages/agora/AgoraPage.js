@@ -171,6 +171,21 @@ _initDoubleTap();
 // Connect BC._render to renderContent so modules can trigger re-renders
 BC._render = () => { renderContent(); _observeVideos(); _observeSentinel(); };
 
+// Mobile: reload data when returning from MetaMask app (tab becomes visible again)
+let _lastVisibilityRefresh = 0;
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    // Only refresh if on Agora page and enough time has passed (debounce 3s)
+    const now = Date.now();
+    if (now - _lastVisibilityRefresh < 3000) return;
+    if (!document.getElementById('agora')?.classList.contains('active')) return;
+    _lastVisibilityRefresh = now;
+    // Refresh data in the background
+    Promise.all([loadProfiles(), loadPosts(), loadSocialGraph(), loadUserStatus()])
+        .then(() => { renderContent(); _observeVideos(); _observeSentinel(); })
+        .catch(() => {});
+});
+
 // ============================================================================
 // CART BAR
 // ============================================================================
@@ -407,6 +422,15 @@ export const AgoraPage = {
         checkDeepLink();
     },
 
+    // Called by app.js when wallet state changes without full page navigation
+    // (e.g. mobile returning from MetaMask with session restore)
+    async update(isConnected) {
+        await this.refresh();
+        renderContent();
+        _observeVideos();
+        _observeSentinel();
+    },
+
     async refresh() {
         await Promise.all([
             loadFees(),
@@ -425,6 +449,7 @@ export const AgoraPage = {
         BC.view = tab;
         BC.selectedTag = -1;
         BC.feedPage = 0;
+        BC.feedMode = 'list';
         render();
     },
 
