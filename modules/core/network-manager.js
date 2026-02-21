@@ -41,45 +41,36 @@ import { State } from '../../state.js';
 
 /**
  * Target network configuration
- * Currently: opBNB Testnet
+ * Currently: Sepolia (Ethereum testnet)
  */
 export const NETWORK_CONFIG = {
-    chainId: 421614,
-    chainIdHex: '0x66eee',
-    name: 'Arbitrum Sepolia',
+    chainId: 11155111,
+    chainIdHex: '0xaa36a7',
+    name: 'Sepolia',
     nativeCurrency: {
-        name: 'ETH',
+        name: 'SepoliaETH',
         symbol: 'ETH',
         decimals: 18
     },
-    blockExplorer: 'https://sepolia.arbiscan.io'
+    blockExplorer: 'https://sepolia.etherscan.io'
 };
 
 /**
- * RPC endpoints in priority order (Arbitrum Sepolia — runtime)
+ * RPC endpoints in priority order (Sepolia — public RPCs)
+ * Nota: Alchemy key é Arbitrum-only, usar public RPCs para Sepolia
  */
 const RPC_ENDPOINTS = [
     {
-        name: 'Alchemy',
-        getUrl: () => {
-            const key = import.meta.env?.VITE_ALCHEMY_API_KEY;
-            return key ? `https://arb-sepolia.g.alchemy.com/v2/${key}` : null;
-        },
+        name: 'PublicNode',
+        getUrl: () => 'https://ethereum-sepolia-rpc.publicnode.com',
         priority: 1,
-        isPublic: false,
-        isPaid: true
-    },
-    {
-        name: 'Arbitrum Official',
-        getUrl: () => 'https://sepolia-rollup.arbitrum.io/rpc',
-        priority: 2,
         isPublic: true,
         isPaid: false
     },
     {
-        name: 'PublicNode',
-        getUrl: () => 'https://arbitrum-sepolia.publicnode.com',
-        priority: 3,
+        name: 'Sepolia Official',
+        getUrl: () => 'https://rpc.sepolia.org',
+        priority: 2,
         isPublic: true,
         isPaid: false
     }

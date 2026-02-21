@@ -4,7 +4,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 //
 // V10.0: TODOS os contratos são imutáveis (sem UUPS proxy).
-// - AirdropClaim: merkle-based airdrop → auto-stake (7M BKC, 2 phases)
+// - AirdropClaim: IGNORADO — tokens vão direto para Treasury
 // - BKCToken: deployer-controlled minter, TGE 20M mint no constructor
 // - BackchainEcosystem: registerModule() / registerModuleBatch()
 // - LiquidityPool: AMM constant-product (novo)
@@ -159,10 +159,9 @@ const SECURITY_CONFIG = {
 // ════════════════════════════════════════════════════════════════════════════
 
 const TESTNET_RPC_ENDPOINTS = [
-    { name: 'Alchemy', url: process.env.ALCHEMY_API_KEY ? `https://arb-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}` : '', priority: 1 },
-    { name: 'Arbitrum Official', url: 'https://sepolia-rollup.arbitrum.io/rpc', priority: 2 },
-    { name: 'PublicNode', url: 'https://arbitrum-sepolia.publicnode.com', priority: 3 },
-].filter(rpc => rpc.url) as { name: string; url: string; priority: number }[];
+    { name: 'PublicNode', url: 'https://ethereum-sepolia-rpc.publicnode.com', priority: 1 },
+    { name: 'Sepolia Official', url: 'https://rpc.sepolia.org', priority: 2 },
+];
 
 const MAINNET_RPC_ENDPOINTS = [
     { name: 'opBNB Official', url: 'https://opbnb-mainnet-rpc.bnbchain.org', priority: 1 },
@@ -196,13 +195,11 @@ const NFT_POOL_VIRTUAL_RESERVES  = 100;    // Phantom depth — keeps spread ≤
 
 const LIQUIDITY_CONFIG = {
     // ── Official Token Distribution (20M TGE) ──
-    // Airdrop 1:        3,500,000 BKC
-    // Airdrop 2:        3,500,000 BKC
     // Fortune:          1,000,000 BKC
     // NFT Pool Bronze:  2,000,000 BKC
     // Liquidity Pool:   4,000,000 BKC
-    // Reserve/Burn:     5,000,000 BKC → Treasury
     // Referral (1 BKC): 1,000,000 BKC
+    // Treasury:        12,000,000 BKC (includes airdrop + reserve)
     // Total:           20,000,000 BKC ✓
     FORTUNE_POOL: 1_000_000n * 10n**18n,
     // Single Bronze pool with on-demand minting (V3)
@@ -212,11 +209,7 @@ const LIQUIDITY_CONFIG = {
     LIQUIDITY_POOL_ETH: "1.0", // 1 ETH → preço inicial: 0.00000025 ETH/BKC
     // Referral BKC bonus pool (1 BKC per referred wallet = 1M wallets max)
     REFERRAL_BONUS_BKC: 1_000_000n * 10n**18n,
-    // AirdropClaim: Phase 1 deposit (3.5M BKC)
-    AIRDROP_PHASE1_BKC: 3_500_000n * 10n**18n,
-    // AirdropClaim: Phase 2 deposit (3.5M BKC — funded at deploy, activated later)
-    AIRDROP_PHASE2_BKC: 3_500_000n * 10n**18n,
-    // Remaining 5M goes to Treasury as technical reserve/burn
+    // Remaining 12M (airdrop + reserve) goes to Treasury in FASE 14
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -229,14 +222,8 @@ const FAUCET_CONFIG = {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-//                    🪂 AIRDROP CLAIM CONFIG
+//                    🪂 AIRDROP: IGNORADO — tokens vão direto para Treasury
 // ════════════════════════════════════════════════════════════════════════════
-
-const AIRDROP_CONFIG = {
-    CLAIM_FEE: 4n * 10n**14n,  // 0.0004 ETH ≈ $1 on opBNB mainnet (adjustable)
-    LOCK_DAYS: 365,             // 1 year auto-stake lock
-    DEADLINE_DAYS: 180,         // 6 months to claim before unclaimed can be recovered
-};
 
 // ════════════════════════════════════════════════════════════════════════════
 //                    📊 MODULE FEE CONFIGS (V10: ModuleConfig)
@@ -866,23 +853,9 @@ async function main() {
         updateAddressJSON("rentalManager", rentalAddr);
 
         // ══════════════════════════════════════════════════════════════════════
-        // FASE 8b: AirdropClaim (Merkle-based auto-stake)
+        // FASE 8b: AirdropClaim — IGNORADO (tokens vão para Treasury)
         // ══════════════════════════════════════════════════════════════════════
-        setCurrentPhase("FASE 8b: AirdropClaim");
-        console.log("\n═══════════════════════════════════════════════════════════════════════");
-        console.log("   FASE 8b: Deploy AirdropClaim (Merkle + Auto-Stake)");
-        console.log("═══════════════════════════════════════════════════════════════════════");
-
-        // AirdropClaim constructor(bkcToken, stakingPool, ecosystem, claimFee, lockDays, moduleId)
-        const airdropModuleId = ethers.id("AIRDROP_CLAIM");
-        const AirdropClaim = await ethers.getContractFactory("AirdropClaim");
-        const { contract: airdrop, address: airdropAddr } = await deployContractWithRetry(
-            AirdropClaim,
-            [bkcAddr, stakingAddr, ecoAddr, AIRDROP_CONFIG.CLAIM_FEE, AIRDROP_CONFIG.LOCK_DAYS, airdropModuleId],
-            "AirdropClaim"
-        );
-        addresses.airdropClaim = airdropAddr;
-        updateAddressJSON("airdropClaim", airdropAddr);
+        console.log("\n   ⏩ FASE 8b: AirdropClaim IGNORADO — 7M BKC vai para Treasury em FASE 14");
 
         // ══════════════════════════════════════════════════════════════════════
         // FASE 9: Configuração do Ecossistema
@@ -914,20 +887,18 @@ async function main() {
             "Ecosystem.setTutorBps(500 = 5%)"
         );
 
-        // 9b. registerModuleBatch — registrar todos os 9 módulos
+        // 9b. registerModuleBatch — registrar todos os 8 módulos
         const moduleContracts = [
             stakingAddr, bronzePoolAddr, fortuneAddr, agoraAddr,
-            notaryAddr, charityAddr, rentalAddr, fusionAddr, airdropAddr,
+            notaryAddr, charityAddr, rentalAddr, fusionAddr,
         ];
         const moduleIds = [
             ethers.id("STAKING"), ethers.id("NFT_POOL"), ethers.id("FORTUNE"), ethers.id("AGORA"),
             ethers.id("NOTARY"), ethers.id("CHARITY"), ethers.id("RENTAL"), ethers.id("NFT_FUSION"),
-            airdropModuleId,
         ];
         const moduleConfigs = [
             MODULE_CONFIGS.STANDARD, MODULE_CONFIGS.STANDARD, MODULE_CONFIGS.STANDARD, MODULE_CONFIGS.AGORA,
             MODULE_CONFIGS.STANDARD, MODULE_CONFIGS.CHARITY, MODULE_CONFIGS.RENTAL, MODULE_CONFIGS.STANDARD,
-            MODULE_CONFIGS.STANDARD, // AirdropClaim: claim fee → standard split (buyback-heavy)
         ];
 
         // Converter para o formato do struct: [active, customBps, operatorBps, treasuryBps, buybackBps]
@@ -937,10 +908,10 @@ async function main() {
 
         await sendTxWithRetry(
             async () => await eco.registerModuleBatch(moduleContracts, moduleIds, moduleConfigsTuples),
-            "Ecosystem.registerModuleBatch() — 9 módulos"
+            "Ecosystem.registerModuleBatch() — 8 módulos"
         );
 
-        console.log("   ✅ Todos os módulos registrados (9 total: 1 Bronze pool + AirdropClaim)!");
+        console.log("   ✅ Todos os módulos registrados (8 total: 1 Bronze pool, sem AirdropClaim)!");
 
         // ══════════════════════════════════════════════════════════════════════
         // FASE 9b: Configurar FeeConfig para cada ação + BKC Distribution
@@ -1039,19 +1010,13 @@ async function main() {
         // NOTE: forceUnstake penalty is auto-computed by NFT tier (no setter needed)
         // Default forceUnstakeEthFee = 0.0004 ether (set in constructor)
 
-        // StakingPool: autorizar AirdropClaim para delegateFor()
-        await sendTxWithRetry(
-            async () => await staking.setDelegateForAuthorized(airdropAddr, true),
-            "StakingPool.setDelegateForAuthorized(AirdropClaim, true)"
-        );
-
         // BKCToken: autorizar BuybackMiner como minter
         await sendTxWithRetry(
             async () => await bkc.addMinter(buybackAddr),
             "BKCToken.addMinter(BuybackMiner)"
         );
 
-        console.log("   ✅ StakingPool configurado + BuybackMiner minter + AirdropClaim delegator!");
+        console.log("   ✅ StakingPool configurado + BuybackMiner minter!");
 
         // ══════════════════════════════════════════════════════════════════════
         // FASE 11: Liquidez Inicial
@@ -1095,15 +1060,8 @@ async function main() {
             `Ecosystem.fundTutorBonus(${ethers.formatEther(tutorBonusBkc)} BKC)`
         );
 
-        // Fund AirdropClaim with Phase 1 + Phase 2 tokens (3.5M + 3.5M = 7M BKC)
-        const airdropPhase1Bkc = LIQUIDITY_CONFIG.AIRDROP_PHASE1_BKC;
-        const airdropPhase2Bkc = LIQUIDITY_CONFIG.AIRDROP_PHASE2_BKC;
-        const airdropTotalBkc = airdropPhase1Bkc + airdropPhase2Bkc;
-        await sendTxWithRetry(
-            async () => await bkc.transfer(airdropAddr, airdropTotalBkc),
-            `AirdropClaim: ${ethers.formatEther(airdropTotalBkc)} BKC (Phase 1+2)`
-        );
-        console.log(`   ℹ️  AirdropClaim funded with ${ethers.formatEther(airdropTotalBkc)} BKC. setMerkleRoot() needed to activate each phase.`);
+        // AirdropClaim IGNORADO — 7M BKC permanece com deployer → Treasury em FASE 14
+        console.log("   ⏩ AirdropClaim ignorado — 7M BKC extra vai para Treasury");
 
         // ══════════════════════════════════════════════════════════════════════
         // FASE 12: Faucet (testnet only)
@@ -1208,8 +1166,7 @@ async function main() {
         console.log(`   Deployer:       ${ethers.formatEther(deployerBkc)} BKC / ${ethers.formatEther(deployerEth)} ETH`);
         console.log(`   FortunePool:    ${ethers.formatEther(fortuneBkc)} BKC`);
         console.log(`   LiquidityPool:  ${ethers.formatEther(lpBkc)} BKC`);
-        const airdropBkc = await bkc.balanceOf(airdropAddr);
-        console.log(`   AirdropClaim:   ${ethers.formatEther(airdropBkc)} BKC (Phase 1+2)`);
+        console.log(`   Treasury:       12M BKC (airdrop + reserve — transferred in FASE 14)`);
         if (faucetAddr) {
             const faucetEth = await ethers.provider.getBalance(faucetAddr);
             console.log(`   Faucet:         ${ethers.formatEther(faucetEth)} ETH (ETH-only)`);
@@ -1229,8 +1186,7 @@ async function main() {
         console.log(`   BuybackMiner + Ecosystem → reward notifiers no StakingPool`);
         console.log(`   RewardBooster → configurado no StakingPool`);
         console.log(`   NFTFusion → authorized in RewardBooster`);
-        console.log(`   AirdropClaim → delegateFor authorized in StakingPool`);
-        console.log(`   9 módulos registrados no Ecosystem (1 Bronze pool + AirdropClaim)`);
+        console.log(`   8 módulos registrados no Ecosystem (1 Bronze pool, sem AirdropClaim)`);
         console.log(`   ${actionIds.length} action fees configuradas (gas-based + value-based + fusion)`);
         console.log(`   ETH Distribution: 5% tutor | 15% operator | 30% treasury | 55% buyback`);
         console.log(`   BKC Distribution: ${BKC_DISTRIBUTION.operatorBps/100}% operator / ${BKC_DISTRIBUTION.stakerBps/100}% stakers / ${BKC_DISTRIBUTION.treasuryBps/100}% treasury`);
@@ -1254,8 +1210,7 @@ async function main() {
         console.log("   1. Verificar contratos no Etherscan: npx hardhat run scripts/verify_contracts.ts");
         console.log("   2. Transferir ownership do Ecosystem para Governance (quando pronto)");
         console.log("   3. Chamar bkc.renounceMinterAdmin() quando não precisar mais adicionar minters");
-        console.log("   4. Chamar airdrop.setMerkleRoot(root, deadlineDays) para ativar Phase 1");
-        console.log("   5. Atualizar deployment-addresses.json no frontend");
+        console.log("   4. Atualizar deployment-addresses.json no frontend");
         console.log("────────────────────────────────────────────────────────────────\n");
 
     } catch (error: any) {

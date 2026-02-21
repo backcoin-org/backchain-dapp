@@ -14,7 +14,7 @@ import { addresses } from '../config.js';
 // CONSTANTS
 // ════════════════════════════════════════════════════════════════════════════
 
-const EXPLORER    = "https://sepolia.arbiscan.io";
+const EXPLORER    = "https://sepolia.etherscan.io";
 const PRICE_REFRESH_MS = 15000;
 const DEFAULT_SLIPPAGE = 1;
 const GAS_RESERVE = ethers.parseEther("0.005");

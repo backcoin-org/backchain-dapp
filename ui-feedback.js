@@ -38,7 +38,7 @@ export const showToast = (message, type = 'info', txHash = null) => {
     `;
 
     if (txHash) {
-        const explorerUrl = `https://sepolia.arbiscan.io/tx/${txHash}`;
+        const explorerUrl = `https://sepolia.etherscan.io/tx/${txHash}`;
         content += `<a href="${explorerUrl}" target="_blank" title="View on Explorer" class="ml-3 flex-shrink-0 text-white/80 hover:text-white transition-colors">
                         <i class="fa-solid fa-arrow-up-right-from-square text-sm"></i>
                       </a>`;

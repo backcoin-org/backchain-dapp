@@ -29,7 +29,7 @@ import { RentalTx } from '../modules/transactions/index.js';
 // CONSTANTS
 // ============================================================================
 
-const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
+const EXPLORER_TX = "https://sepolia.etherscan.io/tx/";
 
 // Tier configurations with colors, keep rates, and IPFS images
 const TIER_CONFIG = {

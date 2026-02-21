@@ -28,62 +28,51 @@ export const CONFIG = {
 // Resolve o problema de RPC ruim sem intervenção do usuário
 
 export const METAMASK_NETWORK_CONFIG = {
-    chainId: '0x66eee', // 421614 in hex (opBNB Testnet)
-    chainIdDecimal: 421614,
-    chainName: 'opBNB Testnet',
+    chainId: '0xaa36a7', // 11155111 in hex (Sepolia)
+    chainIdDecimal: 11155111,
+    chainName: 'Sepolia',
     nativeCurrency: {
-        name: 'ETH',
+        name: 'SepoliaETH',
         symbol: 'ETH',
         decimals: 18
     },
-    blockExplorerUrls: ['https://sepolia.arbiscan.io'],
+    blockExplorerUrls: ['https://sepolia.etherscan.io'],
     rpcUrls: [
-        'https://sepolia-rollup.arbitrum.io/rpc',
-        'https://arbitrum-sepolia.publicnode.com',
-        `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`
-    ].filter(url => !url.includes('undefined'))
+        'https://ethereum-sepolia-rpc.publicnode.com',
+        'https://rpc.sepolia.org'
+    ]
 };
 
 // ============================================================================
 // 2. NETWORK CONFIGURATION - MULTI-RPC SYSTEM
 // ============================================================================
 
-// Lista de RPCs em ordem de prioridade (opBNB Testnet — runtime)
+// Lista de RPCs em ordem de prioridade (Sepolia — runtime)
+// Nota: Alchemy key é Arbitrum-only, usar public RPCs para Sepolia
 export const RPC_ENDPOINTS = [
     {
-        name: "Alchemy",
-        url: ALCHEMY_KEY ? `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}` : null,
+        name: "PublicNode",
+        url: "https://ethereum-sepolia-rpc.publicnode.com",
         priority: 1,
-        isPublic: false,
+        isPublic: true,
         corsCompatible: true
     },
     {
-        name: "Arbitrum Official",
-        url: "https://sepolia-rollup.arbitrum.io/rpc",
+        name: "Sepolia Official",
+        url: "https://rpc.sepolia.org",
         priority: 2,
         isPublic: true,
         corsCompatible: true
-    },
-    {
-        name: "PublicNode",
-        url: "https://arbitrum-sepolia.publicnode.com",
-        priority: 3,
-        isPublic: true,
-        corsCompatible: true
     }
-].filter(rpc => rpc.url !== null);
+];
 
-// RPC Principal (opBNB Testnet — runtime)
-export const sepoliaRpcUrl = ALCHEMY_KEY
-    ? `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`
-    : "https://sepolia-rollup.arbitrum.io/rpc";
+// RPC Principal (Sepolia — public)
+export const sepoliaRpcUrl = "https://ethereum-sepolia-rpc.publicnode.com";
 
-// WebSocket
-export const sepoliaWssUrl = ALCHEMY_KEY
-    ? `wss://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`
-    : null;
+// WebSocket (not available on public RPCs)
+export const sepoliaWssUrl = null;
 
-export const sepoliaChainId = 421614n;
+export const sepoliaChainId = 11155111n;
 
 // ============================================================================
 // 3. RPC FALLBACK SYSTEM
@@ -981,7 +970,7 @@ export async function isCorrectNetwork() {
 }
 
 /**
- * Adiciona/Atualiza a rede opBNB Testnet no MetaMask com RPCs confiáveis
+ * Adiciona/Atualiza a rede Sepolia no MetaMask com RPCs confiáveis
  * Esta função também ATUALIZA os RPCs se a rede já existir!
  */
 export async function updateMetaMaskNetwork() {
@@ -1015,7 +1004,7 @@ export async function updateMetaMaskNetwork() {
 }
 
 /**
- * Troca para a rede opBNB Testnet
+ * Troca para a rede Sepolia
  * Se a rede não existir, adiciona automaticamente
  */
 export async function switchToCorrectNetwork() {
@@ -1030,13 +1019,13 @@ export async function switchToCorrectNetwork() {
             params: [{ chainId: METAMASK_NETWORK_CONFIG.chainId }]
         });
         
-        console.log('✅ Switched to opBNB Testnet');
+        console.log('✅ Switched to Sepolia');
         return true;
-        
+
     } catch (switchError) {
         // Error 4902 = chain not added to MetaMask
         if (switchError.code === 4902) {
-            console.log('🔄 Network not found, adding...');
+            console.log('🔄 Sepolia not found, adding...');
             return await updateMetaMaskNetwork();
         }
         
@@ -1112,7 +1101,7 @@ export async function ensureCorrectNetworkConfig() {
             const switched = await switchToCorrectNetwork();
             
             if (!switched) {
-                return { success: false, error: 'Please switch to opBNB Testnet' };
+                return { success: false, error: 'Please switch to Sepolia network' };
             }
         }
 

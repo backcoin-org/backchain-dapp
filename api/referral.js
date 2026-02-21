@@ -22,8 +22,8 @@ const setCorsHeaders = (res) => {
 };
 
 // --- Contract config (env var overrides for each deploy) ---
-const ECOSYSTEM_ADDRESS = process.env.ECOSYSTEM_CONTRACT_ADDRESS || '0xAfCc974E352A47E1b718d7D5a80769a51C224414';
-const FAUCET_ADDRESS = process.env.FAUCET_CONTRACT_ADDRESS || '0xa5724Fae5250589b35Bcb8682dd07CCe4a2D1191';
+const ECOSYSTEM_ADDRESS = process.env.ECOSYSTEM_CONTRACT_ADDRESS || '0x5D20cA8C89bdFaE01254D72FbAD81881fa1042DD';
+const FAUCET_ADDRESS = process.env.FAUCET_CONTRACT_ADDRESS || '0x6666fb7D5383D14379474eBb8033ecbfc7D2e5e6';
 
 const ECOSYSTEM_ABI = [
     'function setTutorFor(address _user, address _tutor) external',
@@ -63,11 +63,8 @@ export default async function handler(req, res) {
         return res.status(500).json({ success: false, error: 'Server configuration error' });
     }
 
-    // Arbitrum Sepolia RPC (runtime)
-    const alchemyKey = process.env.ALCHEMY_API_KEY;
-    const rpcUrl = alchemyKey
-        ? `https://arb-sepolia.g.alchemy.com/v2/${alchemyKey}`
-        : 'https://sepolia-rollup.arbitrum.io/rpc';
+    // Sepolia RPC (public — Alchemy key is Arbitrum-only)
+    const rpcUrl = 'https://ethereum-sepolia-rpc.publicnode.com';
 
     try {
         const provider = new ethers.JsonRpcProvider(rpcUrl);

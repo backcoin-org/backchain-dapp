@@ -13,7 +13,7 @@ try {
     const addresses = JSON.parse(readFileSync(join(process.cwd(), 'deployment-addresses.json'), 'utf8'));
     NOTARY_ADDRESS = addresses.notary;
 } catch {
-    NOTARY_ADDRESS = '0x22A689E034807A5A05503f1f83b6D907F348978B';
+    NOTARY_ADDRESS = '0x0C073AeBB15447Ea71d34d4BDEFb3490f5178595';
 }
 
 const NOTARY_ABI = [
@@ -65,11 +65,8 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Invalid certificate ID' });
     }
 
-    // Arbitrum Sepolia RPC (runtime)
-    const alchemyKey = process.env.ALCHEMY_API_KEY;
-    const rpcUrl = alchemyKey
-        ? `https://arb-sepolia.g.alchemy.com/v2/${alchemyKey}`
-        : 'https://sepolia-rollup.arbitrum.io/rpc';
+    // Sepolia RPC (public — Alchemy key is Arbitrum-only)
+    const rpcUrl = 'https://ethereum-sepolia-rpc.publicnode.com';
 
     try {
         const provider = new ethers.JsonRpcProvider(rpcUrl);

@@ -20,7 +20,12 @@ const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
 // ========================================
 
 const RPC_URLS = {
-  // Arbitrum Sepolia (active runtime)
+  // Sepolia (active runtime) — public RPC (Alchemy key is Arbitrum-only)
+  sepolia: {
+    primary: "https://ethereum-sepolia-rpc.publicnode.com",
+    fallback: "https://rpc.sepolia.org",
+  },
+  // Arbitrum Sepolia (legacy)
   arbitrumSepolia: {
     primary: ALCHEMY_API_KEY
       ? `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}`
@@ -50,7 +55,7 @@ if (!ETHERSCAN_API_KEY) {
   console.warn("⚠️ AVISO: ETHERSCAN_API_KEY não encontrada. Verificação impossível.");
 }
 // Log da RPC sendo usada
-console.log(`🌐 Arbitrum Sepolia RPC: ${RPC_URLS.arbitrumSepolia.primary}`);
+console.log(`🌐 Sepolia RPC: ${RPC_URLS.sepolia.primary}`);
 
 // ========================================
 // ⚙️ CONFIGURAÇÃO DO HARDHAT
@@ -104,7 +109,15 @@ const config: HardhatUserConfig = {
       chainId: 31337,
     },
 
-    // 🟢 TESTNET: Arbitrum Sepolia (active runtime)
+    // 🟢 TESTNET: Sepolia (active runtime)
+    sepolia: {
+      url: RPC_URLS.sepolia.primary,
+      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
+      chainId: 11155111,
+      timeout: 60000,
+    },
+
+    // Arbitrum Sepolia (legacy)
     arbitrumSepolia: {
       url: RPC_URLS.arbitrumSepolia.primary,
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
@@ -135,6 +148,14 @@ const config: HardhatUserConfig = {
   etherscan: {
     apiKey: ETHERSCAN_API_KEY,
     customChains: [
+      {
+        network: "sepolia",
+        chainId: 11155111,
+        urls: {
+          apiURL: "https://api-sepolia.etherscan.io/api",
+          browserURL: "https://sepolia.etherscan.io",
+        },
+      },
       {
         network: "arbitrumSepolia",
         chainId: 421614,

@@ -41,8 +41,8 @@ const ethers = window.ethers;
 // ============================================================================
 // 1. CONFIGURAÇÃO
 // ============================================================================
-const OPBNB_TESTNET_ID_DECIMAL = 421614;
-const OPBNB_TESTNET_ID_HEX = '0x66eee';
+const OPBNB_TESTNET_ID_DECIMAL = 11155111;
+const OPBNB_TESTNET_ID_HEX = '0xaa36a7';
 
 let balancePollingInterval = null;
 
@@ -590,7 +590,7 @@ export async function initPublicProvider() {
             setupNetworkChangeListener(async (info) => {
                 if (!info.isCorrectNetwork) {
                     console.log('⚠️ User switched to wrong network');
-                    showToast("Please switch back to opBNB Testnet", "warning");
+                    showToast("Please switch to Sepolia network", "warning");
                 } else {
                     const health = await checkRpcHealth();
                     if (!health.healthy) {

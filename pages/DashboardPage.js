@@ -63,7 +63,7 @@ const DashboardState = {
 // ============================================================================
 // CONFIG
 // ============================================================================
-const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/tx/";
+const EXPLORER_BASE_URL = "https://sepolia.etherscan.io/tx/";
 const FAUCET_API_URL = "/api/faucet";
 const NETWORK_ACTIVITY_API = "https://getrecentactivity-4wvdcuoouq-uc.a.run.app";
 const SYSTEM_DATA_API = "https://getsystemdata-4wvdcuoouq-uc.a.run.app";
@@ -512,7 +512,7 @@ function copyTutorLink() {
 function shareTutorLink() {
     if (!State.userAddress) return;
     const link = `${window.location.origin}/#dashboard?ref=${State.userAddress}`;
-    const text = `Join Backchain and earn crypto!\n\nStake BKC and earn daily rewards\nBe a tutor — earn 10% ETH + 5% BKC FOREVER\n\n${link}\n\n#Backchain #DeFi #Arbitrum #ArbitrumOne #Web3`;
+    const text = `Join Backchain and earn crypto!\n\nStake BKC and earn daily rewards\nBe a tutor — earn 10% ETH + 5% BKC FOREVER\n\n${link}\n\n#Backchain #DeFi #opBNB #BNBChain #Web3`;
 
     if (navigator.share) {
         navigator.share({ title: 'Backchain — Become a Tutor', text, url: link }).catch(() => {});

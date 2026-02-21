@@ -129,7 +129,7 @@ export const ErrorTypes = {
  */
 export const ErrorMessages = {
     // Network
-    [ErrorTypes.WRONG_NETWORK]: 'Please switch to opBNB Testnet',
+    [ErrorTypes.WRONG_NETWORK]: 'Please switch to Sepolia network',
     [ErrorTypes.RPC_UNHEALTHY]: 'Network connection issue. Retrying...',
     [ErrorTypes.RPC_RATE_LIMITED]: 'Network is busy. Please wait a moment...',
     [ErrorTypes.NETWORK_ERROR]: 'Network error. Please check your connection',

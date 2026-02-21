@@ -20,7 +20,7 @@ const setCorsHeaders = (res) => {
 };
 
 // --- Contract config (env var overrides for each deploy) ---
-const FAUCET_ADDRESS = process.env.FAUCET_CONTRACT_ADDRESS || '0xa5724Fae5250589b35Bcb8682dd07CCe4a2D1191';
+const FAUCET_ADDRESS = process.env.FAUCET_CONTRACT_ADDRESS || '0x6666fb7D5383D14379474eBb8033ecbfc7D2e5e6';
 const FAUCET_ABI = [
     'function distributeTo(address recipient) external',
     'function canClaim(address user) view returns (bool)',
@@ -48,11 +48,8 @@ export default async function handler(req, res) {
         return res.status(500).json({ success: false, error: 'Server configuration error' });
     }
 
-    // Arbitrum Sepolia RPC (runtime)
-    const alchemyKey = process.env.ALCHEMY_API_KEY;
-    const rpcUrl = alchemyKey
-        ? `https://arb-sepolia.g.alchemy.com/v2/${alchemyKey}`
-        : 'https://sepolia-rollup.arbitrum.io/rpc';
+    // Sepolia RPC (public — Alchemy key is Arbitrum-only)
+    const rpcUrl = 'https://ethereum-sepolia-rpc.publicnode.com';
 
     try {
         const provider = new ethers.JsonRpcProvider(rpcUrl);
