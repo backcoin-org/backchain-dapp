@@ -396,7 +396,8 @@ async function loadAirdropData() {
 }
 
 // --- Agora On-Chain Data ---
-const EVENTS_LOOKBACK = -10_000_000;
+// V12 deploy block on Sepolia — fixed fromBlock avoids massive eth_getLogs ranges
+const EVENTS_LOOKBACK = 10_308_450;
 
 async function loadAgoraData() {
     airdropState.agoraHasProfile = false;

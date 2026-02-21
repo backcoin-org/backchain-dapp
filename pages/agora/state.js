@@ -21,8 +21,11 @@ export const CONTENT_LIMITS = {
     elite:    50000,
 };
 
-// Arbitrum ~250ms blocks. 10M blocks ~ 29 days of history.
-export const EVENTS_LOOKBACK = -10_000_000;
+// Sepolia deploy block for V12 contracts (deployed 2026-02-21).
+// All Agora events exist after this block. Using a fixed fromBlock avoids
+// massive eth_getLogs ranges that public RPCs reject silently.
+export const DEPLOY_BLOCK = 10_308_450;
+export const EVENTS_LOOKBACK = DEPLOY_BLOCK;
 
 export const TAGS = [
     { id: 0,  name: 'General',   icon: 'fa-globe',             color: '#8b8b9e' },

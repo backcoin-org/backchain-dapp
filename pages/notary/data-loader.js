@@ -113,12 +113,12 @@ async function loadCertificatesFromContract() {
             const provider = NetworkManager.getProvider();
             if (provider && addresses?.notary) {
                 const contract = new ethers.Contract(addresses.notary, NOTARY_ABI_EVENTS, provider);
-                const currentBlock = await provider.getBlockNumber();
-                const fromBlock = Math.max(0, currentBlock - 10_000_000);
+                // V12 deploy block on Sepolia — use fixed fromBlock for public RPC compat
+                const fromBlock = 10_308_450;
 
                 // Query transfers TO current user
                 const transferFilter = contract.filters.CertificateTransferred(null, null, State.userAddress);
-                const transferEvents = await contract.queryFilter(transferFilter, fromBlock, currentBlock);
+                const transferEvents = await contract.queryFilter(transferFilter, fromBlock);
 
                 // Build set of received document hashes
                 const receivedHashes = new Set(transferEvents.map(ev => ev.args.documentHash.toLowerCase()));
@@ -172,11 +172,10 @@ async function loadRecentNotarizations() {
     const contract = new ethers.Contract(addresses.notary, NOTARY_ABI_EVENTS, provider);
     const filter = contract.filters.Certified();
 
-    const currentBlock = await provider.getBlockNumber();
-    // Arbitrum ~250ms/block → 10M blocks ≈ 29 days
-    const fromBlock = Math.max(0, currentBlock - 10_000_000);
+    // V12 deploy block on Sepolia — use fixed fromBlock for public RPC compat
+    const fromBlock = 10_308_450;
 
-    const events = await contract.queryFilter(filter, fromBlock, currentBlock);
+    const events = await contract.queryFilter(filter, fromBlock);
 
     // Get 20 most recent
     const recent = events.slice(-20).reverse();
