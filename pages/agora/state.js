@@ -62,6 +62,8 @@ export const MEDIA_LIMITS = {
     video: { max: 100 * 1024 * 1024, types: ['video/mp4', 'video/webm', 'video/ogg'], label: '100MB' }
 };
 
+export const GALLERY_MAX_ITEMS = 10;
+
 export const bkcABI = [
     "function balanceOf(address) view returns (uint256)",
     "function allowance(address owner, address spender) view returns (uint256)",
@@ -94,11 +96,13 @@ export const BC = {
     following: new Set(),
     followers: new Set(),
     followCounts: new Map(),
-    // Media
+    // Media (multi-upload)
+    pendingMedia: [],  // Array of { file, preview, type: 'image'|'video' }
+    isUploadingImage: false,
+    // Legacy single-media (keep for backward compat)
     pendingImage: null,
     pendingImagePreview: null,
     pendingMediaType: null,
-    isUploadingImage: false,
     // View state
     selectedPost: null,
     selectedProfile: null,
@@ -124,6 +128,9 @@ export const BC = {
     selectedTag: -1,
     selectedLanguage: null,
     composeTag: 0,
+    // Infinite scroll & feed mode
+    feedPage: 0,
+    feedMode: 'list',  // 'list' | 'tiktok'
     // Stats
     globalStats: null,
     // UI flags

@@ -52,16 +52,37 @@ export function getIPFSUrl(uri) {
 }
 
 export function parsePostContent(content) {
-    if (!content) return { text: '', mediaCID: '', isVideo: false };
+    const empty = { text: '', media: [], mediaCID: '', isVideo: false };
+    if (!content) return empty;
+
+    // New format: [gallery]img:CID1|vid:CID2|img:CID3
+    const galleryIdx = content.indexOf('\n[gallery]');
+    if (galleryIdx !== -1) {
+        const text = content.slice(0, galleryIdx);
+        const media = content.slice(galleryIdx + 10).trim().split('|').map(item => {
+            if (item.startsWith('vid:')) return { cid: item.slice(4), type: 'video' };
+            if (item.startsWith('img:')) return { cid: item.slice(4), type: 'image' };
+            return { cid: item, type: 'image' };
+        }).filter(m => m.cid);
+        const first = media[0] || null;
+        return { text, media, mediaCID: first?.cid || '', isVideo: first?.type === 'video' };
+    }
+
+    // Legacy: [vid]CID
     const vidIdx = content.indexOf('\n[vid]');
     if (vidIdx !== -1) {
-        return { text: content.slice(0, vidIdx), mediaCID: content.slice(vidIdx + 6).trim(), isVideo: true };
+        const cid = content.slice(vidIdx + 6).trim();
+        return { text: content.slice(0, vidIdx), media: [{ cid, type: 'video' }], mediaCID: cid, isVideo: true };
     }
+
+    // Legacy: [img]CID
     const imgIdx = content.indexOf('\n[img]');
     if (imgIdx !== -1) {
-        return { text: content.slice(0, imgIdx), mediaCID: content.slice(imgIdx + 6).trim(), isVideo: false };
+        const cid = content.slice(imgIdx + 6).trim();
+        return { text: content.slice(0, imgIdx), media: [{ cid, type: 'image' }], mediaCID: cid, isVideo: false };
     }
-    return { text: content, mediaCID: '', isVideo: false };
+
+    return { text: content, media: [], mediaCID: '', isVideo: false };
 }
 
 export function parseMetadata(metadataURI) {

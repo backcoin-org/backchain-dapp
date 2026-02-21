@@ -1,9 +1,9 @@
 // scripts/deploy_ecosystem.ts
 // ════════════════════════════════════════════════════════════════════════════
-// 🚀 BACKCHAIN ECOSYSTEM - DEPLOY COMPLETO V10.0 (IMUTÁVEL)
+// 🚀 BACKCHAIN ECOSYSTEM - DEPLOY COMPLETO V12.0 (IMUTÁVEL)
 // ════════════════════════════════════════════════════════════════════════════
 //
-// V10.0: TODOS os contratos são imutáveis (sem UUPS proxy).
+// V12.0: TODOS os contratos são imutáveis (sem UUPS proxy).
 // - AirdropClaim: IGNORADO — tokens vão direto para Treasury
 // - BKCToken: deployer-controlled minter, TGE 20M mint no constructor
 // - BackchainEcosystem: registerModule() / registerModuleBatch()
@@ -67,7 +67,7 @@ let currentPhase = "INIT";
 
 function initTransactionLog(network: string, chainId: number, deployer: string) {
     txLog = {
-        version: "10.0.0",
+        version: "12.0.0",
         network,
         chainId,
         deployer,
@@ -429,8 +429,8 @@ function clearConfigFiles(networkName: string) {
     fs.writeFileSync(addressesFilePath, JSON.stringify({}, null, 2));
 
     const defaultRules = {
-        VERSION: "10.0.0",
-        DESCRIPTION: "Backchain Ecosystem V10.0 - All Immutable Contracts + Ecosystem-wide Referral",
+        VERSION: "12.0.0",
+        DESCRIPTION: "Backchain Ecosystem V12.0 - All Immutable Contracts + Fixed Fees + Batch Actions",
         NETWORK: networkName,
         CREATED_AT: new Date().toISOString(),
         wallets: {
@@ -589,7 +589,7 @@ async function deployContractWithRetry(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//                    🚀 SCRIPT PRINCIPAL V10.0
+//                    🚀 SCRIPT PRINCIPAL V12.0
 // ════════════════════════════════════════════════════════════════════════════
 
 async function main() {
@@ -606,7 +606,7 @@ async function main() {
     initTransactionLog(networkName, chainId, deployer.address);
 
     console.log("\n\n════════════════════════════════════════════════════════════════════════════");
-    console.log("               🚀 BACKCHAIN ECOSYSTEM DEPLOY V10.0 (IMUTÁVEL)");
+    console.log("               🚀 BACKCHAIN ECOSYSTEM DEPLOY V12.0 (IMUTÁVEL)");
     console.log("════════════════════════════════════════════════════════════════════════════");
     console.log(`   Network:     ${networkName} (chainId: ${chainId})`);
     console.log(`   Deployer:    ${deployer.address}`);
@@ -614,7 +614,7 @@ async function main() {
     console.log(`   Treasury:    ${SYSTEM_WALLETS.TREASURY}`);
     console.log(`   Mode:        ${isMainnet ? '🔴 MAINNET' : '🟢 TESTNET'}`);
     console.log("════════════════════════════════════════════════════════════════════════════");
-    console.log("   ⚠️  V10.0: TODOS os contratos são IMUTÁVEIS (sem proxy)");
+    console.log("   ⚠️  V12.0: TODOS os contratos são IMUTÁVEIS (sem proxy)");
     console.log("════════════════════════════════════════════════════════════════════════════\n");
 
     try {
@@ -1145,7 +1145,7 @@ async function main() {
         // RESUMO FINAL
         // ══════════════════════════════════════════════════════════════════════
         console.log("\n════════════════════════════════════════════════════════════════════════════");
-        console.log("                         📊 DEPLOY V10.0 CONCLUÍDO!");
+        console.log("                         📊 DEPLOY V12.0 CONCLUÍDO!");
         console.log("════════════════════════════════════════════════════════════════════════════");
 
         console.log("\n📋 CONTRATOS IMPLANTADOS:");
@@ -1197,7 +1197,7 @@ async function main() {
         printTransactionSummary();
 
         console.log("\n────────────────────────────────────────────────────────────────");
-        console.log(`   🎉 BACKCHAIN V10.0 IMPLANTADO COM SUCESSO!`);
+        console.log(`   🎉 BACKCHAIN V12.0 IMPLANTADO COM SUCESSO!`);
         console.log(`   📡 Rede: ${networkName} ${isMainnet ? '(MAINNET)' : '(TESTNET)'}`);
         console.log(`   🔒 Todos os contratos são IMUTÁVEIS (sem proxy)`);
         if (governanceAddr) {

@@ -4,7 +4,7 @@
 
 import { State } from '../../state.js';
 import { BC, getMaxContent } from './state.js';
-import { getProfileName, getInitials } from './utils.js';
+import { getProfileName, getInitials, escapeHtml, linkifyContent } from './utils.js';
 import { injectStyles } from './styles.js';
 import { loadFees, loadUserStatus, loadGlobalStats, loadProfiles, loadPosts, loadSocialGraph, loadBlockedAuthors, loadActiveRooms } from './data-loader.js';
 import { navigateView, goBack, doCreatePost, doCreateReply, doLike, doFollow, doUnfollow, doDeletePost, doPinPost, doBlockUser, doUnblockUser, handleImageSelect, removeImage, onWizUsernameInput, doCreateProfile, goLive, endLive, watchLive, leaveLive, sharePost, closeModal, togglePostMenu, openChangeTag, selectNewTag, confirmChangeTag, restoreCart, removeFromCart, clearCart, toggleCart, submitCart, getCartFeeTotal } from './actions.js';
@@ -101,8 +101,75 @@ function renderContent() {
     }
 }
 
+// After rendering content, set up video auto-play observers
+function _observeVideos() {
+    if (!BC._videoObserver) {
+        BC._videoObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                const video = entry.target;
+                if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+                    video.play().catch(() => {});
+                } else {
+                    video.pause();
+                }
+            });
+        }, { threshold: [0, 0.6] });
+    }
+    // Disconnect previously observed, re-observe all current videos
+    BC._videoObserver.disconnect();
+    document.querySelectorAll('video[data-post-video]').forEach(v => {
+        BC._videoObserver.observe(v);
+    });
+}
+
+// Infinite scroll sentinel observer
+function _observeSentinel() {
+    if (BC._sentinelObserver) BC._sentinelObserver.disconnect();
+    const sentinel = document.querySelector('[data-sentinel="feed"]');
+    if (!sentinel) return;
+    BC._sentinelObserver = new IntersectionObserver((entries) => {
+        if (entries[0]?.isIntersecting) {
+            BC.feedPage++;
+            renderContent();
+            _observeVideos();
+            _observeSentinel();
+        }
+    }, { rootMargin: '200px' });
+    BC._sentinelObserver.observe(sentinel);
+}
+
+// Double-tap to like (TikTok mode)
+let _lastTapTime = 0;
+function _initDoubleTap() {
+    document.addEventListener('click', (e) => {
+        const card = e.target.closest('.bc-tiktok-card');
+        if (!card) return;
+        const now = Date.now();
+        if (now - _lastTapTime < 300) {
+            // Double-tap → like
+            const postId = card.dataset.postId;
+            if (postId) {
+                window.AgoraPage?.like(postId);
+                // Float heart animation
+                const heart = document.createElement('div');
+                heart.className = 'bc-float-heart';
+                heart.innerHTML = '<i class="fa-solid fa-heart"></i>';
+                heart.style.left = (e.clientX - card.getBoundingClientRect().left - 30) + 'px';
+                heart.style.top = (e.clientY - card.getBoundingClientRect().top - 30) + 'px';
+                card.appendChild(heart);
+                setTimeout(() => heart.remove(), 900);
+                if (navigator.vibrate) navigator.vibrate(50);
+            }
+            _lastTapTime = 0;
+        } else {
+            _lastTapTime = now;
+        }
+    });
+}
+_initDoubleTap();
+
 // Connect BC._render to renderContent so modules can trigger re-renders
-BC._render = renderContent;
+BC._render = () => { renderContent(); _observeVideos(); _observeSentinel(); };
 
 // ============================================================================
 // CART BAR
@@ -183,6 +250,8 @@ function render() {
         ${renderCartBar()}
         ${renderModals()}`;
     renderContent();
+    _observeVideos();
+    _observeSentinel();
 }
 
 // ============================================================================
@@ -250,6 +319,70 @@ document.addEventListener('click', () => {
 });
 
 // ============================================================================
+// CAROUSEL NAVIGATION
+// ============================================================================
+
+function _moveCarousel(postId, direction) {
+    const carousel = document.querySelector(`[data-carousel="${postId}"]`);
+    if (!carousel) return;
+    const total = parseInt(carousel.dataset.total) || 1;
+    let current = parseInt(carousel.dataset.current) || 0;
+    current = Math.max(0, Math.min(total - 1, current + direction));
+    carousel.dataset.current = current;
+
+    // Show/hide slides
+    carousel.querySelectorAll('.bc-carousel-slide').forEach((s, i) => {
+        s.style.display = i === current ? '' : 'none';
+    });
+    // Update dots
+    carousel.querySelectorAll('.bc-carousel-dot').forEach((d, i) => {
+        d.classList.toggle('active', i === current);
+    });
+    // Update arrows visibility
+    const prev = carousel.querySelector('.bc-carousel-prev');
+    const next = carousel.querySelector('.bc-carousel-next');
+    if (prev) prev.style.display = current === 0 ? 'none' : '';
+    if (next) next.style.display = current === total - 1 ? 'none' : '';
+    // Update counter
+    const counter = carousel.querySelector('.bc-carousel-counter');
+    if (counter) counter.textContent = `${current + 1}/${total}`;
+    // Pause/play videos
+    carousel.querySelectorAll('video').forEach((v, i) => {
+        if (i === current) { v.play().catch(() => {}); } else { v.pause(); }
+    });
+}
+
+function _initCarouselSwipe() {
+    document.addEventListener('touchstart', e => {
+        const carousel = e.target.closest('[data-carousel]');
+        if (!carousel) return;
+        carousel._touchStartX = e.touches[0].clientX;
+    }, { passive: true });
+
+    document.addEventListener('touchend', e => {
+        const carousel = e.target.closest('[data-carousel]');
+        if (!carousel || carousel._touchStartX == null) return;
+        const dx = e.changedTouches[0].clientX - carousel._touchStartX;
+        carousel._touchStartX = null;
+        if (Math.abs(dx) < 40) return; // too short swipe
+        _moveCarousel(carousel.dataset.carousel, dx < 0 ? 1 : -1);
+    }, { passive: true });
+}
+_initCarouselSwipe();
+
+// ============================================================================
+// EXPAND POST (inline text expansion)
+// ============================================================================
+
+function _expandPost(postId) {
+    const body = document.querySelector(`.bc-post-body[data-post-id="${postId}"]`);
+    if (!body) return;
+    const post = BC.postsById.get(postId);
+    if (!post?.content) return;
+    body.innerHTML = linkifyContent(escapeHtml(post.content));
+}
+
+// ============================================================================
 // EXPORT
 // ============================================================================
 
@@ -269,6 +402,8 @@ export const AgoraPage = {
         await loadBlockedAuthors();
         restoreCart();
         renderContent();
+        _observeVideos();
+        _observeSentinel();
         checkDeepLink();
     },
 
@@ -289,17 +424,28 @@ export const AgoraPage = {
         BC.activeTab = tab;
         BC.view = tab;
         BC.selectedTag = -1;
+        BC.feedPage = 0;
         render();
     },
 
     filterTag(tagId) {
         BC.selectedTag = tagId;
+        BC.feedPage = 0;
         renderContent();
+        _observeSentinel();
     },
 
     filterLanguage(code) {
         BC.selectedLanguage = code;
+        BC.feedPage = 0;
         renderContent();
+        _observeSentinel();
+    },
+
+    setFeedMode(mode) {
+        BC.feedMode = mode;
+        renderContent();
+        _observeVideos();
     },
 
     setWizLanguage(code) {
@@ -382,6 +528,11 @@ export const AgoraPage = {
     clearCart,
     toggleCart,
     submitCart,
+
+    // Carousel + Expand
+    expandPost: _expandPost,
+    carouselPrev(postId) { _moveCarousel(postId, -1); },
+    carouselNext(postId) { _moveCarousel(postId, 1); },
 
     // Live streaming
     goLive,

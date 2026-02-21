@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { State } from '../../state.js';
-import { BC, TAGS, CONTENT_LIMITS, getMaxContent } from './state.js';
+import { BC, TAGS, CONTENT_LIMITS, GALLERY_MAX_ITEMS, getMaxContent } from './state.js';
 import { getInitials, formatETH } from './utils.js';
 
 // ============================================================================
@@ -59,9 +59,25 @@ function _renderUpgradeHint() {
 // COMPOSE BOX
 // ============================================================================
 
+function _renderMediaGrid() {
+    if (BC.pendingMedia.length === 0) return '';
+    const canAddMore = BC.pendingMedia.length < GALLERY_MAX_ITEMS;
+    const items = BC.pendingMedia.map((m, i) => `
+        <div class="bc-media-thumb">
+            <img src="${m.preview}" alt="">
+            ${m.type === 'video' ? '<div class="bc-video-badge"><i class="fa-solid fa-play"></i> Video</div>' : ''}
+            <button class="bc-image-remove" onclick="event.stopPropagation(); AgoraPage.removeImage(${i})"><i class="fa-solid fa-xmark"></i></button>
+        </div>`).join('');
+    const addBtn = canAddMore ? `
+        <div class="bc-media-thumb bc-media-add" onclick="document.getElementById('bc-image-input').click()">
+            <i class="fa-solid fa-plus"></i>
+        </div>` : '';
+    return `<div class="bc-media-grid">${items}${addBtn}</div>`;
+}
+
 export function renderCompose() {
     if (!State.isConnected) return '';
-    const hasMedia = !!BC.pendingImage;
+    const hasMedia = BC.pendingMedia.length > 0;
     const feeLabel = hasMedia ? `~${formatETH(BC.fees.post || 0n)} BNB` : 'FREE';
     const profileBanner = (!BC.hasProfile && State.isConnected) ? `
         <div class="bc-profile-create-banner">
@@ -82,13 +98,8 @@ export function renderCompose() {
                 </div>
                 <div class="bc-compose-body">
                     <textarea id="bc-compose-input" class="bc-compose-textarea" placeholder="What's happening on-chain?" maxlength="${getMaxContent()}" oninput="AgoraPage._updateCharCount(this)"></textarea>
-                    ${BC.pendingImagePreview ? `
-                        <div class="bc-image-preview">
-                            <img src="${BC.pendingImagePreview}" alt="Preview">
-                            ${BC.pendingMediaType === 'video' ? '<div class="bc-video-badge"><i class="fa-solid fa-play"></i> Video</div>' : ''}
-                            <button class="bc-image-remove" onclick="AgoraPage.removeImage()"><i class="fa-solid fa-xmark"></i></button>
-                        </div>` : ''}
-                    ${BC.isUploadingImage ? `<div class="bc-uploading-badge"><i class="fa-solid fa-spinner fa-spin"></i> Uploading ${BC.pendingMediaType === 'video' ? 'video' : 'image'}...</div>` : ''}
+                    ${_renderMediaGrid()}
+                    ${BC.isUploadingImage ? `<div class="bc-uploading-badge"><i class="fa-solid fa-spinner fa-spin"></i> Uploading media...</div>` : ''}
                     ${renderComposeTagPicker()}
                 </div>
             </div>
@@ -96,8 +107,8 @@ export function renderCompose() {
             <div class="bc-compose-divider"></div>
             <div class="bc-compose-bottom">
                 <div class="bc-compose-tools">
-                    <button class="bc-compose-tool" title="Add image" onclick="document.getElementById('bc-image-input').click()"><i class="fa-solid fa-image"></i></button>
-                    <input type="file" id="bc-image-input" hidden accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/ogg" onchange="AgoraPage.handleImageSelect(event)">
+                    <button class="bc-compose-tool" title="Add media" onclick="document.getElementById('bc-image-input').click()" ${BC.pendingMedia.length >= GALLERY_MAX_ITEMS ? 'disabled' : ''}><i class="fa-solid fa-image"></i></button>
+                    <input type="file" id="bc-image-input" hidden accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/ogg" multiple onchange="AgoraPage.handleImageSelect(event)">
                     <button class="bc-go-live-btn" title="Go Live" onclick="AgoraPage.goLive()" ${BC.isLive ? 'disabled' : ''}>
                         <i class="fa-solid fa-video"></i> ${BC.isLive ? 'LIVE' : 'Go Live'}
                     </button>

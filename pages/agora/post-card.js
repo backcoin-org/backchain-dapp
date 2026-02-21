@@ -11,6 +11,68 @@ import {
     renderAvatar, getTagInfo
 } from './utils.js';
 
+const FEED_PREVIEW_CHARS = 280;
+
+// ============================================================================
+// POST BODY (with truncation in feed)
+// ============================================================================
+
+function _renderPostBody(post, options = {}) {
+    if (!post.content) return '';
+    const isDetail = options.noAnimation && !options.isRepostContent; // post-detail uses noAnimation
+    const isTruncated = !isDetail && post.content.length > FEED_PREVIEW_CHARS;
+    const displayText = isTruncated ? post.content.slice(0, FEED_PREVIEW_CHARS) + '...' : post.content;
+    return `<div class="bc-post-body" data-post-id="${post.id}">
+        ${linkifyContent(escapeHtml(displayText))}
+        ${isTruncated ? `<span class="bc-read-more" onclick="event.stopPropagation(); AgoraPage.expandPost('${post.id}')">Read more</span>` : ''}
+    </div>`;
+}
+
+// ============================================================================
+// POST MEDIA (carousel for multi-media, single for legacy)
+// ============================================================================
+
+function _renderPostMedia(post) {
+    const media = post.media || [];
+
+    // No media at all
+    if (media.length === 0 && !post.mediaCID) return '';
+
+    // Single media (legacy or 1-item gallery)
+    if (media.length <= 1) {
+        const cid = media[0]?.cid || post.mediaCID;
+        const isVid = media[0]?.type === 'video' || post.isVideo;
+        if (!cid) return '';
+        const url = resolveContentUrl(cid) || '';
+        return `<div class="bc-post-media">${isVid
+            ? `<video src="${url}" playsinline muted loop preload="metadata" data-post-video="${post.id}" onerror="this.style.display='none'"></video>`
+            : `<img src="${url}" alt="Media" loading="lazy" onerror="this.style.display='none'">`
+        }</div>`;
+    }
+
+    // Multi-media carousel
+    const slides = media.map((m, i) => {
+        const url = resolveContentUrl(m.cid) || '';
+        const hidden = i === 0 ? '' : ' style="display:none;"';
+        return m.type === 'video'
+            ? `<div class="bc-carousel-slide" data-slide="${i}"${hidden}><video src="${url}" playsinline muted loop preload="metadata" data-post-video="${post.id}"></video></div>`
+            : `<div class="bc-carousel-slide" data-slide="${i}"${hidden}><img src="${url}" alt="Media ${i+1}" loading="lazy"></div>`;
+    }).join('');
+
+    const dots = media.map((_, i) =>
+        `<span class="bc-carousel-dot${i === 0 ? ' active' : ''}" data-idx="${i}"></span>`
+    ).join('');
+
+    return `
+        <div class="bc-post-media bc-carousel" data-carousel="${post.id}" data-current="0" data-total="${media.length}" onclick="event.stopPropagation();">
+            <div class="bc-carousel-track">${slides}</div>
+            <div class="bc-carousel-dots">${dots}</div>
+            <button class="bc-carousel-arrow bc-carousel-prev" onclick="AgoraPage.carouselPrev('${post.id}')" style="display:none;"><i class="fa-solid fa-chevron-left"></i></button>
+            <button class="bc-carousel-arrow bc-carousel-next" onclick="AgoraPage.carouselNext('${post.id}')"><i class="fa-solid fa-chevron-right"></i></button>
+            <span class="bc-carousel-counter">1/${media.length}</span>
+        </div>`;
+}
+
 // ============================================================================
 // POST MENU
 // ============================================================================
@@ -115,11 +177,8 @@ export function renderPost(post, index = 0, options = {}) {
                 </div>
                 ${renderPostMenu(post)}
             </div>
-            ${post.content ? `<div class="bc-post-body">${linkifyContent(escapeHtml(post.content))}</div>` : ''}
-            ${post.mediaCID ? `<div class="bc-post-media">${post.isVideo
-                ? `<video src="${resolveContentUrl(post.mediaCID) || ''}" controls playsinline preload="metadata" onerror="this.style.display='none'"></video>`
-                : `<img src="${resolveContentUrl(post.mediaCID) || ''}" alt="Media" loading="lazy" onerror="this.style.display='none'">`
-            }</div>` : ''}
+            ${_renderPostBody(post, options)}
+            ${_renderPostMedia(post)}
             <div class="bc-actions" onclick="event.stopPropagation()">
                 <button class="bc-action act-reply" onclick="AgoraPage.openReply('${post.id}')" title="Reply">
                     <i class="fa-regular fa-comment"></i>${replyCount > 0 ? `<span class="count">${replyCount}</span>` : ''}

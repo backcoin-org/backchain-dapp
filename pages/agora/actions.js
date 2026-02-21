@@ -10,7 +10,7 @@ import { agoraABI } from '../../config.js';
 import { BackchatTx } from '../../modules/transactions/index.js';
 import { irysUploadFile } from '../../modules/core/index.js';
 import { LiveStream } from '../../modules/webrtc-live.js';
-import { BC, getMaxContent, getOperatorAddress, MEDIA_LIMITS } from './state.js';
+import { BC, getMaxContent, getOperatorAddress, MEDIA_LIMITS, GALLERY_MAX_ITEMS } from './state.js';
 import { getProfileName, getProfileUsername, getIPFSUrl } from './utils.js';
 import { loadPosts } from './data-loader.js';
 
@@ -57,16 +57,26 @@ export async function doCreatePost() {
     let finalContent = content;
     let contentType = 0;
 
-    if (BC.pendingImage) {
-        const isVideo = BC.pendingMediaType === 'video';
+    // Multi-media upload
+    if (BC.pendingMedia.length > 0) {
         try {
             BC.isUploadingImage = true;
             BC._render();
-            const result = await uploadMediaToStorage(BC.pendingImage);
-            const cid = result.ipfsHash || '';
-            if (cid) {
-                finalContent = content + (isVideo ? '\n[vid]' : '\n[img]') + cid;
-                contentType = isVideo ? 2 : 1;
+            const uploaded = [];
+            for (const m of BC.pendingMedia) {
+                const result = await uploadMediaToStorage(m.file);
+                if (result.ipfsHash) uploaded.push({ cid: result.ipfsHash, type: m.type });
+            }
+            if (uploaded.length === 1) {
+                // Single media — legacy format for backward compat
+                const m = uploaded[0];
+                finalContent = content + (m.type === 'video' ? '\n[vid]' : '\n[img]') + m.cid;
+                contentType = m.type === 'video' ? 2 : 1;
+            } else if (uploaded.length > 1) {
+                // Gallery format
+                const gallery = uploaded.map(m => `${m.type === 'video' ? 'vid' : 'img'}:${m.cid}`).join('|');
+                finalContent = content + '\n[gallery]' + gallery;
+                contentType = 1;
             }
         } catch (e) {
             console.error('[Agora] Media upload failed:', e);
@@ -89,6 +99,7 @@ export async function doCreatePost() {
         button: btn,
         onSuccess: async () => {
             if (input) input.value = '';
+            BC.pendingMedia = [];
             BC.pendingImage = null;
             BC.pendingImagePreview = null;
             BC.pendingMediaType = null;
@@ -474,43 +485,58 @@ export async function uploadMediaToStorage(file) {
 }
 
 export function handleImageSelect(e) {
-    const file = e.target?.files?.[0];
-    if (!file) return;
-    const isImage = file.type.startsWith('image/');
-    const isVideo = file.type.startsWith('video/');
-    if (!isImage && !isVideo) { showToast('Unsupported file type. Use images or videos.', 'error'); return; }
-    const limit = isVideo ? MEDIA_LIMITS.video : MEDIA_LIMITS.image;
-    if (!limit.types.includes(file.type)) { showToast(`Invalid ${isVideo ? 'video' : 'image'} format.`, 'error'); return; }
-    if (file.size > limit.max) { showToast(`File too large. Maximum ${limit.label}.`, 'error'); return; }
+    const files = e.target?.files;
+    if (!files || files.length === 0) return;
+    const remaining = GALLERY_MAX_ITEMS - BC.pendingMedia.length;
+    if (remaining <= 0) { showToast(`Max ${GALLERY_MAX_ITEMS} media items`, 'error'); return; }
+    const toAdd = Array.from(files).slice(0, remaining);
+    let processed = 0;
 
-    BC.pendingImage = file;
-    if (isVideo) {
-        const video = document.createElement('video');
-        video.preload = 'metadata';
-        video.onloadeddata = () => { video.currentTime = 1; };
-        video.onseeked = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            canvas.getContext('2d').drawImage(video, 0, 0);
-            BC.pendingImagePreview = canvas.toDataURL('image/jpeg');
-            BC.pendingMediaType = 'video';
-            BC._render();
-            URL.revokeObjectURL(video.src);
-        };
-        video.src = URL.createObjectURL(file);
-    } else {
-        BC.pendingMediaType = 'image';
-        const reader = new FileReader();
-        reader.onload = (ev) => { BC.pendingImagePreview = ev.target.result; BC._render(); };
-        reader.readAsDataURL(file);
+    for (const file of toAdd) {
+        const isImage = file.type.startsWith('image/');
+        const isVideo = file.type.startsWith('video/');
+        if (!isImage && !isVideo) { showToast('Unsupported file type. Use images or videos.', 'error'); continue; }
+        const limit = isVideo ? MEDIA_LIMITS.video : MEDIA_LIMITS.image;
+        if (!limit.types.includes(file.type)) { showToast(`Invalid ${isVideo ? 'video' : 'image'} format.`, 'error'); continue; }
+        if (file.size > limit.max) { showToast(`File too large. Maximum ${limit.label}.`, 'error'); continue; }
+
+        if (isVideo) {
+            const video = document.createElement('video');
+            video.preload = 'metadata';
+            video.onloadeddata = () => { video.currentTime = 1; };
+            video.onseeked = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                canvas.getContext('2d').drawImage(video, 0, 0);
+                BC.pendingMedia.push({ file, preview: canvas.toDataURL('image/jpeg'), type: 'video' });
+                URL.revokeObjectURL(video.src);
+                if (++processed === toAdd.length) BC._render();
+            };
+            video.src = URL.createObjectURL(file);
+        } else {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                BC.pendingMedia.push({ file, preview: ev.target.result, type: 'image' });
+                if (++processed === toAdd.length) BC._render();
+            };
+            reader.readAsDataURL(file);
+        }
     }
+    // Reset input so same files can be re-selected
+    if (e.target) e.target.value = '';
 }
 
-export function removeImage() {
-    BC.pendingImage = null;
-    BC.pendingImagePreview = null;
-    BC.pendingMediaType = null;
+export function removeImage(index) {
+    if (typeof index === 'number') {
+        BC.pendingMedia.splice(index, 1);
+    } else {
+        // Legacy: clear all
+        BC.pendingMedia = [];
+        BC.pendingImage = null;
+        BC.pendingImagePreview = null;
+        BC.pendingMediaType = null;
+    }
     const input = document.getElementById('bc-image-input');
     if (input) input.value = '';
     BC._render();

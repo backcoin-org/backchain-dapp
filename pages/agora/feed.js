@@ -5,6 +5,10 @@
 import { State } from '../../state.js';
 import { BC, TAGS, LANGUAGES } from './state.js';
 import { renderPost } from './post-card.js';
+import { resolveContentUrl } from '../../modules/core/index.js';
+import { getProfileName, renderAvatar, formatETH, formatTimeAgo, escapeHtml } from './utils.js';
+
+const FEED_PAGE_SIZE = 20;
 
 // ============================================================================
 // TAG & LANGUAGE BARS
@@ -172,18 +176,102 @@ export function renderFeed() {
             <div class="bc-empty-text">Be the first to post on the unstoppable social network!</div>
         </div>`;
     }
-    return filteredPosts.map((post, i) => renderPost(post, i)).join('');
+
+    // Infinite scroll — render only (feedPage+1)*PAGE_SIZE posts
+    const limit = (BC.feedPage + 1) * FEED_PAGE_SIZE;
+    const visible = filteredPosts.slice(0, limit);
+    const hasMore = filteredPosts.length > limit;
+
+    let html = visible.map((post, i) => renderPost(post, i)).join('');
+    if (hasMore) {
+        html += `<div class="bc-feed-sentinel" data-sentinel="feed"><div class="bc-loading"><div class="bc-spinner"></div></div></div>`;
+    }
+    return html;
 }
 
 // ============================================================================
 // DISCOVER VIEW
 // ============================================================================
 
+// ============================================================================
+// TIKTOK VERTICAL SCROLL CARD
+// ============================================================================
+
+function _renderTikTokCard(post, i) {
+    const cid = post.media?.[0]?.cid || post.mediaCID;
+    const isVid = post.media?.[0]?.type === 'video' || post.isVideo;
+    const mediaUrl = cid ? (resolveContentUrl(cid) || '') : '';
+    const authorName = getProfileName(post.author);
+    const caption = post.content ? escapeHtml(post.content.slice(0, 150)) + (post.content.length > 150 ? '...' : '') : '';
+    const likeCount = post.likesCount || BC.likesMap.get(post.id)?.size || 0;
+    const replyCount = post.repliesCount || BC.replyCountMap.get(post.id) || 0;
+    const superETH = formatETH(post.superLikeETH || 0n);
+    const isLiked = BC.likesMap.get(post.id)?.has(State.userAddress?.toLowerCase()) || false;
+
+    let bgStyle;
+    if (isVid && mediaUrl) {
+        bgStyle = `background:#000;`;
+    } else if (mediaUrl) {
+        bgStyle = `background-image:url('${mediaUrl}');background-size:cover;background-position:center;`;
+    } else {
+        // Gradient background for text-only posts
+        const hue = (post.id * 37) % 360;
+        bgStyle = `background:linear-gradient(135deg, hsl(${hue},40%,15%), hsl(${(hue+60)%360},30%,8%));`;
+    }
+
+    return `
+        <div class="bc-tiktok-card" data-post-id="${post.id}" ${bgStyle.includes('background-image') ? `style="${bgStyle}"` : `style="${bgStyle}"`}>
+            ${isVid && mediaUrl ? `<video class="bc-tiktok-video" src="${mediaUrl}" playsinline muted loop preload="metadata" data-post-video="${post.id}"></video>` : ''}
+            ${!isVid && mediaUrl ? `<div class="bc-tiktok-img-overlay"></div>` : ''}
+            <div class="bc-tiktok-overlay">
+                <div class="bc-tiktok-bottom">
+                    <div class="bc-tiktok-info">
+                        <div class="bc-tiktok-author" onclick="event.stopPropagation(); AgoraPage.viewProfile('${post.author}')">
+                            <strong>${authorName}</strong>
+                            <span class="bc-tiktok-time">${formatTimeAgo(post.timestamp)}</span>
+                        </div>
+                        ${caption ? `<div class="bc-tiktok-caption">${caption}</div>` : ''}
+                    </div>
+                    <div class="bc-tiktok-actions">
+                        <div class="bc-tiktok-action" onclick="event.stopPropagation(); AgoraPage.viewProfile('${post.author}')">
+                            <div class="bc-tiktok-avatar">${renderAvatar(post.author)}</div>
+                        </div>
+                        <div class="bc-tiktok-action ${isLiked ? 'liked' : ''}" onclick="event.stopPropagation(); AgoraPage.like('${post.id}')">
+                            <i class="${isLiked ? 'fa-solid' : 'fa-regular'} fa-heart"></i>
+                            <span>${likeCount || ''}</span>
+                        </div>
+                        <div class="bc-tiktok-action" onclick="event.stopPropagation(); AgoraPage.viewPost('${post.id}')">
+                            <i class="fa-regular fa-comment"></i>
+                            <span>${replyCount || ''}</span>
+                        </div>
+                        <div class="bc-tiktok-action" onclick="event.stopPropagation(); AgoraPage.openSuperLike('${post.id}')">
+                            <i class="fa-solid fa-star"></i>
+                            <span>${(post.superLikeETH || 0n) > 0n ? superETH : ''}</span>
+                        </div>
+                        <div class="bc-tiktok-action" onclick="event.stopPropagation(); AgoraPage.sharePost('${post.id}')">
+                            <i class="fa-solid fa-arrow-up-from-bracket"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+}
+
 export function renderDiscover() {
+    const modeToggle = `
+        <div class="bc-discover-mode-toggle">
+            <button class="bc-mode-btn ${BC.feedMode === 'list' ? 'active' : ''}" onclick="AgoraPage.setFeedMode('list')" title="List view">
+                <i class="fa-solid fa-list"></i>
+            </button>
+            <button class="bc-mode-btn ${BC.feedMode === 'tiktok' ? 'active' : ''}" onclick="AgoraPage.setFeedMode('tiktok')" title="Vertical scroll">
+                <i class="fa-solid fa-clapperboard"></i>
+            </button>
+        </div>`;
+
     if (BC.trendingPosts.length === 0) {
         return `
             <div class="bc-discover-header">
-                <h2><i class="fa-solid fa-fire"></i> Discover</h2>
+                <h2><i class="fa-solid fa-fire"></i> Discover ${modeToggle}</h2>
                 <p>Ranked by engagement — likes, replies, reposts & Super Likes</p>
             </div>
             <div class="bc-empty">
@@ -192,9 +280,17 @@ export function renderDiscover() {
                 <div class="bc-empty-text">Be the first to post! Posts are ranked by engagement — likes, replies, and Super Likes boost visibility.</div>
             </div>`;
     }
+
+    if (BC.feedMode === 'tiktok') {
+        return `
+            <div class="bc-tiktok-feed" data-tiktok-feed>
+                ${BC.trendingPosts.map((post, i) => _renderTikTokCard(post, i)).join('')}
+            </div>`;
+    }
+
     return `
         <div class="bc-discover-header">
-            <h2><i class="fa-solid fa-fire"></i> Discover</h2>
+            <h2><i class="fa-solid fa-fire"></i> Discover ${modeToggle}</h2>
             <p>Ranked by engagement — likes, replies, reposts & Super Likes</p>
         </div>
         ${BC.trendingPosts.map((post, i) => renderPost(post, i, { trendingRank: i + 1 })).join('')}`;

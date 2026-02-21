@@ -297,11 +297,11 @@ export async function loadPosts() {
             const postTag = meta ? meta.tag : 0;
 
             if (type === 'post') {
-                const { text, mediaCID, isVideo } = parsePostContent(ev.args.contentHash || ev.args.content || '');
+                const { text, media, mediaCID, isVideo } = parsePostContent(ev.args.contentHash || ev.args.content || '');
                 const post = {
                     id: pid, type: 'post',
                     author: ev.args.author || (meta ? meta.author : null),
-                    content: text, mediaCID, isVideo,
+                    content: text, media, mediaCID, isVideo,
                     tag: ev.args.tag != null ? Number(ev.args.tag) : postTag,
                     timestamp, superLikeETH, editedAt,
                     likesCount, downvotesCount, repliesCount, repostsCount,
@@ -312,11 +312,11 @@ export async function loadPosts() {
                 BC.postsById.set(pid, post);
             } else if (type === 'reply') {
                 const parentId = ev.args.parentId.toString();
-                const { text, mediaCID, isVideo } = parsePostContent(ev.args.contentHash || ev.args.content || '');
+                const { text, media, mediaCID, isVideo } = parsePostContent(ev.args.contentHash || ev.args.content || '');
                 const reply = {
                     id: pid, type: 'reply', parentId,
                     author: ev.args.author || (meta ? meta.author : null),
-                    content: text, mediaCID, isVideo,
+                    content: text, media, mediaCID, isVideo,
                     tag: ev.args.tag != null ? Number(ev.args.tag) : postTag,
                     timestamp, superLikeETH, editedAt,
                     likesCount, downvotesCount,
