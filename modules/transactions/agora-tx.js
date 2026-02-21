@@ -76,7 +76,7 @@ export async function createProfile({
 
             // V3: pricing via ecosystem governance per length tier
             usernameFee = await contract.getUsernamePrice(username.length);
-            console.log('[Agora] Username fee:', ethers.formatEther(usernameFee), 'ETH');
+            console.log('[Agora] Username fee:', ethers.formatEther(usernameFee), 'BNB');
 
             const { NetworkManager } = await import('../core/index.js');
             const balance = await NetworkManager.getProvider().getBalance(userAddress);
@@ -133,7 +133,7 @@ export async function createPost({
             if (isMedia) {
                 const actionIds = { 1: 'AGORA_POST_IMAGE', 2: 'AGORA_POST_VIDEO', 4: 'AGORA_LIVE' };
                 fee = await calculateFeeClientSide(ethers.id(actionIds[contentType]), 0n);
-                console.log(`[Agora] Post fee (${actionIds[contentType]}):`, ethers.formatEther(fee), 'ETH');
+                console.log(`[Agora] Post fee (${actionIds[contentType]}):`, ethers.formatEther(fee), 'BNB');
             } else {
                 fee = 0n;
                 console.log('[Agora] Text/link post: FREE');
@@ -343,7 +343,6 @@ export async function follow({
 
         validate: async (signer, userAddress) => {
             if (!toFollow || toFollow === '0x0000000000000000000000000000000000000000') throw new Error('Invalid address');
-            if (toFollow.toLowerCase() === userAddress.toLowerCase()) throw new Error('Cannot follow yourself');
             // V3: check on-chain state
             const contract = await getAgoraContractReadOnly();
             const already = await contract.isFollowing(userAddress, toFollow);

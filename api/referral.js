@@ -4,7 +4,7 @@
 // POST /api/referral  body: { userAddress, referrerAddress }
 //
 // 1. Calls ecosystem.setTutorFor(user, tutor) via relayer (gasless for user)
-// 2. Optionally calls faucet.distributeTo(user) for welcome BKC bonus
+// 2. Optionally calls faucet.distributeTo(user) for welcome ETH bonus
 //
 // Uses same FAUCET_RELAYER_KEY as faucet.js (deployer wallet = tutor relayer)
 
@@ -22,8 +22,8 @@ const setCorsHeaders = (res) => {
 };
 
 // --- Contract config (env var overrides for each deploy) ---
-const ECOSYSTEM_ADDRESS = process.env.ECOSYSTEM_CONTRACT_ADDRESS || '0x0c36eA7F304c50443BcF6e54C13B903277408C06';
-const FAUCET_ADDRESS = process.env.FAUCET_CONTRACT_ADDRESS || '0x2483E352e276f684Be1A6a990253dE6da82c2173';
+const ECOSYSTEM_ADDRESS = process.env.ECOSYSTEM_CONTRACT_ADDRESS || '0xAfCc974E352A47E1b718d7D5a80769a51C224414';
+const FAUCET_ADDRESS = process.env.FAUCET_CONTRACT_ADDRESS || '0xa5724Fae5250589b35Bcb8682dd07CCe4a2D1191';
 
 const ECOSYSTEM_ABI = [
     'function setTutorFor(address _user, address _tutor) external',
@@ -34,7 +34,7 @@ const ECOSYSTEM_ABI = [
 const FAUCET_ABI = [
     'function distributeTo(address recipient) external',
     'function canClaim(address user) view returns (bool)',
-    'function getFaucetStatus() view returns (uint256 ethBalance, uint256 tokenBalance, uint256 ethPerDrip, uint256 tokensPerDrip, uint256 estimatedEthClaims, uint256 estimatedTokenClaims)',
+    'function getFaucetStatus() view returns (uint256 ethBalance, uint256 ethPerDrip, uint256 estimatedClaims)',
     'function paused() view returns (bool)',
 ];
 
@@ -95,8 +95,7 @@ export default async function handler(req, res) {
         const faucet = new ethers.Contract(FAUCET_ADDRESS, FAUCET_ABI, provider);
         let faucetClaimed = false;
         let faucetTxHash = null;
-        let bonusBkc = '0';
-        let bonusEth = '0';
+        let ethAmount = '0';
 
         const isPaused = await faucet.paused();
         if (!isPaused) {
@@ -110,8 +109,7 @@ export default async function handler(req, res) {
                 faucetClaimed = true;
 
                 const status = await faucet.getFaucetStatus();
-                bonusBkc = ethers.formatEther(status[3]); // tokensPerDrip
-                bonusEth = ethers.formatEther(status[2]); // ethPerDrip
+                ethAmount = ethers.formatEther(status[1]); // ethPerDrip
                 console.log(`[Tutor API] Faucet drip sent: ${fReceipt.hash}`);
             } else {
                 console.log(`[Tutor API] User ${userAddress} on faucet cooldown`);
@@ -124,8 +122,7 @@ export default async function handler(req, res) {
             referrerTxHash,
             faucetClaimed,
             faucetTxHash,
-            bonusBkc,
-            bonusEth,
+            ethAmount,
         });
 
     } catch (e) {
@@ -135,7 +132,7 @@ export default async function handler(req, res) {
             return res.status(403).json({ success: false, error: 'Relayer not authorized. Contact admin.' });
         }
         if (e.message?.includes('InsufficientTutorFee')) {
-            return res.status(200).json({ success: true, referrerSet: false, faucetClaimed: false, bonusBkc: '0', bonusEth: '0' });
+            return res.status(200).json({ success: true, referrerSet: false, faucetClaimed: false, ethAmount: '0' });
         }
         if (e.message?.includes('CannotTutorSelf')) {
             return res.status(400).json({ success: false, error: 'Cannot tutor yourself' });
@@ -144,7 +141,7 @@ export default async function handler(req, res) {
             return res.status(403).json({ success: false, error: 'Faucet relayer not authorized. Contact admin.' });
         }
         if (e.message?.includes('CooldownActive')) {
-            return res.status(200).json({ success: true, referrerSet: false, faucetClaimed: false, bonusBkc: '0', bonusEth: '0' });
+            return res.status(200).json({ success: true, referrerSet: false, faucetClaimed: false, ethAmount: '0' });
         }
 
         return res.status(500).json({ success: false, error: 'Transaction failed. Try again later.' });

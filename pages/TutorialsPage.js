@@ -35,11 +35,11 @@ const videos = {
             icon: 'fa-money-bill-trend-up',
             en: {
                 title: 'How to Earn Money with Backcoin',
-                description: 'Three income streams: be an Operator (commissions), Delegator (staking rewards), or Referrer (5% forever). Learn how to combine all three.'
+                description: 'Three income streams: be an Operator (commissions), Delegator (staking rewards), or Tutor (10% BNB + 5% BKC forever). Learn how to combine all three.'
             },
             pt: {
                 title: 'Como Ganhar Dinheiro com Backcoin',
-                description: 'Três fontes de renda: seja Operador (comissões), Delegador (recompensas de staking) ou Referenciador (5% pra sempre). Aprenda a combinar as três.'
+                description: 'Três fontes de renda: seja Operador (comissões), Delegador (recompensas de staking) ou Tutor (10% BNB + 5% BKC pra sempre). Aprenda a combinar as três.'
             }
         },
         {
@@ -62,14 +62,44 @@ const videos = {
             thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
             duration: '2:30',
             tag: 'beginner',
-            icon: 'fa-link',
+            icon: 'fa-graduation-cap',
             en: {
-                title: 'Referral System — Passive Income Forever',
-                description: 'Share your link and earn 5% of your referrals\' staking rewards — automatically, forever. How to set up and maximize referrals.'
+                title: 'Tutor System — Passive Income Forever',
+                description: 'Share your tutor link and earn 10% BNB fees + 5% BKC claims from your tutters — automatically, forever. How to set up and maximize your network.'
             },
             pt: {
-                title: 'Sistema de Referral — Renda Passiva Pra Sempre',
-                description: 'Compartilhe seu link e ganhe 5% das recompensas de staking dos seus indicados — automaticamente, pra sempre. Como configurar e maximizar.'
+                title: 'Sistema Tutor — Renda Passiva Pra Sempre',
+                description: 'Compartilhe seu link de tutor e ganhe 10% das taxas BNB + 5% dos claims BKC dos seus tutters — automaticamente, pra sempre. Como configurar e maximizar.'
+            }
+        },
+        {
+            id: 'ov-5',
+            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
+            duration: '3:30',
+            tag: 'beginner',
+            icon: 'fa-cube',
+            en: {
+                title: 'What is opBNB & Why We Chose It',
+                description: 'opBNB is BNB Chain\'s Layer 2 network — ultra-low fees, high speed, and massive scalability. Learn why Backchain chose opBNB as its home and how it benefits you.'
+            },
+            pt: {
+                title: 'O Que é opBNB e Por Que Escolhemos',
+                description: 'opBNB é a rede Layer 2 da BNB Chain — taxas ultrabaixas, alta velocidade e escalabilidade massiva. Saiba por que a Backchain escolheu a opBNB e como isso te beneficia.'
+            }
+        },
+        {
+            id: 'ov-6',
+            thumbnail: 'https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg',
+            duration: '4:00',
+            tag: 'beginner',
+            icon: 'fa-cart-shopping',
+            en: {
+                title: 'How to Buy BNB — The Fuel of Backchain',
+                description: 'BNB is the native currency of opBNB and the fuel for every Backchain action. Learn how to buy BNB on exchanges, bridge to opBNB, and add it to MetaMask step by step.'
+            },
+            pt: {
+                title: 'Como Comprar BNB — O Combustível da Backchain',
+                description: 'BNB é a moeda nativa da opBNB e o combustível para cada ação na Backchain. Aprenda como comprar BNB em exchanges, fazer bridge para opBNB e adicionar na MetaMask passo a passo.'
             }
         }
     ],
@@ -453,11 +483,11 @@ const videos = {
             icon: 'fa-sitemap',
             en: {
                 title: 'Fees Explained — Where Every Cent Goes',
-                description: 'Complete breakdown of BNB and BKC fees. How fees flow to operators, referrers, stakers, burn, and treasury. Full transparency.'
+                description: 'Complete breakdown of BNB and BKC fees. How fees flow to operators, tutors, stakers, burn, and treasury. Full transparency.'
             },
             pt: {
                 title: 'Taxas Explicadas — Pra Onde Vai Cada Centavo',
-                description: 'Detalhamento completo das taxas BNB e BKC. Como fluem para operadores, referenciadores, delegadores, burn e tesouro.'
+                description: 'Detalhamento completo das taxas BNB e BKC. Como fluem para operadores, tutores, delegadores, burn e tesouro.'
             }
         },
         {
@@ -501,8 +531,8 @@ const categories = [
         key: 'overview',
         icon: 'star',
         color: 'amber',
-        en: { title: 'What is Backcoin', desc: '4 videos — Overview, Earning & Operator Guide' },
-        pt: { title: 'O Que é o Backcoin', desc: '4 vídeos — Visão Geral, Ganhos e Guia do Operador' }
+        en: { title: 'What is Backcoin', desc: '6 videos — Overview, Earning, opBNB & Tutor Guide' },
+        pt: { title: 'O Que é o Backcoin', desc: '6 vídeos — Visão Geral, Ganhos, opBNB e Guia Tutor' }
     },
     {
         key: 'gettingStarted',

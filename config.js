@@ -357,11 +357,11 @@ export const FAUCET_AMOUNT_WEI = 20n * 10n**18n;
 // ✅ V6.8: NFT BOOST TIERS - Now only 4 tiers with BURN RATE reduction
 // ============================================================================
 // The boost value REDUCES the burn rate on delegation claim rewards:
-// Recycle Model (V2): Penalties are recycled back to stakers, NOT burned
-// - No NFT: 60% recycled → user keeps 40%
-// - Bronze (10%): 40% recycled → user keeps 60%
-// - Silver (25%): 30% recycled → user keeps 70%
-// - Gold (40%): 20% recycled → user keeps 80%
+// Recycle Model (V12): Penalties are recycled back to stakers, NOT burned
+// - No NFT: 50% recycled → user keeps 50%
+// - Bronze (10%): 30% recycled → user keeps 70%
+// - Silver (25%): 20% recycled → user keeps 80%
+// - Gold (40%): 10% recycled → user keeps 90%
 // - Diamond (50%): 0% recycled → user keeps 100%
 
 export const boosterTiers = [
@@ -379,9 +379,9 @@ export const boosterTiers = [
     },
     {
         name: "Gold",
-        boostBips: 4000,  // 40% boost → 20% recycled
-        recycleRate: 20,
-        keepRate: 80,
+        boostBips: 4000,  // 40% boost → 10% recycled
+        recycleRate: 10,
+        keepRate: 90,
         color: "text-amber-400",
         emoji: "🥇",
         image: "https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeifponccrbicg2pcjrn2hrfoqgc77xhm2r4ld7hdpw6cxxkbsckf44",
@@ -391,9 +391,9 @@ export const boosterTiers = [
     },
     {
         name: "Silver",
-        boostBips: 2500,  // 25% boost → 30% recycled
-        recycleRate: 30,
-        keepRate: 70,
+        boostBips: 2500,  // 25% boost → 20% recycled
+        recycleRate: 20,
+        keepRate: 80,
         color: "text-gray-300",
         emoji: "🥈",
         image: "https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeihvi2inujm5zpi7tl667g4srq273536pjkglwyrtbwmgnskmu7jg4",
@@ -403,9 +403,9 @@ export const boosterTiers = [
     },
     {
         name: "Bronze",
-        boostBips: 1000,  // 10% boost → 40% recycled
-        recycleRate: 40,
-        keepRate: 60,
+        boostBips: 1000,  // 10% boost → 30% recycled
+        recycleRate: 30,
+        keepRate: 70,
         color: "text-yellow-600",
         emoji: "🥉",
         image: "https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeiclqidb67rt3tchhjpsib62s624li7j2bpxnr6b5w5mfp4tomhu7m",
@@ -427,10 +427,10 @@ export function getTierByBoost(boostBips) {
 // Helper function to calculate recycle rate from boost (V2 recycle model)
 export function getRecycleRateFromBoost(boostBips) {
     if (boostBips >= 5000) return 0;   // Diamond: 0% recycled
-    if (boostBips >= 4000) return 20;  // Gold: 20% recycled
-    if (boostBips >= 2500) return 30;  // Silver: 30% recycled
-    if (boostBips >= 1000) return 40;  // Bronze: 40% recycled
-    return 60; // No NFT: 60% recycled
+    if (boostBips >= 4000) return 10;  // Gold: 10% recycled
+    if (boostBips >= 2500) return 20;  // Silver: 20% recycled
+    if (boostBips >= 1000) return 30;  // Bronze: 30% recycled
+    return 50; // No NFT: 50% recycled
 }
 
 // Backwards compat alias

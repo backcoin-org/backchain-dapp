@@ -1,5 +1,5 @@
 // pages/AboutPage.js
-// ✅ PRODUCTION V5.0 — Complete ecosystem overview with all 16 modules
+// ✅ PRODUCTION V5.1 — Complete ecosystem overview — modular architecture
 
 import { showToast } from '../ui-feedback.js';
 
@@ -179,9 +179,9 @@ function renderHeroSection() {
             </h1>
 
             <p class="text-zinc-400 text-sm max-w-lg mx-auto leading-relaxed mb-5">
-                An unstoppable, permissionless DeFi ecosystem on <span class="text-blue-400 font-medium">Arbitrum</span>.
-                No admin keys. No pause functions. No blacklists.
-                <span class="text-amber-400 font-medium">16 smart contracts</span> working together to create a self-sustaining digital economy.
+                An unstoppable, permissionless DeFi ecosystem on <span class="text-yellow-400 font-medium">opBNB</span>.
+                No admin keys. No blacklists.
+                A <span class="text-amber-400 font-medium">modular smart contract ecosystem</span> working together to create a self-sustaining digital economy.
             </p>
 
             <div class="flex items-center justify-center gap-3 flex-wrap">
@@ -238,10 +238,10 @@ function renderPhilosophySection() {
                 </div>
                 <div class="ab-card text-center p-4">
                     <div class="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto mb-2">
-                        <i class="fa-solid fa-power-off text-emerald-400"></i>
+                        <i class="fa-solid fa-shield-halved text-emerald-400"></i>
                     </div>
-                    <h3 class="text-white font-bold text-sm mb-1">No Pause</h3>
-                    <p class="text-zinc-500 text-[11px]">Contracts cannot be paused or frozen. The protocol runs 24/7, forever.</p>
+                    <h3 class="text-white font-bold text-sm mb-1">Immutable Core</h3>
+                    <p class="text-zinc-500 text-[11px]">Core contracts are immutable. Modules can be added or removed without changing existing code.</p>
                 </div>
             </div>
         </div>
@@ -287,7 +287,7 @@ function renderHubSpokeSection() {
                     <div class="ab-card bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border-emerald-500/30">
                         <div class="flex items-center gap-2 mb-2">
                             <i class="fa-solid fa-puzzle-piece text-emerald-400"></i>
-                            <span class="text-white font-bold text-sm">The Spokes (15 Modules)</span>
+                            <span class="text-white font-bold text-sm">The Spokes (Service Modules)</span>
                         </div>
                         <ul class="text-zinc-400 text-xs space-y-1">
                             <li><i class="fa-solid fa-check text-emerald-500/60 mr-1.5"></i>Each spoke generates fees for the ecosystem</li>
@@ -351,7 +351,7 @@ function renderAllModulesSection() {
                 </div>
                 <div>
                     <h2 class="text-white font-bold text-xl">The Ecosystem Map</h2>
-                    <p class="text-zinc-500 text-xs">16 smart contracts, one interconnected economy</p>
+                    <p class="text-zinc-500 text-xs">Modular smart contracts, one interconnected economy</p>
                 </div>
             </div>
 
@@ -475,7 +475,7 @@ function renderAllModulesSection() {
                     <div class="w-8 h-8 rounded-lg bg-sky-500/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-faucet-drip text-sky-400 text-sm"></i></div>
                     <div class="flex-1 min-w-0">
                         <p class="text-white text-sm font-medium">Testnet Faucet</p>
-                        <p class="text-zinc-500 text-[10px]">Free BKC for testing on Arbitrum Sepolia.</p>
+                        <p class="text-zinc-500 text-[10px]">Free BKC for testing on opBNB testnet.</p>
                     </div>
                 </div>
                 <div class="ab-module-pill bg-zinc-500/5 border border-zinc-500/20">
@@ -662,11 +662,11 @@ function renderGrowthPrograms() {
                         </div>
                         <div>
                             <p class="text-white font-bold text-sm">Tutor System</p>
-                            <p class="text-zinc-500 text-[10px]">Invite friends, earn forever</p>
+                            <p class="text-zinc-500 text-[10px]">Tutor new users, earn forever</p>
                         </div>
                     </div>
                     <p class="text-zinc-400 text-xs leading-relaxed mb-3">
-                        Share your referral link. When someone joins through it, you become their Tutor and earn <strong class="text-white">10% of their BNB fees</strong> + <strong class="text-white">5% of their BKC claims</strong> — forever.
+                        Share your tutor link. When someone joins through it, they become your Tutter and you earn <strong class="text-white">10% of their BNB fees</strong> + <strong class="text-white">5% of their BKC claims</strong> — forever.
                     </p>
                     <div class="flex items-center gap-2">
                         <span class="ab-badge bg-amber-500/20 text-amber-400"><i class="fa-solid fa-percentage mr-1"></i>10% BNB</span>
@@ -734,7 +734,7 @@ function renderWhyBackcoinSection() {
                     </div>
                     <div>
                         <h3 class="text-white font-bold text-sm mb-1">Real Utility, Not Vapor</h3>
-                        <p class="text-zinc-500 text-xs leading-relaxed">Notarize legal documents. Play verifiably fair games. Trade NFTs on bonding curves. Rent boost power. Post on a censorship-resistant social network. Donate to transparent charities. These aren't promises — they're live contracts on Arbitrum.</p>
+                        <p class="text-zinc-500 text-xs leading-relaxed">Notarize legal documents. Play verifiably fair games. Trade NFTs on bonding curves. Rent boost power. Post on a censorship-resistant social network. Donate to transparent charities. These aren't promises — they're live contracts on opBNB.</p>
                     </div>
                 </div>
                 <div class="ab-card flex gap-4 items-start">
@@ -775,13 +775,17 @@ function renderTechStackSection() {
 
             <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div class="ab-card text-center p-4">
-                    <img src="./assets/icon_arbitrum.svg" class="h-8 mx-auto mb-2 opacity-80" alt="Arbitrum">
-                    <p class="text-white font-bold text-xs">Arbitrum One</p>
-                    <p class="text-zinc-500 text-[10px]">L2 Ethereum network</p>
+                    <div class="h-8 flex items-center justify-center mb-2">
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center">
+                            <span class="text-sm font-black text-white">B</span>
+                        </div>
+                    </div>
+                    <p class="text-white font-bold text-xs">opBNB</p>
+                    <p class="text-zinc-500 text-[10px]">BNB Chain L2 network</p>
                 </div>
                 <div class="ab-card text-center p-4">
                     <div class="h-8 flex items-center justify-center mb-2">
-                        <i class="fa-brands fa-ethereum text-2xl text-zinc-400"></i>
+                        <i class="fa-solid fa-code text-2xl text-zinc-400"></i>
                     </div>
                     <p class="text-white font-bold text-xs">Solidity 0.8.28</p>
                     <p class="text-zinc-500 text-[10px]">Smart contracts</p>

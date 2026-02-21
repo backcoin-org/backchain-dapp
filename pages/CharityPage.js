@@ -622,7 +622,7 @@ const renderCard = (c) => {
                     <div class="cp-progress-fill" style="width:${prog}%;background:linear-gradient(90deg,${CATEGORIES[cat]?.color || '#f59e0b'},${CATEGORIES[cat]?.color || '#d97706'}88)"></div>
                 </div>
                 <div class="flex justify-between text-xs mb-3">
-                    <span class="text-white font-semibold"><i class="fa-brands fa-ethereum text-zinc-500 mr-1"></i>${fmt(c.raisedAmount)} BNB</span>
+                    <span class="text-white font-semibold"><i class="fa-solid fa-coins text-zinc-500 mr-1"></i>${fmt(c.raisedAmount)} BNB</span>
                     <span class="text-zinc-500">${prog}% of ${fmt(c.goalAmount)}</span>
                 </div>
                 <div class="flex justify-between text-xs text-zinc-500 pt-2 border-t border-zinc-800">
@@ -681,7 +681,7 @@ const renderMain = () => {
             <!-- Stats -->
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
                 <div class="cp-stat-card">
-                    <p class="text-2xl font-bold text-emerald-400 font-mono"><i class="fa-brands fa-ethereum text-lg mr-1"></i>${CS.stats ? fmt(CS.stats.raised) : '--'}</p>
+                    <p class="text-2xl font-bold text-emerald-400 font-mono"><i class="fa-solid fa-coins text-lg mr-1"></i>${CS.stats ? fmt(CS.stats.raised) : '--'}</p>
                     <p class="text-[10px] text-zinc-500 uppercase mt-1">Total Donated</p>
                 </div>
                 <div class="cp-stat-card">
@@ -689,11 +689,11 @@ const renderMain = () => {
                     <p class="text-[10px] text-zinc-500 uppercase mt-1">Campaigns</p>
                 </div>
                 <div class="cp-stat-card">
-                    <p class="text-2xl font-bold text-blue-400 font-mono"><i class="fa-brands fa-ethereum text-lg mr-1"></i>${CS.stats ? fmt(CS.stats.fees) : '--'}</p>
+                    <p class="text-2xl font-bold text-blue-400 font-mono"><i class="fa-solid fa-coins text-lg mr-1"></i>${CS.stats ? fmt(CS.stats.fees) : '--'}</p>
                     <p class="text-[10px] text-zinc-500 uppercase mt-1">BNB Fees</p>
                 </div>
                 <div class="cp-stat-card">
-                    <p class="text-2xl font-bold text-purple-400 font-mono"><i class="fa-brands fa-ethereum text-lg mr-1"></i>${CS.stats ? fmt(CS.stats.withdrawn) : '--'}</p>
+                    <p class="text-2xl font-bold text-purple-400 font-mono"><i class="fa-solid fa-coins text-lg mr-1"></i>${CS.stats ? fmt(CS.stats.withdrawn) : '--'}</p>
                     <p class="text-[10px] text-zinc-500 uppercase mt-1">Withdrawn</p>
                 </div>
             </div>
@@ -807,7 +807,7 @@ const renderDetail = (c) => {
                             <div class="cp-progress h-3 mb-3">
                                 <div class="cp-progress-fill" style="width:${prog}%"></div>
                             </div>
-                            <p class="text-3xl font-bold text-white mb-1"><i class="fa-brands fa-ethereum text-zinc-500"></i> ${fmt(c.raisedAmount)} BNB</p>
+                            <p class="text-3xl font-bold text-white mb-1"><i class="fa-solid fa-coins text-zinc-500"></i> ${fmt(c.raisedAmount)} BNB</p>
                             <p class="text-sm text-zinc-500 mb-4">raised of ${fmt(c.goalAmount)} BNB goal (${prog}%)</p>
                             <div class="grid grid-cols-2 gap-3">
                                 <div class="text-center p-3 bg-zinc-800/50 rounded-xl">
@@ -950,7 +950,7 @@ const renderBoostModal = () => `
                 <div class="text-center p-4 bg-zinc-800/50 rounded-xl mb-4">
                     <p class="text-xs text-zinc-500 mb-1">Estimated cost</p>
                     <p class="text-2xl font-bold text-amber-400" id="boost-cost-display">
-                        <i class="fa-brands fa-ethereum mr-1"></i><span id="boost-cost-value">...</span> BNB
+                        <i class="fa-solid fa-coins mr-1"></i><span id="boost-cost-value">...</span> BNB
                     </p>
                     <p class="text-[10px] text-zinc-600 mt-1" id="boost-per-day-display"></p>
                 </div>
@@ -1114,7 +1114,7 @@ function renderCreateStep4(panel) {
             <div class="cp-wiz-summary-row"><span class="text-zinc-500">Media</span><span class="text-white">${CS.createMedia.length > 0 ? `${CS.createMedia.length} files` : 'None'}</span></div>
         </div>
         <div class="text-center text-xs text-zinc-500 p-3 bg-zinc-800/50 rounded-xl mb-4">
-            <i class="fa-brands fa-ethereum text-amber-400 mr-1"></i>
+            <i class="fa-solid fa-coins text-amber-400 mr-1"></i>
             Campaign creation requires a small <strong class="text-amber-400">BNB fee</strong> (gas + ecosystem fee)
         </div>
         <div class="flex justify-between mt-6">
@@ -1316,7 +1316,7 @@ function openMyCampaigns() {
                             ${renderBadge(c.status)}
                         </div>
                         <p class="text-zinc-500 text-xs" style="margin:0">
-                            <i class="fa-brands fa-ethereum"></i> <strong class="text-white">${fmt(c.raisedAmount)}</strong> / ${fmt(c.goalAmount)} BNB (${prog}%)
+                            <i class="fa-solid fa-coins"></i> <strong class="text-white">${fmt(c.raisedAmount)}</strong> / ${fmt(c.goalAmount)} BNB (${prog}%)
                             &bull; <span style="color:${time.color}">${time.text}</span>
                         </p>
                     </div>

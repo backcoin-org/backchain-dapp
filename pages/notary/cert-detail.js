@@ -55,7 +55,7 @@ export function renderCertDetail(el) {
             <!-- Primary Actions -->
             <div style="display:flex;gap:8px;margin-bottom:16px">
                 <button class="nt-btn-primary" style="flex:1;padding:14px;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px" onclick="NotaryPage.addToWallet('${cert.id}')">
-                    <i class="fa-brands fa-ethereum"></i>Add to Wallet
+                    <i class="fa-solid fa-wallet"></i>Add to Wallet
                 </button>
                 ${isOwner ? `
                     <button class="nt-btn-primary" style="flex:1;padding:14px;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(135deg,#3b82f6,#6366f1)" onclick="NotaryPage.toggleTransferForm()">

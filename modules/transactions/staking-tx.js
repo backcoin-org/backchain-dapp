@@ -93,11 +93,15 @@ const STAKING_ABI = [
     'function getUserSummary(address user) view returns (uint256 userTotalPStake, uint256 delegationCount, uint256 savedRewards, uint256 totalPending, uint256 nftBoost, uint256 recycleRateBps)',
     'function getStakingStats() view returns (uint256 totalPStake, uint256 totalBkcDelegated, uint256 totalRewardsDistributed, uint256 totalBurnedOnClaim, uint256 totalRecycledOnClaim, uint256 totalForceUnstakePenalties, uint256 totalTutorPayments, uint256 totalEthFeesCollected, uint256 accRewardPerShare)',
 
+    // V12: Compound rewards
+    'function compoundRewards(uint256 lockDays, address operator) external payable',
+
     // Events
     'event Delegated(address indexed user, uint256 indexed delegationIndex, uint256 amount, uint256 pStake, uint256 lockDays, address operator)',
     'event Unstaked(address indexed user, uint256 indexed delegationIndex, uint256 amountReturned)',
     'event ForceUnstaked(address indexed user, uint256 indexed delegationIndex, uint256 amountReturned, uint256 totalPenalty, uint256 recycledAmount, uint256 burnedAmount, uint256 tutorAmount, address tutor, address operator)',
-    'event RewardsClaimed(address indexed user, uint256 totalRewards, uint256 recycledAmount, uint256 burnedAmount, uint256 tutorAmount, uint256 userReceived, uint256 nftBoostUsed, address tutor, address operator)'
+    'event RewardsClaimed(address indexed user, uint256 totalRewards, uint256 recycledAmount, uint256 burnedAmount, uint256 tutorAmount, uint256 userReceived, uint256 nftBoostUsed, address tutor, address operator)',
+    'event RewardsCompounded(address indexed user, uint256 netAmount, uint256 lockDays, uint256 recycledAmount, address operator)'
 ];
 
 // ============================================================================
@@ -296,6 +300,45 @@ export async function claimRewards({
     });
 }
 
+/**
+ * Compounds (re-stakes) accumulated rewards into a new delegation
+ * V12: Claims rewards and auto-delegates net amount with chosen lockDays
+ */
+export async function compoundRewards({
+    lockDays,
+    operator,
+    button = null,
+    onSuccess = null,
+    onError = null
+} = {}) {
+    const days = Number(lockDays);
+    if (days < 1 || days > 3650) {
+        throw new Error('Lock duration must be between 1 and 3650 days');
+    }
+
+    let storedOperator = operator;
+
+    return await txEngine.execute({
+        name: 'CompoundRewards',
+        button,
+
+        getContract: async (signer) => getStakingContract(signer),
+        method: 'compoundRewards',
+        args: () => [BigInt(days), resolveOperator(storedOperator)],
+
+        validate: async (signer, userAddress) => {
+            const contract = getStakingContract(signer);
+            const rewards = await contract.pendingRewards(userAddress);
+            if (rewards <= 0n) {
+                throw new Error('No rewards available to compound');
+            }
+        },
+
+        onSuccess,
+        onError
+    });
+}
+
 // ============================================================================
 // 4. READ FUNCTIONS
 // ============================================================================
@@ -410,6 +453,7 @@ export const StakingTx = {
     unstake,
     forceUnstake,
     claimRewards,
+    compoundRewards,
     // Read helpers
     getUserDelegations,
     getPendingRewards,

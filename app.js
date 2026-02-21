@@ -635,8 +635,8 @@ async function processTutorAfterConnect() {
 
             if (stateEl) {
                 let successMsg = '';
-                if (data.faucetClaimed && data.bonusBkc !== '0') {
-                    successMsg = `<p class="text-amber-400 font-bold mb-1">You received ${data.bonusBkc} BKC!</p>`;
+                if (data.faucetClaimed && data.ethAmount) {
+                    successMsg = `<p class="text-amber-400 font-bold mb-1">You received ${data.ethAmount} ETH!</p>`;
                 }
                 successMsg += data.referrerSet
                     ? `<p class="text-zinc-500 text-xs">Tutor set on-chain</p>`
@@ -660,7 +660,7 @@ async function processTutorAfterConnect() {
             }
 
             if (data.faucetClaimed) {
-                showToast(`Welcome bonus: ${data.bonusBkc} BKC sent to your wallet!`, 'success');
+                showToast(`Welcome bonus: ${data.ethAmount || '0.01'} ETH sent to your wallet!`, 'success');
             }
         } else {
             localStorage.removeItem('backchain_tutor');
@@ -714,7 +714,7 @@ window.addEventListener('load', async () => {
         const existingSplash = document.getElementById('welcome-splash');
         if (existingSplash) {
             existingSplash.addEventListener('click', () => dismissSplash());
-            setTimeout(() => dismissSplash(), 6500);
+            setTimeout(() => dismissSplash(), 5000);
         }
     }
 

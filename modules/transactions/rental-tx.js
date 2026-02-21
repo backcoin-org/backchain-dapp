@@ -250,7 +250,7 @@ export async function withdrawEarnings({
             const contract = await getRentalContractReadOnly();
             const pending = await contract.pendingEarnings(userAddress);
             if (pending === 0n) throw new Error('No earnings to withdraw');
-            console.log('[RentalTx] Withdrawing:', ethers.formatEther(pending), 'ETH');
+            console.log('[RentalTx] Withdrawing:', ethers.formatEther(pending), 'BNB');
         },
         onSuccess, onError
     });

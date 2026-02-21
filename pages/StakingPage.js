@@ -231,6 +231,7 @@ function injectStyles() {
             transition: all var(--stk-tr); box-shadow: 0 4px 20px rgba(34,197,94,0.25);
         }
         .stk-claim-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(34,197,94,0.35); }
+        #stk-compound-btn:hover:not(:disabled) { box-shadow: 0 6px 28px rgba(124,58,237,0.4) !important; }
         .stk-claim-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: none; }
         .stk-claim-btn:not(:disabled) {
             background-size: 200% 100%;
@@ -581,9 +582,14 @@ function render() {
                             </div>
                         </div>
 
-                        <button id="stk-claim-btn" class="stk-claim-btn" disabled>
-                            <i class="fa-solid fa-hand-holding-dollar"></i> <span>Claim Rewards</span>
-                        </button>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap">
+                            <button id="stk-claim-btn" class="stk-claim-btn" style="flex:1" disabled>
+                                <i class="fa-solid fa-hand-holding-dollar"></i> <span>Claim Rewards</span>
+                            </button>
+                            <button id="stk-compound-btn" class="stk-claim-btn" style="flex:1;background:linear-gradient(135deg,#7c3aed,#6d28d9);box-shadow:0 4px 20px rgba(124,58,237,0.3)" disabled>
+                                <i class="fa-solid fa-arrows-spin"></i> <span>Compound</span>
+                            </button>
+                        </div>
                         <div id="stk-eth-fee" class="stk-eth-fee"></div>
                     </div>
 
@@ -950,6 +956,12 @@ function updateHeroRewards() {
         claimBtn.disabled = !hasRewards;
         const btnSpan = claimBtn.querySelector('span');
         if (btnSpan) btnSpan.textContent = hasRewards ? 'Claim Rewards' : 'No Rewards Yet';
+    }
+    const compoundBtn = document.getElementById('stk-compound-btn');
+    if (compoundBtn) {
+        compoundBtn.disabled = !hasRewards;
+        const cSpan = compoundBtn.querySelector('span');
+        if (cSpan) cSpan.textContent = hasRewards ? 'Compound' : 'Compound';
     }
 
     if (breakdownEl && hasRewards) {
@@ -1464,6 +1476,30 @@ async function handleClaim() {
     }
 }
 
+async function handleCompound() {
+    if (isProcessing) return;
+    const btn = document.getElementById('stk-compound-btn');
+    isProcessing = true;
+
+    try {
+        await StakingTx.compoundRewards({
+            lockDays: lockDays,
+            button: btn,
+            onSuccess: async () => {
+                showToast('Rewards compounded into new delegation!', 'success');
+                isLoading = false; lastFetch = 0;
+                stakingHistory = [];
+                await loadData(true);
+            },
+            onError: (error) => { if (!error.cancelled) showToast('Compound failed: ' + (error.reason || error.message || 'Unknown error'), 'error'); }
+        });
+    } catch (e) {
+        showToast('Compound failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
+    } finally {
+        isProcessing = false;
+    }
+}
+
 async function handleBuyback() {
     if (isProcessing) return;
     const btn = document.getElementById('stk-buyback-btn');
@@ -1535,8 +1571,9 @@ function setupListeners() {
         loadData(true).then(() => { setTimeout(() => icon?.classList.remove('fa-spin'), 500); });
     });
 
-    // Claim button
+    // Claim & Compound buttons
     document.getElementById('stk-claim-btn')?.addEventListener('click', handleClaim);
+    document.getElementById('stk-compound-btn')?.addEventListener('click', handleCompound);
 
     // Buyback button
     document.getElementById('stk-buyback-btn')?.addEventListener('click', handleBuyback);

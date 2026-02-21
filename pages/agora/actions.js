@@ -141,11 +141,6 @@ export async function doRepost(originalPostId) {
 
 export async function doLike(postId) {
     const myAddr = State.userAddress?.toLowerCase();
-    const post = BC.postsById.get(postId);
-    if (post && post.author?.toLowerCase() === myAddr) {
-        showToast('You can\'t like your own post', 'error');
-        return;
-    }
     // Check if already in cart
     if (BC.actionCart.some(a => a.type === 'like' && String(a.targetId) === String(postId))) {
         showToast('Already in cart', 'info');
@@ -177,12 +172,6 @@ export async function doSuperLike(postId, amount) {
 }
 
 export async function doDownvote(postId) {
-    const myAddr = State.userAddress?.toLowerCase();
-    const post = BC.postsById.get(postId);
-    if (post && post.author?.toLowerCase() === myAddr) {
-        showToast('You can\'t downvote your own post', 'error');
-        return;
-    }
     // Check if already in cart
     if (BC.actionCart.some(a => a.type === 'downvote' && String(a.targetId) === String(postId))) {
         showToast('Already in cart', 'info');
@@ -267,11 +256,6 @@ export async function doPinPost(postId) {
 }
 
 export async function doFollow(address) {
-    const myAddr = State.userAddress?.toLowerCase();
-    if (address.toLowerCase() === myAddr) {
-        showToast('You can\'t follow yourself', 'error');
-        return;
-    }
     // Check if already in cart
     if (BC.actionCart.some(a => a.type === 'follow' && a.targetId.toLowerCase() === address.toLowerCase())) {
         showToast('Already in cart', 'info');

@@ -10,7 +10,7 @@
 // - getBoostCost(days) estimates boost cost
 //
 // ============================================================================
-// V2 FEE STRUCTURE (ETH only):
+// V2 FEE STRUCTURE (BNB only):
 // - Create: gas-based → calculateFeeClientSide(CHARITY_CREATE)
 // - Donate: value-based 5% → ecosystem deducts on-chain
 // - Boost:  gas-based per day → calculateFeeClientSide(CHARITY_BOOST) × days
@@ -174,8 +174,8 @@ export async function createCampaign({
 }
 
 /**
- * Donates ETH to a campaign
- * V2: Same structure, value-based fee deducted on-chain
+ * Donates BNB to a campaign
+ * V2: Same structure, value-based 5% fee deducted on-chain
  */
 export async function donate({
     campaignId,
@@ -327,7 +327,7 @@ export async function withdraw({
 }
 
 /**
- * Boosts a campaign for X days. Pays ETH gas-based fee per day.
+ * Boosts a campaign for X days. Pays BNB gas-based fee per day.
  * V2: Variable days (1-30), additive expiry (stacks with existing boost)
  */
 export async function boostCampaign({

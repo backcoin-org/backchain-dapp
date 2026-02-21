@@ -2075,7 +2075,7 @@ async function getFortunePoolStatus() {
                 feeAll += await calculateFeeClientSide(id);
             }
             baseFee = feeSingle;
-            console.log(`Service fees: single=${Number(feeSingle)/1e18} ETH, all=${Number(feeAll)/1e18} ETH`);
+            console.log(`Service fees: single=${Number(feeSingle)/1e18} BNB, all=${Number(feeAll)/1e18} BNB`);
         } catch (e) {
             console.log("calculateFeeClientSide failed:", e.message);
         }

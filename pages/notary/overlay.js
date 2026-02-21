@@ -100,17 +100,17 @@ export function showNftCard(cert, imageUrl, fileInfo) {
 
                     <!-- Chain badge -->
                     <div style="display:flex;align-items:center;gap:6px;margin-bottom:16px">
-                        <div style="width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,#28a0f0,#1b6cb0);display:flex;align-items:center;justify-content:center">
-                            <span style="font-size:10px;font-weight:800;color:#fff">A</span>
+                        <div style="width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,#F0B90B,#d4a20a);display:flex;align-items:center;justify-content:center">
+                            <span style="font-size:10px;font-weight:800;color:#fff">B</span>
                         </div>
-                        <span style="font-size:11px;color:rgba(255,255,255,0.5)">Arbitrum Sepolia</span>
+                        <span style="font-size:11px;color:rgba(255,255,255,0.5)">opBNB</span>
                         <span style="font-size:10px;color:var(--nt-green);margin-left:auto"><i class="fa-solid fa-shield-check" style="margin-right:3px"></i>On-chain</span>
                     </div>
 
                     <!-- Actions -->
                     <div style="display:flex;gap:8px">
                         <button onclick="NotaryPage.addToWallet('${cert.id}')" style="flex:1;padding:12px;border:none;border-radius:12px;background:linear-gradient(135deg,var(--nt-accent),#f59e0b);color:#000;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
-                            <i class="fa-brands fa-ethereum"></i>Add to Wallet
+                            <i class="fa-solid fa-wallet"></i>Add to Wallet
                         </button>
                         ${imageUrl ? `
                             <a href="${imageUrl}" target="_blank" style="flex:1;padding:12px;border:none;border-radius:12px;background:rgba(255,255,255,0.1);color:#fff;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none">

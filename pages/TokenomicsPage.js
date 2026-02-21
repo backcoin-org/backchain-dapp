@@ -71,9 +71,9 @@ function renderHero() {
                 <span class="text-zinc-400 font-normal">Tokenomics</span>
             </h1>
             <p class="text-zinc-500 text-sm max-w-md mx-auto">
-                15 immutable contracts. <span class="text-amber-400">Real yield</span> from protocol fees.
+                Modular smart contract ecosystem. <span class="text-amber-400">Real yield</span> from protocol fees.
                 <span class="text-emerald-400">Deflationary</span> by design.
-                No admin keys. No pause. <span class="text-purple-400">Unstoppable.</span>
+                No admin keys. <span class="text-purple-400">Unstoppable.</span>
             </p>
         </div>`;
 }
@@ -491,7 +491,7 @@ function renderContracts() {
         <div class="tk-section tk-fade" style="animation-delay:0.5s">
             <div class="flex items-center gap-2 mb-4">
                 <div class="tk-icon-box" style="background:rgba(161,161,170,0.2)"><i class="fa-solid fa-file-contract text-zinc-400"></i></div>
-                <div><h2 class="text-white font-bold">15 Smart Contracts</h2><p class="text-zinc-500 text-xs">All immutable — no admin, no pause, no blacklist</p></div>
+                <div><h2 class="text-white font-bold">Smart Contract Modules</h2><p class="text-zinc-500 text-xs">Modular ecosystem — no admin, no blacklist</p></div>
             </div>
             <div class="grid grid-cols-2 gap-2 text-[10px]">
                 <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-coins text-amber-400"></i><span class="text-zinc-400">BKCToken</span></div>
@@ -500,6 +500,7 @@ function renderContracts() {
                 <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-lock text-purple-400"></i><span class="text-zinc-400">StakingPool</span></div>
                 <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-hammer text-emerald-400"></i><span class="text-zinc-400">BuybackMiner</span></div>
                 <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-gem text-violet-400"></i><span class="text-zinc-400">RewardBooster</span></div>
+                <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-fire text-orange-400"></i><span class="text-zinc-400">NFTFusion</span></div>
                 <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-store text-pink-400"></i><span class="text-zinc-400">NFTPool (x4)</span></div>
                 <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-clover text-green-400"></i><span class="text-zinc-400">FortunePool</span></div>
                 <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-landmark text-cyan-400"></i><span class="text-zinc-400">Agora</span></div>

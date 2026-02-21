@@ -209,7 +209,7 @@ const LIQUIDITY_CONFIG = {
     NFT_POOL_BKC: 2_000_000n * 10n**18n,  // 2M BKC
     // LiquidityPool: ETH + BKC initial liquidity (define o preço inicial)
     LIQUIDITY_POOL_BKC: 4_000_000n * 10n**18n,
-    LIQUIDITY_POOL_ETH: "0.5", // 0.5 ETH → preço inicial: 0.000000125 ETH/BKC
+    LIQUIDITY_POOL_ETH: "1.0", // 1 ETH → preço inicial: 0.00000025 ETH/BKC
     // Referral BKC bonus pool (1 BKC per referred wallet = 1M wallets max)
     REFERRAL_BONUS_BKC: 1_000_000n * 10n**18n,
     // AirdropClaim: Phase 1 deposit (3.5M BKC)

@@ -8,7 +8,7 @@
 // V69.1 Changes:
 // - Removed sidebar (Network Status, AirBNFT, Portfolio Stats)
 // - Activity feed now full-width
-// - Faucet always visible with prominent design (BKC + ETH)
+// - Faucet always visible with prominent design (ETH for gas)
 // - Enhanced mobile experience (filter chips scroll, better breakpoints)
 // - Visual polish (hero gradient border, claim shimmer, faucet glow)
 //
@@ -67,7 +67,6 @@ const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/tx/";
 const FAUCET_API_URL = "/api/faucet";
 const NETWORK_ACTIVITY_API = "https://getrecentactivity-4wvdcuoouq-uc.a.run.app";
 const SYSTEM_DATA_API = "https://getsystemdata-4wvdcuoouq-uc.a.run.app";
-const FAUCET_BKC_AMOUNT = "1,000";
 const FAUCET_ETH_AMOUNT = "0.01";
 
 // ============================================================================
@@ -130,6 +129,10 @@ const ACTIVITY_ICONS = {
     CHARITY_CLOSED: { icon: 'fa-lock', color: '#71717a', bg: 'rgba(39,39,42,0.5)', label: '🔒 Campaign Closed', emoji: '🔒' },
     AGORA_DOWNVOTE: { icon: 'fa-thumbs-down', color: '#ef4444', bg: 'rgba(239,68,68,0.15)', label: '👎 Downvoted', emoji: '👎' },
     AGORA_UNFOLLOW: { icon: 'fa-user-minus', color: '#ef4444', bg: 'rgba(239,68,68,0.15)', label: '👤 Unfollowed', emoji: '👤' },
+    NFT_BULK_FUSED: { icon: 'fa-fire-flame-curved', color: '#f97316', bg: 'rgba(249,115,22,0.15)', label: '🔥 Bulk Fused', emoji: '🔥' },
+    COMPOUND_REWARDS: { icon: 'fa-arrows-spin', color: '#4ade80', bg: 'rgba(34,197,94,0.15)', label: '🔄 Rewards Compounded', emoji: '🔄' },
+    BUYBACK_PAUSED: { icon: 'fa-pause', color: '#fbbf24', bg: 'rgba(251,191,36,0.15)', label: '⏸️ Buyback Paused', emoji: '⏸️' },
+    BUYBACK_UNPAUSED: { icon: 'fa-play', color: '#4ade80', bg: 'rgba(34,197,94,0.15)', label: '▶️ Buyback Resumed', emoji: '▶️' },
     DEFAULT: { icon: 'fa-circle', color: '#71717a', bg: 'rgba(39,39,42,0.5)', label: 'Activity', emoji: '📋' }
 };
 
@@ -239,10 +242,14 @@ function getActivityStyle(type, details = {}) {
     if (t === 'TUTORCHANGED' || t === 'TUTOR_CHANGED') return ACTIVITY_ICONS.TUTOR_CHANGED;
     if (t === 'TUTOREARNED' || t === 'TUTOR_EARNED' || t === 'TUTOR_BONUS') return ACTIVITY_ICONS.TUTOR_EARNED;
     if (t === 'REWARDRECYCLED' || t === 'REWARD_RECYCLED' || t === 'RECYCLED') return ACTIVITY_ICONS.REWARD_RECYCLED;
+    if (t === 'NFTBULKFUSED' || t === 'NFT_BULK_FUSED' || t === 'BULKFUSED' || t === 'BULK_FUSED') return ACTIVITY_ICONS.NFT_BULK_FUSED;
     if (t === 'NFTFUSION' || t === 'NFT_FUSION' || t === 'FUSED' || t === 'FUSION') return ACTIVITY_ICONS.NFT_FUSION;
     if (t === 'NFTSPLIT' || t === 'NFT_SPLIT' || t === 'SPLIT') return ACTIVITY_ICONS.NFT_SPLIT;
+    if (t === 'COMPOUNDREWARDS' || t === 'COMPOUND_REWARDS' || t === 'REWARDSCOMPOUNDED' || t === 'REWARDS_COMPOUNDED') return ACTIVITY_ICONS.COMPOUND_REWARDS;
     if (t === 'GOVERNANCEVOTE' || t === 'GOVERNANCE_VOTE' || t === 'VOTED') return ACTIVITY_ICONS.GOVERNANCE_VOTE;
     if (t === 'GOVERNANCEPROPOSE' || t === 'GOVERNANCE_PROPOSE' || t === 'PROPOSAL_CREATED') return ACTIVITY_ICONS.GOVERNANCE_PROPOSE;
+    if (t === 'BUYBACKPAUSED' || t === 'BUYBACK_PAUSED') return ACTIVITY_ICONS.BUYBACK_PAUSED;
+    if (t === 'BUYBACKUNPAUSED' || t === 'BUYBACK_UNPAUSED') return ACTIVITY_ICONS.BUYBACK_UNPAUSED;
     if (t === 'BUYBACKEXECUTED' || t === 'BUYBACK_EXECUTED' || t.includes('BUYBACK')) return ACTIVITY_ICONS.BUYBACK;
     if (t === 'SWAPETHFORBKC' || t === 'SWAPBKCFORETH' || t.includes('SWAP')) return ACTIVITY_ICONS.SWAP;
     if (t === 'LIQUIDITYADDED' || t === 'LIQUIDITY_ADDED') return ACTIVITY_ICONS.LIQUIDITY_ADD;
@@ -292,9 +299,8 @@ async function requestSmartFaucet(btnElement) {
 
         if (response.ok && data.success) {
             apiSuccess = true;
-            const bkcAmt = data.bkcAmount || FAUCET_BKC_AMOUNT;
             const ethAmt = data.ethAmount || FAUCET_ETH_AMOUNT;
-            showToast(`Faucet: ${bkcAmt} BKC + ${ethAmt} ETH sent to your wallet!`, "success");
+            showToast(`Faucet: ${ethAmt} ETH sent to your wallet!`, "success");
             DashboardState.faucet.canClaim = false;
             try { localStorage.setItem('bkc_faucet_' + State.userAddress.toLowerCase(), '1'); } catch(e) {}
             updateFaucetWidget();
@@ -302,11 +308,6 @@ async function requestSmartFaucet(btnElement) {
             console.log('[Faucet] Claim success, txHash:', data.txHash, '— refreshing balance in 3s...');
             setTimeout(async () => {
                 try {
-                    // Direct on-chain check first (bypasses all caching)
-                    if (State.bkcTokenContractPublic) {
-                        const directBal = await State.bkcTokenContractPublic.balanceOf(State.userAddress);
-                        console.log('[Faucet] Direct on-chain BKC after claim:', ethers.formatEther(directBal));
-                    }
                     await loadUserData(true);
                     console.log('[Faucet] Post-claim balance:', State.currentUserBalance?.toString());
                     updateBalanceCard();
@@ -356,7 +357,7 @@ function updateFaucetWidget() {
     if (!State.isConnected) {
         widget.style.opacity = '0.5';
         if (titleEl) titleEl.innerText = "Get Free Testnet Tokens";
-        if (descEl) descEl.innerText = "Connect your wallet to claim BKC + ETH for gas";
+        if (descEl) descEl.innerText = "Connect your wallet to claim ETH for gas";
         if (statusEl) statusEl.classList.add('hidden');
         if (btn) { btn.className = 'dash-btn-secondary'; btn.innerHTML = '<i class="fa-solid fa-wallet"></i> Connect Wallet'; btn.disabled = true; }
         return;
@@ -366,12 +367,12 @@ function updateFaucetWidget() {
     if (!DashboardState.faucet.canClaim) {
         // Already claimed (one-time per wallet)
         if (titleEl) titleEl.innerText = "Testnet Tokens Received";
-        if (descEl) descEl.innerText = `Already received ${FAUCET_BKC_AMOUNT} BKC + ${FAUCET_ETH_AMOUNT} ETH for testing on this wallet`;
+        if (descEl) descEl.innerText = `Already received ${FAUCET_ETH_AMOUNT} ETH for testing on this wallet`;
         if (statusEl) { statusEl.classList.remove('hidden'); statusEl.innerHTML = `<i class="fa-solid fa-circle-check" style="margin-right:4px;color:#4ade80"></i>One-time claim used`; }
         if (btn) { btn.className = 'dash-btn-secondary'; btn.innerHTML = '<i class="fa-solid fa-check"></i> Already Claimed'; btn.disabled = true; }
     } else {
         if (titleEl) titleEl.innerText = "Get Free Testnet Tokens";
-        if (descEl) descEl.innerText = "Claim BKC tokens and ETH for gas — one-time per wallet";
+        if (descEl) descEl.innerText = "Claim ETH for gas — one-time per wallet";
         if (statusEl) statusEl.classList.add('hidden');
         if (btn) { btn.className = 'dash-btn-primary dash-btn-cyan'; btn.innerHTML = '<i class="fa-solid fa-faucet"></i> Claim Free Tokens'; btn.disabled = false; }
     }
@@ -1190,11 +1191,8 @@ function renderDashboardLayout() {
                 </div>
                 <div class="dash-faucet-info">
                     <h3 id="faucet-title">Get Free Testnet Tokens</h3>
-                    <p id="faucet-desc">Claim BKC tokens and ETH for gas — one-time per wallet</p>
+                    <p id="faucet-desc">Claim ETH for gas — one-time per wallet</p>
                     <div class="dash-faucet-amounts">
-                        <span class="dash-faucet-badge" style="color:#22d3ee">
-                            <i class="fa-solid fa-coins" style="font-size:10px"></i>${FAUCET_BKC_AMOUNT} BKC
-                        </span>
                         <span class="dash-faucet-badge" style="color:#4ade80">
                             <i class="fa-brands fa-ethereum" style="font-size:10px"></i>${FAUCET_ETH_AMOUNT} ETH
                         </span>

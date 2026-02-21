@@ -40,19 +40,19 @@ const TIER_CONFIG = {
     'Gold': {
         color: '#fbbf24', border: 'rgba(251,191,36,0.4)', bg: 'rgba(251,191,36,0.06)',
         gradient: 'linear-gradient(135deg, rgba(251,191,36,0.12), rgba(217,119,6,0.08))',
-        icon: '🥇', keepRate: 80, recycleRate: 20,
+        icon: '🥇', keepRate: 90, recycleRate: 10,
         image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeifponccrbicg2pcjrn2hrfoqgc77xhm2r4ld7hdpw6cxxkbsckf44'
     },
     'Silver': {
         color: '#9ca3af', border: 'rgba(156,163,175,0.4)', bg: 'rgba(156,163,175,0.06)',
         gradient: 'linear-gradient(135deg, rgba(156,163,175,0.12), rgba(100,116,139,0.08))',
-        icon: '🥈', keepRate: 70, recycleRate: 30,
+        icon: '🥈', keepRate: 80, recycleRate: 20,
         image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeihvi2inujm5zpi7tl667g4srq273536pjkglwyrtbwmgnskmu7jg4'
     },
     'Bronze': {
         color: '#f97316', border: 'rgba(249,115,22,0.4)', bg: 'rgba(249,115,22,0.06)',
         gradient: 'linear-gradient(135deg, rgba(249,115,22,0.12), rgba(180,83,9,0.08))',
-        icon: '🥉', keepRate: 60, recycleRate: 40,
+        icon: '🥉', keepRate: 70, recycleRate: 30,
         image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeiclqidb67rt3tchhjpsib62s624li7j2bpxnr6b5w5mfp4tomhu7m'
     }
 };
@@ -104,6 +104,9 @@ let fuseTierFilter = null; // auto-set when first NFT selected
 let splitSelectedTokenId = null; // tokenId selected for split
 let splitTargetTier = null; // target tier for split
 let splitConfirmPending = false; // waiting for split confirmation
+let bulkFuseSelected = []; // tokenIds selected for bulk fuse
+let bulkFuseTierFilter = null; // tier filter for bulk fuse
+let bulkFuseTargetTier = null; // target tier for bulk fuse
 
 const factoryABI = [
     "function getPoolAddress(uint256 boostBips) view returns (address)",
@@ -368,6 +371,9 @@ function injectStyles() {
         .nft-fusion-tab.active[data-fusion-tab="fuse"] {
             color: #000; background: linear-gradient(135deg, #f59e0b, #f97316);
             border-color: rgba(245,158,11,0.4); box-shadow: 0 2px 12px rgba(245,158,11,0.2);
+        }
+        .nft-fusion-tab.active[data-fusion-tab="bulk"] {
+            color: #f97316; border-color: #f97316; background: rgba(249,115,22,0.08);
         }
         .nft-fusion-tab.active[data-fusion-tab="split"] {
             color: #fff; background: linear-gradient(135deg, #8b5cf6, #7c3aed);
@@ -1049,10 +1055,10 @@ function renderImpactPreview() {
 
 function getTierFromBoostLocal(boost) {
     if (boost >= 5000) return { keepRate: 100, recycleRate: 0, name: 'Diamond' };
-    if (boost >= 4000) return { keepRate: 80, recycleRate: 20, name: 'Gold' };
-    if (boost >= 2500) return { keepRate: 70, recycleRate: 30, name: 'Silver' };
-    if (boost >= 1000) return { keepRate: 60, recycleRate: 40, name: 'Bronze' };
-    return { keepRate: 40, recycleRate: 60, name: 'None' };
+    if (boost >= 4000) return { keepRate: 90, recycleRate: 10, name: 'Gold' };
+    if (boost >= 2500) return { keepRate: 80, recycleRate: 20, name: 'Silver' };
+    if (boost >= 1000) return { keepRate: 70, recycleRate: 30, name: 'Bronze' };
+    return { keepRate: 50, recycleRate: 50, name: 'None' };
 }
 
 // ============================================================================
@@ -1103,13 +1109,16 @@ function renderFusionSection() {
                 <button class="nft-fusion-tab ${fusionActiveTab === 'fuse' ? 'active' : ''}" data-fusion-tab="fuse">
                     <i class="fa-solid fa-fire"></i> Forge
                 </button>
+                <button class="nft-fusion-tab ${fusionActiveTab === 'bulk' ? 'active' : ''}" data-fusion-tab="bulk">
+                    <i class="fa-solid fa-layer-group"></i> Bulk
+                </button>
                 <button class="nft-fusion-tab ${fusionActiveTab === 'split' ? 'active' : ''}" data-fusion-tab="split">
                     <i class="fa-solid fa-scissors"></i> Split
                 </button>
             </div>
             <div class="nft-fusion-body">
                 ${hasNfts
-                    ? (fusionActiveTab === 'fuse' ? renderFuseTab(nftsByTier) : renderSplitTab(nftsByTier))
+                    ? (fusionActiveTab === 'fuse' ? renderFuseTab(nftsByTier) : fusionActiveTab === 'bulk' ? renderBulkFuseTab(nftsByTier) : renderSplitTab(nftsByTier))
                     : renderFusionExplainer()
                 }
             </div>
@@ -1281,6 +1290,148 @@ function renderFuseTab(nftsByTier) {
     return `
         <div class="nft-fusion-filters">${filterBtns}</div>
         ${hint ? `<div class="nft-fusion-hint">${hint}</div>` : ''}
+        <div class="nft-fusion-grid">${nftCards}</div>
+        ${previewHtml}
+    `;
+}
+
+function renderBulkFuseTab(nftsByTier) {
+    // Find tiers where user has 4+ NFTs (can bulk fuse to at least +2 tiers)
+    // or 2+ NFTs (can bulk fuse +1 tier, same as normal fuse but with multi-select)
+    const eligibleTiers = [];
+    for (let t = 0; t <= 2; t++) {
+        if (nftsByTier[t].length >= 4) eligibleTiers.push(t);
+    }
+
+    if (eligibleTiers.length === 0) {
+        bulkFuseSelected = [];
+        bulkFuseTierFilter = null;
+        bulkFuseTargetTier = null;
+        const counts = [0, 1, 2].map(t => {
+            const name = TIER_NAMES_MAP[t];
+            const s = getTierStyle(name);
+            const c = nftsByTier[t].length;
+            return `<span style="color:${s.color}">${s.icon} ${c}</span>`;
+        }).join(' <span style="opacity:0.3">/</span> ');
+        return `
+            <div class="nft-fusion-empty">
+                <i class="fa-solid fa-layer-group"></i>
+                Need 4+ NFTs of the same tier to bulk forge.<br>
+                <span style="display:inline-block;margin-top:6px;font-size:10px">${counts}</span>
+            </div>
+        `;
+    }
+
+    if (bulkFuseTierFilter === null || !eligibleTiers.includes(bulkFuseTierFilter)) {
+        bulkFuseTierFilter = eligibleTiers[0];
+        bulkFuseSelected = [];
+        bulkFuseTargetTier = null;
+    }
+
+    const currentTierIds = new Set(nftsByTier[bulkFuseTierFilter].map(n => n.tokenId));
+    bulkFuseSelected = bulkFuseSelected.filter(id => currentTierIds.has(id));
+
+    const tierName = TIER_NAMES_MAP[bulkFuseTierFilter];
+    const tierStyle = getTierStyle(tierName);
+
+    // Tier filter buttons
+    const filterBtns = [0, 1, 2].map(t => {
+        const name = TIER_NAMES_MAP[t];
+        const style = getTierStyle(name);
+        const count = nftsByTier[t].length;
+        const isActive = t === bulkFuseTierFilter;
+        const isDisabled = count < 4;
+        return `<button class="nft-fusion-filter ${isActive ? 'active' : ''}" data-bulk-filter="${t}" ${isDisabled ? 'disabled' : ''} style="${isActive ? `border-color:${style.color};color:${style.color};background:${style.bg}` : ''}">
+            ${style.icon} ${name} <span class="ff-count">${count}</span>
+        </button>`;
+    }).join('');
+
+    // Target tier options
+    const targetOptions = [];
+    for (let target = bulkFuseTierFilter + 1; target <= 3; target++) {
+        const levels = target - bulkFuseTierFilter;
+        const required = 1 << levels; // 2^levels NFTs needed per output
+        const available = nftsByTier[bulkFuseTierFilter].length;
+        const maxOutputs = Math.floor(available / required);
+        if (maxOutputs < 1) continue;
+        const targetName = TIER_NAMES_MAP[target];
+        const targetStyle = getTierStyle(targetName);
+        const isActive = bulkFuseTargetTier === target;
+        targetOptions.push(`<button class="nft-fusion-filter ${isActive ? 'active' : ''}" data-bulk-target="${target}" style="${isActive ? `border-color:${targetStyle.color};color:${targetStyle.color};background:${targetStyle.bg}` : ''}">
+            &rarr; ${targetStyle.icon} ${targetName} <span class="ff-count">${required}:1</span>
+        </button>`);
+    }
+
+    // Auto-set target if not set
+    if (bulkFuseTargetTier === null || bulkFuseTargetTier <= bulkFuseTierFilter) {
+        bulkFuseTargetTier = bulkFuseTierFilter + 1;
+    }
+
+    const levels = bulkFuseTargetTier - bulkFuseTierFilter;
+    const requiredPer = 1 << levels;
+    const nfts = nftsByTier[bulkFuseTierFilter];
+    const maxSelectable = Math.floor(nfts.length / requiredPer) * requiredPer;
+
+    // NFT grid with multi-select
+    const nftCards = nfts.map(nft => {
+        const isSelected = bulkFuseSelected.includes(nft.tokenId);
+        return `<div class="nft-fusion-nft ${isSelected ? 'selected' : ''}" data-bulk-nft="${nft.tokenId}" style="${isSelected ? `border-color:${tierStyle.color}` : ''}">
+            <div class="nft-fusion-nft-check" style="background:${tierStyle.color}">&check;</div>
+            <span class="nft-fusion-nft-icon">${tierStyle.icon}</span>
+            <div class="nft-fusion-nft-id" style="color:${tierStyle.color}">#${nft.tokenId}</div>
+        </div>`;
+    }).join('');
+
+    // Select all / clear buttons
+    const selectAllBtn = `<button class="nft-fusion-filter" id="bulk-select-all" style="font-size:9px">Select ${maxSelectable}</button>`;
+    const clearBtn = bulkFuseSelected.length > 0 ? `<button class="nft-fusion-filter" id="bulk-clear" style="font-size:9px">Clear</button>` : '';
+
+    // Preview
+    let previewHtml = '';
+    if (bulkFuseSelected.length >= requiredPer && bulkFuseSelected.length % requiredPer === 0) {
+        const outputCount = bulkFuseSelected.length / requiredPer;
+        const targetName = TIER_NAMES_MAP[bulkFuseTargetTier];
+        const targetStyle = getTierStyle(targetName);
+
+        previewHtml = `
+            <div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:var(--nft-surface-2);border:1px solid var(--nft-border)">
+                <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px">
+                    <span style="font-size:12px;font-weight:800;color:${tierStyle.color}">${bulkFuseSelected.length}x ${tierStyle.icon}</span>
+                    <i class="fa-solid fa-angles-right" style="color:var(--nft-text-3);font-size:10px"></i>
+                    <span style="font-size:12px;font-weight:800;color:${targetStyle.color}">${outputCount}x ${targetStyle.icon} ${targetName}</span>
+                </div>
+                <div style="text-align:center;font-size:10px;color:var(--nft-text-3);margin-bottom:8px">
+                    <i class="fa-solid fa-gas-pump" style="font-size:8px"></i> <span id="bulk-fee-display">estimating...</span>
+                </div>
+                <button class="nft-fusion-cta fuse-cta" id="bulk-fuse-execute-btn" style="width:100%">
+                    <i class="fa-solid fa-layer-group"></i> Bulk Forge ${bulkFuseSelected.length} → ${outputCount}x ${targetName}
+                </button>
+            </div>
+        `;
+
+        // Load fee async
+        setTimeout(() => {
+            FusionTx.getEstimatedBulkFuseFee(bulkFuseTierFilter, bulkFuseTargetTier, bulkFuseSelected.length).then(fee => {
+                const el = document.getElementById('bulk-fee-display');
+                if (el) el.textContent = `${Number(ethers.formatEther(fee)).toFixed(6)} BNB`;
+            }).catch(() => {
+                const el = document.getElementById('bulk-fee-display');
+                if (el) el.textContent = 'N/A';
+            });
+        }, 50);
+    }
+
+    const selectedInfo = bulkFuseSelected.length > 0
+        ? `<span style="color:${tierStyle.color};font-weight:700">${bulkFuseSelected.length}</span> selected${bulkFuseSelected.length % requiredPer !== 0 ? ` <span style="color:var(--nft-red);font-size:9px">(need multiples of ${requiredPer})</span>` : ''}`
+        : `Select ${requiredPer}+ ${tierName} NFTs:`;
+
+    return `
+        <div class="nft-fusion-filters">${filterBtns}</div>
+        <div class="nft-fusion-filters" style="margin-bottom:8px">${targetOptions.join('')}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div class="nft-fusion-hint" style="margin-bottom:0"><i class="fa-solid fa-layer-group"></i> ${selectedInfo}</div>
+            <div style="display:flex;gap:4px">${selectAllBtn}${clearBtn}</div>
+        </div>
         <div class="nft-fusion-grid">${nftCards}</div>
         ${previewHtml}
     `;
@@ -1669,6 +1820,9 @@ function setupEventListeners() {
             splitSelectedTokenId = null;
             splitTargetTier = null;
             splitConfirmPending = false;
+            bulkFuseSelected = [];
+            bulkFuseTierFilter = null;
+            bulkFuseTargetTier = null;
             renderFusionSection();
             return;
         }
@@ -1725,6 +1879,94 @@ function setupEventListeners() {
                     onError: (error) => {
                         if (!error.cancelled && error.type !== 'user_rejected') {
                             showToast("Fuse failed: " + (error.message || 'Unknown'), "error");
+                        }
+                    }
+                });
+            } finally { isTransactionInProgress = false; }
+            return;
+        }
+
+        // Bulk fuse tier filter
+        const bulkFilter = e.target.closest('[data-bulk-filter]');
+        if (bulkFilter && !bulkFilter.disabled) {
+            bulkFuseTierFilter = Number(bulkFilter.dataset.bulkFilter);
+            bulkFuseSelected = [];
+            bulkFuseTargetTier = null;
+            renderFusionSection();
+            return;
+        }
+
+        // Bulk fuse target tier
+        const bulkTarget = e.target.closest('[data-bulk-target]');
+        if (bulkTarget) {
+            bulkFuseTargetTier = Number(bulkTarget.dataset.bulkTarget);
+            bulkFuseSelected = [];
+            renderFusionSection();
+            return;
+        }
+
+        // Bulk fuse NFT selection (multi-select)
+        const bulkNftEl = e.target.closest('[data-bulk-nft]');
+        if (bulkNftEl && fusionActiveTab === 'bulk') {
+            const tokenId = Number(bulkNftEl.dataset.bulkNft);
+            const idx = bulkFuseSelected.indexOf(tokenId);
+            if (idx >= 0) {
+                bulkFuseSelected.splice(idx, 1);
+            } else {
+                bulkFuseSelected.push(tokenId);
+            }
+            renderFusionSection();
+            return;
+        }
+
+        // Bulk select all
+        if (e.target.closest('#bulk-select-all') && fusionActiveTab === 'bulk') {
+            const nftsByTier = getAvailableNftsByTier();
+            const nfts = nftsByTier[bulkFuseTierFilter] || [];
+            const levels = (bulkFuseTargetTier || bulkFuseTierFilter + 1) - bulkFuseTierFilter;
+            const requiredPer = 1 << levels;
+            const maxSelectable = Math.floor(nfts.length / requiredPer) * requiredPer;
+            bulkFuseSelected = nfts.slice(0, maxSelectable).map(n => n.tokenId);
+            renderFusionSection();
+            return;
+        }
+
+        // Bulk clear
+        if (e.target.closest('#bulk-clear') && fusionActiveTab === 'bulk') {
+            bulkFuseSelected = [];
+            renderFusionSection();
+            return;
+        }
+
+        // Bulk fuse execute
+        const bulkExecBtn = e.target.closest('#bulk-fuse-execute-btn');
+        if (bulkExecBtn && !bulkExecBtn.disabled && !isTransactionInProgress && bulkFuseSelected.length > 0) {
+            e.preventDefault();
+            const tokenIds = [...bulkFuseSelected];
+            const targetTier = bulkFuseTargetTier;
+            const sourceTier = bulkFuseTierFilter;
+
+            isTransactionInProgress = true;
+            try {
+                await FusionTx.bulkFuseNfts({
+                    tokenIds,
+                    targetTier,
+                    button: bulkExecBtn,
+                    onSuccess: async ({ newTokenIds, targetTier: tt, inputCount }) => {
+                        const targetName = TIER_NAMES_MAP[tt] || 'NFT';
+                        showToast(`Bulk forged ${inputCount} NFTs into ${newTokenIds.length}x ${targetName}!`, "success");
+                        optimisticBoosterUpdate({
+                            remove: tokenIds,
+                            add: newTokenIds.map(id => ({ tokenId: id, boostBips: TIER_TO_BOOST[tt] || 1000 }))
+                        });
+                        bulkFuseSelected = [];
+                        invalidateAllPoolCaches();
+                        await loadAllPoolsData();
+                        renderTierCards(); renderInventory(); renderImpactPreview(); renderFusionSection();
+                    },
+                    onError: (error) => {
+                        if (!error.cancelled && error.type !== 'user_rejected') {
+                            showToast("Bulk forge failed: " + (error.message || 'Unknown'), "error");
                         }
                     }
                 });

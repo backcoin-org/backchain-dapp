@@ -73,11 +73,13 @@ const FUSION_ABI = [
     'function fuse(uint256 tokenId1, uint256 tokenId2, address operator) external payable returns (uint256 newTokenId)',
     'function split(uint256 tokenId, address operator) external payable returns (uint256[])',
     'function splitTo(uint256 tokenId, uint8 targetTier, address operator) external payable returns (uint256[])',
+    'function bulkFuse(uint256[] calldata tokenIds, uint8 targetTier, address operator) external payable returns (uint256[])',
 
     // Read
     'function getFusionFee(uint8 sourceTier) view returns (uint256)',
     'function getSplitFee(uint8 sourceTier) view returns (uint256)',
     'function getMultiSplitFee(uint8 sourceTier, uint8 targetTier) view returns (uint256)',
+    'function getBulkFuseFee(uint8 fromTier, uint8 toTier, uint256 inputCount) view returns (uint256)',
     'function previewFusion(uint256 tokenId1, uint256 tokenId2) view returns (uint8 sourceTier, uint8 resultTier, uint256 ethFee, bool canFuse)',
     'function previewSplit(uint256 tokenId, uint8 targetTier) view returns (uint8 sourceTier, uint256 mintCount, uint256 ethFee, bool canSplit)',
     'function getStats() view returns (uint256 totalFusions, uint256 totalSplits, uint256 bronzeFusions, uint256 silverFusions, uint256 goldFusions, uint256 silverSplits, uint256 goldSplits, uint256 diamondSplits)',
@@ -86,6 +88,7 @@ const FUSION_ABI = [
     // Events
     'event Fused(address indexed user, uint256 indexed tokenId1, uint256 indexed tokenId2, uint256 newTokenId, uint8 sourceTier, uint8 resultTier, address operator)',
     'event Split(address indexed user, uint256 indexed burnedTokenId, uint8 sourceTier, uint8 targetTier, uint256 mintCount, uint256[] newTokenIds, address operator)',
+    'event BulkFused(address indexed user, uint256 inputCount, uint8 sourceTier, uint256 outputCount, uint8 targetTier, uint256 totalFee, address operator)',
 ];
 
 const NFT_APPROVAL_ABI = [
@@ -411,6 +414,102 @@ export async function splitNftTo({
     });
 }
 
+/**
+ * Bulk fuse multiple same-tier NFTs into higher-tier NFTs in one TX
+ * e.g. 4 Bronze → 1 Gold, 16 Bronze → 1 Diamond
+ * @param {Object} params
+ * @param {number[]} params.tokenIds - All NFTs to fuse (must be same tier, count must be power of 2)
+ * @param {number} params.targetTier - Target tier (0=Bronze, 1=Silver, 2=Gold, 3=Diamond)
+ * @param {string} [params.operator] - Operator address
+ */
+export async function bulkFuseNfts({
+    tokenIds, targetTier, operator,
+    button = null, onSuccess = null, onError = null
+}) {
+    const ethers = window.ethers;
+    const fusionAddr = getFusionAddress();
+    const nftAddr = getNftAddress();
+    if (!fusionAddr || !nftAddr) throw new Error('Contract addresses not loaded');
+
+    let ethFee = 0n;
+    let sourceTier = 0;
+
+    return await txEngine.execute({
+        name: 'BulkFuseNFTs', button,
+        getContract: async (signer) => getFusionContract(signer),
+        method: 'bulkFuse',
+        args: () => [tokenIds.map(id => BigInt(id)), Number(targetTier), resolveOperator(operator)],
+        get value() { return ethFee; },
+
+        get approval() {
+            return { token: nftAddr, spender: fusionAddr, isERC721: true };
+        },
+
+        validate: async (signer, userAddress) => {
+            const nft = await getNftContractReadOnly();
+
+            // Verify ownership and same tier
+            const tiers = await Promise.all(tokenIds.map(id => nft.tokenTier(id)));
+            sourceTier = Number(tiers[0]);
+            for (let i = 0; i < tiers.length; i++) {
+                if (Number(tiers[i]) !== sourceTier) throw new Error('All NFTs must be the same tier');
+            }
+            if (targetTier <= sourceTier) throw new Error('Target tier must be higher than source tier');
+            if (targetTier > 3) throw new Error('Cannot fuse above Diamond');
+
+            // Verify count is power of 2
+            const levels = targetTier - sourceTier;
+            const requiredCount = 1 << levels; // 2^levels
+            if (tokenIds.length % requiredCount !== 0) {
+                throw new Error(`Need multiples of ${requiredCount} NFTs for ${TIER_NAMES[sourceTier]} → ${TIER_NAMES[targetTier]}`);
+            }
+
+            // Get fee from contract
+            const fusionContract = await getFusionContractReadOnly();
+            ethFee = await fusionContract.getBulkFuseFee(sourceTier, targetTier, tokenIds.length);
+            console.log(`[BulkFuse] ${tokenIds.length}x ${TIER_NAMES[sourceTier]} → ${tokenIds.length / requiredCount}x ${TIER_NAMES[targetTier]}, Fee: ${ethers.formatEther(ethFee)} BNB`);
+
+            // Check ETH balance
+            const { NetworkManager } = await import('../core/index.js');
+            const ethBalance = await NetworkManager.getProvider().getBalance(userAddress);
+            if (ethBalance < ethFee + ethers.parseEther('0.001')) throw new Error('Insufficient BNB for fee + gas');
+
+            await ensureNftApproval(signer, userAddress);
+        },
+
+        onSuccess: async (receipt) => {
+            let newTokenIds = [];
+            try {
+                const iface = new ethers.Interface(FUSION_ABI);
+                for (const log of receipt.logs) {
+                    try {
+                        const parsed = iface.parseLog(log);
+                        if (parsed?.name === 'BulkFused') {
+                            // BulkFused doesn't include token IDs directly, check Split/Fused events
+                            break;
+                        }
+                    } catch {}
+                }
+                // Fallback: look for Transfer events to find new token IDs
+                const transferIface = new ethers.Interface(['event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)']);
+                for (const log of receipt.logs) {
+                    try {
+                        const parsed = transferIface.parseLog(log);
+                        if (parsed?.name === 'Transfer' && parsed.args.from === ethers.ZeroAddress) {
+                            newTokenIds.push(Number(parsed.args.tokenId));
+                        }
+                    } catch {}
+                }
+            } catch {}
+
+            const outputCount = tokenIds.length / (1 << (targetTier - sourceTier));
+            console.log(`[BulkFuse] Success! ${outputCount}x ${TIER_NAMES[targetTier]} NFTs: ${newTokenIds.join(', ')}`);
+            if (onSuccess) onSuccess({ receipt, newTokenIds, targetTier, sourceTier, inputCount: tokenIds.length });
+        },
+        onError: (err) => { if (onError) onError(err); }
+    });
+}
+
 // ============================================================================
 // 6. READ FUNCTIONS
 // ============================================================================
@@ -443,6 +542,14 @@ export async function getEstimatedMultiSplitFee(sourceTier, targetTier) {
         total += await calculateFeeClientSide(actionId);
     }
     return total;
+}
+
+/**
+ * Get estimated ETH fee for a bulk fuse (from contract view function)
+ */
+export async function getEstimatedBulkFuseFee(fromTier, toTier, inputCount) {
+    const contract = await getFusionContractReadOnly();
+    return await contract.getBulkFuseFee(Number(fromTier), Number(toTier), Number(inputCount));
 }
 
 /**
@@ -481,9 +588,11 @@ export const FusionTx = {
     fuseNfts,
     splitNft,
     splitNftTo,
+    bulkFuseNfts,
     getEstimatedFusionFee,
     getEstimatedSplitFee,
     getEstimatedMultiSplitFee,
+    getEstimatedBulkFuseFee,
     getFusionStats,
     isFusionApproved,
     TIER_NAMES,

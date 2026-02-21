@@ -87,7 +87,7 @@ async function loadOperatorData() {
         const provider = NetworkManager.getProvider();
         const eco = new ethers.Contract(addresses.backchainEcosystem, ecosystemManagerABI, provider);
 
-        // Pending ETH for connected user
+        // Pending BNB for connected user
         if (State.isConnected && State.userAddress) {
             OS.pendingEth = await eco.pendingEth(State.userAddress);
         }
@@ -418,7 +418,7 @@ function render(isActive) {
                     <i class="fa-solid fa-lock-open text-emerald-400 text-lg mt-0.5"></i>
                     <div>
                         <h3 class="text-white font-bold text-sm mb-1">Permissionless</h3>
-                        <p class="text-zinc-500 text-xs leading-relaxed">No registration, no API key, no approval process. Any Ethereum address can be an operator. Just set it and start earning.</p>
+                        <p class="text-zinc-500 text-xs leading-relaxed">No registration, no API key, no approval process. Any wallet address can be an operator. Just set it and start earning.</p>
                     </div>
                 </div>
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4 flex gap-3">
@@ -432,7 +432,7 @@ function render(isActive) {
                     <i class="fa-solid fa-clock text-emerald-400 text-lg mt-0.5"></i>
                     <div>
                         <h3 class="text-white font-bold text-sm mb-1">No Expiration</h3>
-                        <p class="text-zinc-500 text-xs leading-relaxed">No time limit on earnings. As long as the Backchain protocol exists on Arbitrum, your operator commissions will keep accumulating.</p>
+                        <p class="text-zinc-500 text-xs leading-relaxed">No time limit on earnings. As long as the Backchain protocol exists on opBNB, your operator commissions will keep accumulating.</p>
                     </div>
                 </div>
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4 flex gap-3">
@@ -521,7 +521,7 @@ nftPool.buy(tier, quantity, <span class="op-string">OPERATOR_ADDR</span>, { valu
             <div class="space-y-3">
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4">
                     <h3 class="text-white font-bold text-sm mb-1">Do I need to register or apply?</h3>
-                    <p class="text-zinc-500 text-xs leading-relaxed">No. The operator system is completely permissionless. Any valid Ethereum address works as an operator. There's no whitelist, no approval, and no KYC.</p>
+                    <p class="text-zinc-500 text-xs leading-relaxed">No. The operator system is completely permissionless. Any valid wallet address works as an operator. There's no whitelist, no approval, and no KYC.</p>
                 </div>
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-4">
                     <h3 class="text-white font-bold text-sm mb-1">Which actions generate operator fees?</h3>

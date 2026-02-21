@@ -94,11 +94,11 @@ const FORTUNE_ABI = [
     'event GameExpired(uint256 indexed gameId, address indexed player, uint256 forfeitedAmount)'
 ];
 
-// Tier data (hardcoded in contract, cached here for validation)
+// Tier data (fallback if contract read fails — actual values read from getAllTiers())
 const TIERS = [
-    { range: 4,   multiplierBps: 30000 },  // Tier 0: 1-4, 3x
-    { range: 20,  multiplierBps: 150000 }, // Tier 1: 1-20, 15x
-    { range: 100, multiplierBps: 750000 } // Tier 2: 1-100, 75x
+    { range: 4,   multiplierBps: 32000 },  // Tier 0: 1-4, 3.2x
+    { range: 20,  multiplierBps: 160000 }, // Tier 1: 1-20, 16x
+    { range: 100, multiplierBps: 800000 } // Tier 2: 1-100, 80x
 ];
 
 // ============================================================================
@@ -204,10 +204,10 @@ export async function commitPlay({
                 ethFee += await calculateFeeClientSide(ACTION_IDS[i]);
             }
         }
-        console.log('[FortuneTx] ETH fee:', ethers.formatEther(ethFee));
+        console.log('[FortuneTx] BNB fee:', ethers.formatEther(ethFee));
     } catch (e) {
-        console.error('[FortuneTx] Could not calculate ETH fee:', e.message);
-        throw new Error('Could not calculate ETH fee');
+        console.error('[FortuneTx] Could not calculate BNB fee:', e.message);
+        throw new Error('Could not calculate BNB fee');
     }
 
     return await txEngine.execute({

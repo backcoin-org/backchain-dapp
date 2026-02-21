@@ -1,5 +1,5 @@
 // pages/TradePage.js
-// ✅ PRODUCTION V1.0 — Trade BKC/ETH via Uniswap V3
+// ✅ V12.0 — Trade BKC/ETH via Backchain LiquidityPool AMM
 
 const ethers = window.ethers;
 
@@ -8,49 +8,47 @@ import { formatBigNumber } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
 import { openConnectModal } from '../modules/wallet.js';
 import { getBkcPrice, formatUsd } from '../modules/price-service.js';
+import { addresses } from '../config.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // CONSTANTS
 // ════════════════════════════════════════════════════════════════════════════
 
-const SWAP_ROUTER = "0x101F443B4d1b059569D643917553c771E1b9663E";
-const WETH9       = "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73";
-const BKC_TOKEN   = "0x888b9422bbEeaB772E035734A6a91a07c23550d1";
-const POOL        = "0x808eFFE4d4ee6a6560b861F05d6f14BD7d6208f0";
-const FEE_TIER    = 3000;
 const EXPLORER    = "https://sepolia.arbiscan.io";
 const PRICE_REFRESH_MS = 15000;
 const DEFAULT_SLIPPAGE = 1;
 const GAS_RESERVE = ethers.parseEther("0.005");
+const SWAP_FEE_BPS = 30;  // 0.3% — matches LiquidityPool contract
+
+// ════════════════════════════════════════════════════════════════════════════
+// DYNAMIC ADDRESS RESOLUTION
+// ════════════════════════════════════════════════════════════════════════════
+
+function getPoolAddress() {
+    return addresses?.liquidityPool;
+}
+
+function getBkcAddress() {
+    return addresses?.bkcToken;
+}
 
 // ════════════════════════════════════════════════════════════════════════════
 // ABIs
 // ════════════════════════════════════════════════════════════════════════════
 
-const SWAP_ROUTER_ABI = [
-    'function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)',
-    'function multicall(uint256 deadline, bytes[] calldata data) external payable returns (bytes[] memory results)',
-    'function unwrapWETH9(uint256 amountMinimum, address recipient) external payable',
-];
-
-const WETH_ABI = [
-    'function deposit() payable',
-    'function approve(address, uint256) returns (bool)',
-    'function allowance(address, address) view returns (uint256)',
-    'function balanceOf(address) view returns (uint256)',
+const POOL_ABI = [
+    'function swapETHforBKC(uint256 minBkcOut) external payable returns (uint256 bkcOut)',
+    'function swapBKCforETH(uint256 bkcAmount, uint256 minEthOut) external returns (uint256 ethOut)',
+    'function getQuote(uint256 ethAmount) external view returns (uint256 bkcOut)',
+    'function getQuoteBKCtoETH(uint256 bkcAmount) external view returns (uint256 ethOut)',
+    'function currentPrice() external view returns (uint256)',
+    'function getPoolStats() external view returns (uint256 _ethReserve, uint256 _bkcReserve, uint256 _totalLPShares, uint64 _totalSwapCount, uint96 _totalEthVolume, uint96 _totalBkcVolume, uint256 _currentPrice)',
 ];
 
 const ERC20_ABI = [
     'function approve(address, uint256) returns (bool)',
     'function allowance(address, address) view returns (uint256)',
     'function balanceOf(address) view returns (uint256)',
-];
-
-const POOL_ABI = [
-    'function slot0() view returns (uint160 sqrtPriceX96, int24 tick, uint16, uint16, uint16, uint8, bool)',
-    'function liquidity() view returns (uint128)',
-    'function token0() view returns (address)',
-    'function token1() view returns (address)',
 ];
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -64,11 +62,16 @@ const TS = {
     estimatedOutputFormatted: '0',
     priceImpact: 0,
 
-    sqrtPriceX96: 0n,
-    liquidity: 0n,
-    wethIsToken0: false,
+    // Pool reserves (for local quote calculations)
+    ethReserve: 0n,
+    bkcReserve: 0n,
     priceBkcPerEth: 0,
     priceEthPerBkc: 0,
+
+    // Pool stats
+    totalSwapCount: 0,
+    totalEthVolume: 0n,
+    totalBkcVolume: 0n,
 
     slippage: DEFAULT_SLIPPAGE,
     showSettings: false,
@@ -178,8 +181,8 @@ function injectStyles() {
         .trade-pool-info a:hover { text-decoration: underline; }
         .trade-uni-badge {
             display: inline-flex; align-items: center; gap: 4px;
-            padding: 2px 8px; border-radius: 8px; background: rgba(255,0,122,0.1);
-            color: #ff007a; font-size: 0.7rem; font-weight: 600;
+            padding: 2px 8px; border-radius: 8px; background: rgba(245,158,11,0.1);
+            color: #f59e0b; font-size: 0.7rem; font-weight: 600;
         }
 
         /* Swap button states */
@@ -274,30 +277,26 @@ async function getPoolPrice() {
     const provider = getProvider();
     if (!provider) return;
 
+    const poolAddr = getPoolAddress();
+    if (!poolAddr) return;
+
     try {
-        const pool = new ethers.Contract(POOL, POOL_ABI, provider);
-        const [slot0, liq, t0] = await Promise.all([
-            pool.slot0(),
-            pool.liquidity(),
-            pool.token0(),
-        ]);
+        const pool = new ethers.Contract(poolAddr, POOL_ABI, provider);
+        const stats = await pool.getPoolStats();
 
-        TS.sqrtPriceX96 = slot0[0];
-        TS.liquidity = liq;
-        TS.wethIsToken0 = t0.toLowerCase() === WETH9.toLowerCase();
+        TS.ethReserve = stats._ethReserve;
+        TS.bkcReserve = stats._bkcReserve;
+        TS.totalSwapCount = Number(stats._totalSwapCount);
+        TS.totalEthVolume = stats._totalEthVolume;
+        TS.totalBkcVolume = stats._totalBkcVolume;
 
-        // price = (sqrtPriceX96 / 2^96)^2 = token1 per token0
-        const sqrtPrice = Number(TS.sqrtPriceX96) / (2 ** 96);
-        const price = sqrtPrice * sqrtPrice;
+        // Price: BKC per ETH from reserves
+        const ethRes = Number(ethers.formatEther(TS.ethReserve));
+        const bkcRes = Number(ethers.formatEther(TS.bkcReserve));
 
-        if (TS.wethIsToken0) {
-            // token0=WETH, token1=BKC → price = BKC per WETH
-            TS.priceBkcPerEth = price;
-            TS.priceEthPerBkc = price > 0 ? 1 / price : 0;
-        } else {
-            // token0=BKC, token1=WETH → price = WETH per BKC
-            TS.priceEthPerBkc = price;
-            TS.priceBkcPerEth = price > 0 ? 1 / price : 0;
+        if (ethRes > 0) {
+            TS.priceBkcPerEth = bkcRes / ethRes;
+            TS.priceEthPerBkc = ethRes / bkcRes;
         }
 
         updatePriceDisplay();
@@ -310,35 +309,32 @@ async function getPoolPrice() {
 
 function calculateEstimatedOutput() {
     const val = parseFloat(TS.inputAmount);
-    if (!val || val <= 0 || TS.sqrtPriceX96 === 0n) {
+    if (!val || val <= 0 || TS.ethReserve === 0n || TS.bkcReserve === 0n) {
         TS.estimatedOutput = 0n;
         TS.estimatedOutputFormatted = '0';
         TS.priceImpact = 0;
         return;
     }
 
-    const fee = 0.003;
-    const sqrtPrice = Number(TS.sqrtPriceX96) / (2 ** 96);
-    const L = Number(TS.liquidity);
-    if (L === 0 || sqrtPrice === 0) return;
-
-    // Virtual reserves at current price
-    const reserve0 = L / sqrtPrice;  // token0
-    const reserve1 = L * sqrtPrice;  // token1
+    const ethRes = Number(ethers.formatEther(TS.ethReserve));
+    const bkcRes = Number(ethers.formatEther(TS.bkcReserve));
+    if (ethRes === 0 || bkcRes === 0) return;
 
     let reserveIn, reserveOut;
     if (TS.direction === 'buy') {
-        // ETH→BKC: input is ETH (WETH)
-        reserveIn  = TS.wethIsToken0 ? reserve0 : reserve1;
-        reserveOut = TS.wethIsToken0 ? reserve1 : reserve0;
+        // ETH→BKC
+        reserveIn = ethRes;
+        reserveOut = bkcRes;
     } else {
-        // BKC→ETH: input is BKC
-        reserveIn  = TS.wethIsToken0 ? reserve1 : reserve0;
-        reserveOut = TS.wethIsToken0 ? reserve0 : reserve1;
+        // BKC→ETH
+        reserveIn = bkcRes;
+        reserveOut = ethRes;
     }
 
-    const effectiveInput = val * (1 - fee);
-    let outputNum = effectiveInput * reserveOut / (reserveIn + effectiveInput);
+    // Constant-product formula with 0.3% fee
+    const feeMultiplier = (10000 - SWAP_FEE_BPS) / 10000;
+    const effectiveInput = val * feeMultiplier;
+    const outputNum = effectiveInput * reserveOut / (reserveIn + effectiveInput);
 
     if (outputNum <= 0) {
         TS.estimatedOutput = 0n;
@@ -346,11 +342,6 @@ function calculateEstimatedOutput() {
         TS.priceImpact = 0;
         return;
     }
-
-    // V3 concentrated liquidity: virtual reserves overestimate output when
-    // swap crosses tick boundaries. Apply conservative 5% buffer for UI estimate.
-    // Actual execution uses staticCall for exact output.
-    outputNum *= 0.95;
 
     // Price impact
     const midPrice = reserveOut / reserveIn;
@@ -385,10 +376,13 @@ async function loadBalances() {
     const provider = getProvider();
     if (!provider) return;
 
+    const bkcAddr = getBkcAddress();
+    if (!bkcAddr) return;
+
     try {
         const [ethBal, bkcBal] = await Promise.all([
             provider.getBalance(State.userAddress),
-            new ethers.Contract(BKC_TOKEN, ERC20_ABI, provider).balanceOf(State.userAddress),
+            new ethers.Contract(bkcAddr, ERC20_ABI, provider).balanceOf(State.userAddress),
         ]);
         TS.ethBalance = ethBal;
         TS.bkcBalance = bkcBal;
@@ -402,7 +396,7 @@ async function loadBalances() {
 // SWAP EXECUTION
 // ════════════════════════════════════════════════════════════════════════════
 
-// Get gas overrides with 2x buffer to prevent "max fee < base fee" on Arbitrum
+// Gas overrides with 2x buffer to prevent "max fee < base fee" on Arbitrum
 async function getGasOverrides() {
     const provider = State.publicProvider || State.provider;
     const feeData = await provider.getFeeData();
@@ -419,56 +413,31 @@ async function executeBuySwap(btn) {
         const amountIn = ethers.parseEther(TS.inputAmount);
         if (amountIn === 0n) throw new Error('Enter an amount');
 
-        // Validate
         if (TS.ethBalance < amountIn + GAS_RESERVE) {
             throw new Error('Insufficient ETH (need amount + gas)');
         }
 
-        const signer = State.signer;
-        const weth = new ethers.Contract(WETH9, WETH_ABI, signer);
-        const router = new ethers.Contract(SWAP_ROUTER, SWAP_ROUTER_ABI, signer);
+        const poolAddr = getPoolAddress();
+        if (!poolAddr) throw new Error('Pool address not loaded');
 
-        // Step 1: Wrap ETH → WETH
-        setSwapBtn(btn, 'Wrapping ETH...', true);
-        let gasOvr = await getGasOverrides();
-        const wrapTx = await weth.deposit({ value: amountIn, ...gasOvr });
-        await wrapTx.wait();
-
-        // Step 2: Approve WETH (skip if enough allowance)
-        setSwapBtn(btn, 'Approving...', true);
-        const allowance = await weth.allowance(State.userAddress, SWAP_ROUTER);
-        if (allowance < amountIn) {
-            gasOvr = await getGasOverrides();
-            const appTx = await weth.approve(SWAP_ROUTER, ethers.MaxUint256, gasOvr);
-            await appTx.wait();
-        }
-
-        // Step 3: Get real output via staticCall, then apply slippage
+        // Step 1: Get exact quote from contract view
         setSwapBtn(btn, 'Getting quote...', true);
-        const swapParams = {
-            tokenIn: WETH9,
-            tokenOut: BKC_TOKEN,
-            fee: FEE_TIER,
-            recipient: State.userAddress,
-            amountIn,
-            amountOutMinimum: 0n,
-            sqrtPriceLimitX96: 0n,
-        };
-        const realOutput = await router.exactInputSingle.staticCall(swapParams, { from: State.userAddress });
+        const provider = getProvider();
+        const readPool = new ethers.Contract(poolAddr, POOL_ABI, provider);
+        const realOutput = await readPool.getQuote(amountIn);
         const slippageBps = BigInt(Math.floor(TS.slippage * 100));
-        const amountOutMin = realOutput * (10000n - slippageBps) / 10000n;
-        console.log(`[Trade] Buy quote: real=${ethers.formatEther(realOutput)} BKC, min=${ethers.formatEther(amountOutMin)} BKC`);
+        const minBkcOut = realOutput * (10000n - slippageBps) / 10000n;
+        console.log(`[Trade] Buy quote: real=${ethers.formatEther(realOutput)} BKC, min=${ethers.formatEther(minBkcOut)} BKC`);
 
-        // Step 4: Swap
+        // Step 2: Execute swap — sends ETH directly, receives BKC
         setSwapBtn(btn, 'Confirm in Wallet...', true);
-        gasOvr = await getGasOverrides();
-        const swapTx = await router.exactInputSingle({
-            ...swapParams,
-            amountOutMinimum: amountOutMin,
-        }, gasOvr);
+        const signer = State.signer;
+        const pool = new ethers.Contract(poolAddr, POOL_ABI, signer);
+        const gasOvr = await getGasOverrides();
+        const tx = await pool.swapETHforBKC(minBkcOut, { value: amountIn, ...gasOvr });
 
         setSwapBtn(btn, 'Processing...', true);
-        const receipt = await swapTx.wait();
+        const receipt = await tx.wait();
 
         showToast('Swap successful! Bought BKC', 'success');
         console.log(`[Trade] Buy TX: ${receipt.hash}`);
@@ -490,64 +459,43 @@ async function executeSellSwap(btn) {
         const amountIn = ethers.parseEther(TS.inputAmount);
         if (amountIn === 0n) throw new Error('Enter an amount');
 
-        // Validate
         if (TS.bkcBalance < amountIn) {
-            throw new Error(`Insufficient BKC`);
+            throw new Error('Insufficient BKC');
         }
 
-        const signer = State.signer;
-        const bkc = new ethers.Contract(BKC_TOKEN, ERC20_ABI, signer);
-        const router = new ethers.Contract(SWAP_ROUTER, SWAP_ROUTER_ABI, signer);
+        const poolAddr = getPoolAddress();
+        const bkcAddr = getBkcAddress();
+        if (!poolAddr || !bkcAddr) throw new Error('Contract addresses not loaded');
 
-        // Step 1: Approve BKC (skip if enough)
+        const signer = State.signer;
+        const bkc = new ethers.Contract(bkcAddr, ERC20_ABI, signer);
+        const pool = new ethers.Contract(poolAddr, POOL_ABI, signer);
+
+        // Step 1: Approve BKC to LiquidityPool (skip if enough allowance)
         setSwapBtn(btn, 'Approving BKC...', true);
-        const allowance = await bkc.allowance(State.userAddress, SWAP_ROUTER);
+        const allowance = await bkc.allowance(State.userAddress, poolAddr);
         if (allowance < amountIn) {
-            let gasOvr = await getGasOverrides();
-            const appTx = await bkc.approve(SWAP_ROUTER, ethers.MaxUint256, gasOvr);
+            const appOvr = await getGasOverrides();
+            const appTx = await bkc.approve(poolAddr, ethers.MaxUint256, appOvr);
             await appTx.wait();
         }
 
-        // Step 2: Get real output via staticCall, then apply slippage
+        // Step 2: Get exact quote from contract view
         setSwapBtn(btn, 'Getting quote...', true);
-        const realOutput = await router.exactInputSingle.staticCall({
-            tokenIn: BKC_TOKEN,
-            tokenOut: WETH9,
-            fee: FEE_TIER,
-            recipient: SWAP_ROUTER,
-            amountIn,
-            amountOutMinimum: 0n,
-            sqrtPriceLimitX96: 0n,
-        }, { from: State.userAddress });
+        const provider = getProvider();
+        const readPool = new ethers.Contract(poolAddr, POOL_ABI, provider);
+        const realOutput = await readPool.getQuoteBKCtoETH(amountIn);
         const slippageBps = BigInt(Math.floor(TS.slippage * 100));
-        const amountOutMin = realOutput * (10000n - slippageBps) / 10000n;
-        console.log(`[Trade] Sell quote: real=${ethers.formatEther(realOutput)} ETH, min=${ethers.formatEther(amountOutMin)} ETH`);
+        const minEthOut = realOutput * (10000n - slippageBps) / 10000n;
+        console.log(`[Trade] Sell quote: real=${ethers.formatEther(realOutput)} ETH, min=${ethers.formatEther(minEthOut)} ETH`);
 
-        // Step 3: Multicall (exactInputSingle + unwrapWETH9)
+        // Step 3: Execute swap — sends BKC, receives ETH directly
         setSwapBtn(btn, 'Confirm in Wallet...', true);
-        const iface = new ethers.Interface(SWAP_ROUTER_ABI);
-
-        const swapData = iface.encodeFunctionData('exactInputSingle', [{
-            tokenIn: BKC_TOKEN,
-            tokenOut: WETH9,
-            fee: FEE_TIER,
-            recipient: SWAP_ROUTER,
-            amountIn,
-            amountOutMinimum: amountOutMin,
-            sqrtPriceLimitX96: 0n,
-        }]);
-
-        const unwrapData = iface.encodeFunctionData('unwrapWETH9', [
-            amountOutMin,
-            State.userAddress,
-        ]);
-
-        const deadline = BigInt(Math.floor(Date.now() / 1000) + 600);
-        const gasOvr = await getGasOverrides();
-        const mcTx = await router.multicall(deadline, [swapData, unwrapData], gasOvr);
+        const swapOvr = await getGasOverrides();
+        const tx = await pool.swapBKCforETH(amountIn, minEthOut, swapOvr);
 
         setSwapBtn(btn, 'Processing...', true);
-        const receipt = await mcTx.wait();
+        const receipt = await tx.wait();
 
         showToast('Swap successful! Sold BKC for ETH', 'success');
         console.log(`[Trade] Sell TX: ${receipt.hash}`);
@@ -721,6 +669,7 @@ function renderSwapCard() {
     const container = document.getElementById('trade');
     if (!container) return;
 
+    const poolAddr = getPoolAddress() || '0x0000000000000000000000000000000000000000';
     const fromSym = TS.direction === 'buy' ? 'ETH' : 'BKC';
     const toSym = TS.direction === 'buy' ? 'BKC' : 'ETH';
     const fromIcon = TS.direction === 'buy'
@@ -827,9 +776,9 @@ function renderSwapCard() {
 
         <!-- Pool info -->
         <div class="trade-pool-info">
-            <span>Pool: <a href="${EXPLORER}/address/${POOL}" target="_blank" rel="noopener noreferrer">${POOL.slice(0,6)}...${POOL.slice(-4)}</a></span>
+            <span>Pool: <a href="${EXPLORER}/address/${poolAddr}" target="_blank" rel="noopener noreferrer">${poolAddr.slice(0,6)}...${poolAddr.slice(-4)}</a></span>
             <span>Fee: 0.3%</span>
-            <span class="trade-uni-badge"><i class="fa-solid fa-droplet"></i> Uniswap V3</span>
+            <span class="trade-uni-badge"><i class="fa-solid fa-droplet"></i> Backchain AMM</span>
         </div>
 
         <!-- Price Chart -->

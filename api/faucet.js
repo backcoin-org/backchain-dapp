@@ -4,7 +4,7 @@
 // GET /api/faucet?address=0x...
 //
 // Calls distributeTo(address) on the faucet contract, paying gas via FAUCET_RELAYER_KEY.
-// User receives BKC + ETH without needing any gas.
+// User receives ETH for gas without needing any prior balance.
 
 import { ethers } from 'ethers';
 
@@ -20,12 +20,12 @@ const setCorsHeaders = (res) => {
 };
 
 // --- Contract config (env var overrides for each deploy) ---
-const FAUCET_ADDRESS = process.env.FAUCET_CONTRACT_ADDRESS || '0x2483E352e276f684Be1A6a990253dE6da82c2173';
+const FAUCET_ADDRESS = process.env.FAUCET_CONTRACT_ADDRESS || '0xa5724Fae5250589b35Bcb8682dd07CCe4a2D1191';
 const FAUCET_ABI = [
     'function distributeTo(address recipient) external',
     'function canClaim(address user) view returns (bool)',
     'function getCooldownRemaining(address user) view returns (uint256)',
-    'function getFaucetStatus() view returns (uint256 ethBalance, uint256 tokenBalance, uint256 ethPerDrip, uint256 tokensPerDrip, uint256 estimatedEthClaims, uint256 estimatedTokenClaims)',
+    'function getFaucetStatus() view returns (uint256 ethBalance, uint256 ethPerDrip, uint256 estimatedClaims)',
     'function paused() view returns (bool)'
 ];
 
@@ -85,16 +85,11 @@ export default async function handler(req, res) {
             });
         }
 
-        // 3. Check funds
+        // 3. Check funds (V12: ETH-only faucet — 3 returns)
         const status = await faucet.getFaucetStatus();
         const ethBalance = status[0];
-        const tokenBalance = status[1];
-        const ethPerDrip = status[2];
-        const tokensPerDrip = status[3];
+        const ethPerDrip = status[1];
 
-        if (tokenBalance < tokensPerDrip) {
-            return res.status(503).json({ success: false, error: 'Faucet out of BKC tokens' });
-        }
         if (ethPerDrip > 0n && ethBalance < ethPerDrip) {
             return res.status(503).json({ success: false, error: 'Faucet out of ETH' });
         }
@@ -112,9 +107,8 @@ export default async function handler(req, res) {
         return res.status(200).json({
             success: true,
             txHash: receipt.hash,
-            bkcAmount: ethers.formatEther(tokensPerDrip),
             ethAmount: ethers.formatEther(ethPerDrip),
-            message: 'Tokens sent successfully!'
+            message: 'ETH sent successfully!'
         });
 
     } catch (e) {
@@ -125,9 +119,6 @@ export default async function handler(req, res) {
         }
         if (e.message?.includes('CooldownActive')) {
             return res.status(429).json({ success: false, error: 'Cooldown active. Try again later.' });
-        }
-        if (e.message?.includes('InsufficientTokens')) {
-            return res.status(503).json({ success: false, error: 'Faucet out of BKC tokens' });
         }
         if (e.message?.includes('InsufficientETH')) {
             return res.status(503).json({ success: false, error: 'Faucet out of ETH' });

@@ -35,8 +35,8 @@ const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const TIER_CONFIG = {
     'Diamond': { emoji: '💎', color: '#22d3ee', bg: 'rgba(34,211,238,0.15)', border: 'rgba(34,211,238,0.3)', keepRate: 100, image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeicgip72jcqgsirlrhn3tq5cc226vmko6etnndzl6nlhqrktfikafq' },
     'Gold':    { emoji: '🥇', color: '#fbbf24', bg: 'rgba(251,191,36,0.15)', border: 'rgba(251,191,36,0.3)', keepRate: 90, image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeifponccrbicg2pcjrn2hrfoqgc77xhm2r4ld7hdpw6cxxkbsckf44' },
-    'Silver':  { emoji: '🥈', color: '#9ca3af', bg: 'rgba(156,163,175,0.15)', border: 'rgba(156,163,175,0.3)', keepRate: 75, image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeihvi2inujm5zpi7tl667g4srq273536pjkglwyrtbwmgnskmu7jg4' },
-    'Bronze':  { emoji: '🥉', color: '#fb923c', bg: 'rgba(251,146,60,0.15)', border: 'rgba(251,146,60,0.3)', keepRate: 60, image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeiclqidb67rt3tchhjpsib62s624li7j2bpxnr6b5w5mfp4tomhu7m' }
+    'Silver':  { emoji: '🥈', color: '#9ca3af', bg: 'rgba(156,163,175,0.15)', border: 'rgba(156,163,175,0.3)', keepRate: 80, image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeihvi2inujm5zpi7tl667g4srq273536pjkglwyrtbwmgnskmu7jg4' },
+    'Bronze':  { emoji: '🥉', color: '#fb923c', bg: 'rgba(251,146,60,0.15)', border: 'rgba(251,146,60,0.3)', keepRate: 70, image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeiclqidb67rt3tchhjpsib62s624li7j2bpxnr6b5w5mfp4tomhu7m' }
 };
 
 // ============================================================================
@@ -791,7 +791,7 @@ function renderMyRentals() {
                     <div>
                         <h3 class="text-sm font-bold text-white mb-1">Boost Tiers</h3>
                         <p class="text-xs text-zinc-400">
-                            Diamond = Keep 100% | Gold = 90% | Silver = 75% | Bronze = 60% — Without NFT: 50% burned.
+                            Diamond = Keep 100% | Gold = 90% | Silver = 80% | Bronze = 70% — Without NFT: 50% recycled.
                         </p>
                     </div>
                 </div>
@@ -1498,7 +1498,7 @@ async function handleWithdrawEarnings() {
 
 function shareListing(tokenId) {
     const url = `https://backcoin.org/#rental`;
-    const text = `Rent NFT Boosters on Backchain Boost Market!\n\nKeep up to 100% of your staking rewards by renting an NFT booster.\n\n${url}\n\n#Backchain #DeFi #Arbitrum #Web3`;
+    const text = `Rent NFT Boosters on Backchain Boost Market!\n\nKeep up to 100% of your staking rewards by renting an NFT booster.\n\n${url}\n\n#Backchain #DeFi #BNBChain #opBNB #Web3`;
 
     if (navigator.share) {
         navigator.share({ title: 'Backchain Boost Market', text, url }).catch(() => {});

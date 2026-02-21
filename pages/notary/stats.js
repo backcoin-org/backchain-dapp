@@ -45,7 +45,7 @@ export function renderStats(el) {
                 </div>
                 <div class="nt-stat-card">
                     <div style="width:36px;height:36px;border-radius:50%;background:rgba(96,165,250,0.1);display:inline-flex;align-items:center;justify-content:center;margin-bottom:10px">
-                        <i class="fa-brands fa-ethereum" style="font-size:16px;color:var(--nt-blue)"></i>
+                        <i class="fa-solid fa-coins" style="font-size:16px;color:var(--nt-blue)"></i>
                     </div>
                     <div class="nt-stat-value" style="font-size:18px">${stats?.totalETHFormatted ?? '—'}</div>
                     <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">BNB Collected</div>

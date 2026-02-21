@@ -144,8 +144,8 @@ function getCertifyActionId() {
     return window.ethers.id('NOTARY_CERTIFY');
 }
 
-// Minimum fee ~$1 at ~$2500/ETH — prevents $0 fee on low-gas testnets
-const MIN_CERTIFY_FEE = 400000000000000n; // 0.0004 ETH
+// Minimum fee — prevents $0 fee on low-gas testnets
+const MIN_CERTIFY_FEE = 400000000000000n; // 0.0004 BNB
 
 function formatHash(hash) {
     return hash.startsWith('0x') ? hash : `0x${hash}`;
@@ -204,7 +204,7 @@ export async function certify({
             const actionId = getCertifyActionId();
             ethFee = await calculateFeeClientSide(actionId);
             if (ethFee < MIN_CERTIFY_FEE) ethFee = MIN_CERTIFY_FEE;
-            console.log(`[NotaryTx] Certify fee:`, ethers.formatEther(ethFee), 'ETH');
+            console.log(`[NotaryTx] Certify fee:`, ethers.formatEther(ethFee), 'BNB');
 
             // Check ETH balance
             const { NetworkManager } = await import('../core/index.js');
@@ -342,7 +342,7 @@ export async function transferCertificate({
 
             // Calculate transfer fee client-side (may be 0 if not configured)
             ethFee = await calculateFeeClientSide(ethers.id('NOTARY_TRANSFER'));
-            console.log('[NotaryTx] Transfer fee:', ethers.formatEther(ethFee), 'ETH');
+            console.log('[NotaryTx] Transfer fee:', ethers.formatEther(ethFee), 'BNB');
 
             const { NetworkManager } = await import('../core/index.js');
             const provider = NetworkManager.getProvider();
@@ -452,7 +452,7 @@ export async function getCertificatesBatch(start, count) {
 }
 
 /**
- * Gets per-docType certification fee (ETH)
+ * Gets per-docType certification fee (BNB)
  * V3: Uses calculateFeeClientSide with per-type action ID
  */
 export async function getCertifyFee(docType = 0) {

@@ -156,7 +156,7 @@ function render(isActive) {
         <div class="grid grid-cols-3 gap-3 mb-8">
             <div class="tutor-stat-card rounded-2xl p-4 text-center">
                 <div class="text-2xl font-extrabold text-amber-400 mb-1" id="tutor-count">${TS.tutorCount}</div>
-                <div class="text-xs text-zinc-400">Students</div>
+                <div class="text-xs text-zinc-400">Tutters</div>
             </div>
             <div class="tutor-stat-card rounded-2xl p-4 text-center">
                 <div class="text-sm font-bold text-white mb-1 truncate" id="tutor-current">${TS.tutor ? formatAddress(TS.tutor) : 'None yet'}</div>
@@ -177,8 +177,8 @@ function render(isActive) {
                 </h2>
                 <div class="flex items-center justify-between mb-4">
                     <div>
-                        <div class="text-3xl font-extrabold text-amber-400 mb-1" id="tutor-pending-eth">${ethers.formatEther(TS.pendingEth)} ETH</div>
-                        <div class="text-xs text-zinc-400">Accumulated from student activity</div>
+                        <div class="text-3xl font-extrabold text-amber-400 mb-1" id="tutor-pending-eth">${ethers.formatEther(TS.pendingEth)} BNB</div>
+                        <div class="text-xs text-zinc-400">Accumulated from tutter activity</div>
                     </div>
                     <button id="tutor-withdraw-btn" class="shrink-0 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl px-5 py-3 text-sm hover:shadow-lg hover:shadow-amber-500/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                         ${TS.pendingEth === 0n ? 'disabled' : ''}>
@@ -188,12 +188,12 @@ function render(isActive) {
                 ${TS.pendingEth === 0n && TS.tutorCount === 0 ? `
                 <div class="bg-black/20 rounded-xl p-3 flex items-start gap-2">
                     <i class="fa-solid fa-circle-info text-zinc-500 mt-0.5 text-xs"></i>
-                    <p class="text-zinc-500 text-xs">Share your tutor link to start earning. You'll receive a cut of every fee your students pay.</p>
+                    <p class="text-zinc-500 text-xs">Share your tutor link to start earning. You'll receive a cut of every fee your tutters pay.</p>
                 </div>
                 ` : TS.pendingEth === 0n ? `
                 <div class="bg-black/20 rounded-xl p-3 flex items-start gap-2">
                     <i class="fa-solid fa-circle-info text-zinc-500 mt-0.5 text-xs"></i>
-                    <p class="text-zinc-500 text-xs">Your students haven't generated fees yet. Earnings appear here automatically as they use the protocol.</p>
+                    <p class="text-zinc-500 text-xs">Your tutters haven't generated fees yet. Earnings appear here automatically as they use the protocol.</p>
                 </div>
                 ` : ''}
             </div>
@@ -221,7 +221,7 @@ function render(isActive) {
                     </div>
                     <div>
                         <h3 class="text-white font-bold text-sm mb-1">Friend connects wallet</h3>
-                        <p class="text-zinc-400 text-xs leading-relaxed">When they click your link and connect MetaMask, our <strong class="text-zinc-300">server-side relayer</strong> automatically registers you as their tutor on-chain. <strong class="text-green-400">Zero gas for both of you.</strong></p>
+                        <p class="text-zinc-400 text-xs leading-relaxed">When they click your link and connect MetaMask, our <strong class="text-zinc-300">server-side relayer</strong> automatically registers you as their tutor on-chain. They become your <strong class="text-amber-400">tutter</strong>. <strong class="text-green-400">Zero gas for both of you.</strong></p>
                     </div>
                 </div>
                 <div class="flex items-start gap-4 bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4">
@@ -229,8 +229,8 @@ function render(isActive) {
                         <span class="text-cyan-400 font-black text-sm">3</span>
                     </div>
                     <div>
-                        <h3 class="text-white font-bold text-sm mb-1">Friend gets welcome bonus</h3>
-                        <p class="text-zinc-400 text-xs leading-relaxed">Your friend receives <strong class="text-amber-400">free BKC tokens</strong> immediately as a welcome bonus + free testnet BNB from the faucet to start using the platform.</p>
+                        <h3 class="text-white font-bold text-sm mb-1">Tutter gets welcome bonus</h3>
+                        <p class="text-zinc-400 text-xs leading-relaxed">Your new tutter receives <strong class="text-amber-400">free BKC tokens</strong> immediately as a welcome bonus + free BNB from the faucet to start using the platform.</p>
                     </div>
                 </div>
                 <div class="flex items-start gap-4 bg-gradient-to-r from-amber-900/20 to-zinc-800/40 border border-amber-500/30 rounded-xl p-4">
@@ -239,7 +239,7 @@ function render(isActive) {
                     </div>
                     <div>
                         <h3 class="text-white font-bold text-sm mb-1">You earn rewards — forever</h3>
-                        <p class="text-zinc-400 text-xs leading-relaxed">Every time your student pays any BNB fee on the platform, you earn <strong class="text-amber-400">10%</strong>. When they claim staking rewards, you earn <strong class="text-amber-400">5% BKC</strong>. This is <strong class="text-white">permanent and on-chain</strong> — no one can revoke it.</p>
+                        <p class="text-zinc-400 text-xs leading-relaxed">Every time your tutter pays any BNB fee on the platform, you earn <strong class="text-amber-400">10%</strong>. When they claim staking rewards, you earn <strong class="text-amber-400">5% BKC</strong>. This is <strong class="text-white">permanent and on-chain</strong> — no one can revoke it.</p>
                     </div>
                 </div>
             </div>
@@ -255,20 +255,20 @@ function render(isActive) {
                 <div class="bg-zinc-800/40 border border-blue-500/30 rounded-xl p-4">
                     <div class="flex items-center gap-2 mb-3">
                         <div class="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center">
-                            <i class="fa-brands fa-ethereum text-blue-400"></i>
+                            <i class="fa-solid fa-coins text-blue-400"></i>
                         </div>
                         <div>
                             <p class="text-white font-bold text-sm">10% BNB</p>
                             <p class="text-zinc-500 text-[10px]">On all protocol fees</p>
                         </div>
                     </div>
-                    <p class="text-zinc-400 text-xs mb-3">Every BNB fee your student pays — Fortune bets, Notary certifications, NFT trades, Agora badges, post boosts — <strong class="text-white">10% goes directly to you</strong>.</p>
+                    <p class="text-zinc-400 text-xs mb-3">Every BNB fee your tutter pays — Fortune bets, Notary certifications, NFT trades, Agora badges, post boosts — <strong class="text-white">10% goes directly to you</strong>.</p>
                     <div class="bg-black/30 rounded-lg p-3">
                         <p class="text-zinc-500 text-[10px] uppercase mb-2">Example</p>
                         <div class="space-y-1 text-xs">
-                            <div class="flex justify-between"><span class="text-zinc-400">Student certifies a document</span><span class="text-zinc-300">0.0005 BNB</span></div>
-                            <div class="flex justify-between"><span class="text-zinc-400">Student plays Fortune Tier 1</span><span class="text-zinc-300">0.0005 BNB</span></div>
-                            <div class="flex justify-between"><span class="text-zinc-400">Student buys verified badge</span><span class="text-zinc-300">0.02 BNB</span></div>
+                            <div class="flex justify-between"><span class="text-zinc-400">Tutter certifies a document</span><span class="text-zinc-300">0.0005 BNB</span></div>
+                            <div class="flex justify-between"><span class="text-zinc-400">Tutter plays Fortune Tier 1</span><span class="text-zinc-300">0.0005 BNB</span></div>
+                            <div class="flex justify-between"><span class="text-zinc-400">Tutter buys verified badge</span><span class="text-zinc-300">0.02 BNB</span></div>
                             <div class="border-t border-zinc-700 my-1.5"></div>
                             <div class="flex justify-between"><span class="text-zinc-300 font-bold">Total fees</span><span class="text-zinc-300 font-bold">0.021 BNB</span></div>
                             <div class="flex justify-between"><span class="text-amber-400 font-bold">Your 10% cut</span><span class="text-amber-400 font-bold">0.0021 BNB</span></div>
@@ -286,21 +286,21 @@ function render(isActive) {
                             <p class="text-zinc-500 text-[10px]">On staking reward claims</p>
                         </div>
                     </div>
-                    <p class="text-zinc-400 text-xs mb-3">When your student stakes BKC and claims mining rewards from the BuybackMiner, <strong class="text-white">5% of their claim goes to you</strong> in BKC tokens.</p>
+                    <p class="text-zinc-400 text-xs mb-3">When your tutter stakes BKC and claims mining rewards from the BuybackMiner, <strong class="text-white">5% of their claim goes to you</strong> in BKC tokens.</p>
                     <div class="bg-black/30 rounded-lg p-3">
                         <p class="text-zinc-500 text-[10px] uppercase mb-2">Example</p>
                         <div class="space-y-1 text-xs">
-                            <div class="flex justify-between"><span class="text-zinc-400">Student claims rewards</span><span class="text-zinc-300">100 BKC</span></div>
+                            <div class="flex justify-between"><span class="text-zinc-400">Tutter claims rewards</span><span class="text-zinc-300">100 BKC</span></div>
                             <div class="border-t border-zinc-700 my-1.5"></div>
                             <div class="flex justify-between"><span class="text-purple-400 font-bold">Your 5% cut</span><span class="text-purple-400 font-bold">5 BKC</span></div>
-                            <div class="flex justify-between"><span class="text-zinc-400">Student receives</span><span class="text-zinc-300">95 BKC</span></div>
+                            <div class="flex justify-between"><span class="text-zinc-400">Tutter receives</span><span class="text-zinc-300">95 BKC</span></div>
                         </div>
                         <p class="text-zinc-600 text-[10px] mt-2">* NFT burn rate applied before tutor cut</p>
                     </div>
                 </div>
             </div>
             <div class="text-center">
-                <p class="text-zinc-500 text-xs"><i class="fa-solid fa-infinity text-amber-400 mr-1"></i> Both reward streams are <strong class="text-zinc-300">permanent</strong> — they continue as long as your student uses the protocol</p>
+                <p class="text-zinc-500 text-xs"><i class="fa-solid fa-infinity text-amber-400 mr-1"></i> Both reward streams are <strong class="text-zinc-300">permanent</strong> — they continue as long as your tutter uses the protocol</p>
             </div>
         </div>
 
@@ -326,7 +326,7 @@ function render(isActive) {
                         </div>
                         <div class="flex items-start gap-2">
                             <i class="fa-solid fa-ban text-zinc-600 mt-0.5 text-[10px]"></i>
-                            <span class="text-zinc-500">No one benefits from your activity</span>
+                            <span class="text-zinc-500">No tutor benefits from your activity</span>
                         </div>
                     </div>
                 </div>
@@ -366,7 +366,7 @@ function render(isActive) {
                             <i class="fa-solid fa-user text-blue-400 text-xs"></i>
                         </div>
                         <div class="flex-1">
-                            <p class="text-white text-sm font-medium">Student pays BNB fee</p>
+                            <p class="text-white text-sm font-medium">Tutter pays BNB fee</p>
                             <p class="text-zinc-500 text-[10px]">Any on-chain action: Fortune, Notary, Agora, NFT, etc.</p>
                         </div>
                     </div>
@@ -429,17 +429,17 @@ function render(isActive) {
         </div>
         ` : ''}
 
-        <!-- Student Network -->
+        <!-- Tutter Network -->
         ${isConnected && TS.tutorCount > 0 ? `
         <div class="mb-8">
             <div class="rounded-2xl p-5 sm:p-6" style="background:rgba(39,39,42,0.5);border:1px solid rgba(63,63,70,0.5);">
                 <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                    <i class="fa-solid fa-users" style="color:#f59e0b;"></i> Your Students
+                    <i class="fa-solid fa-users" style="color:#f59e0b;"></i> Your Tutters
                 </h3>
                 <div id="tutor-student-list" class="space-y-2">
                     <div class="text-center text-zinc-500 text-sm py-4">
                         <div class="loader mx-auto mb-2"></div>
-                        Loading students...
+                        Loading tutters...
                     </div>
                 </div>
             </div>
@@ -467,7 +467,7 @@ function render(isActive) {
                     </div>
                     <div>
                         <p class="text-white font-bold text-sm">No expiration</p>
-                        <p class="text-zinc-400 text-xs">Tutor relationships have no time limit. You earn for as long as the protocol exists and your student is active.</p>
+                        <p class="text-zinc-400 text-xs">Tutor relationships have no time limit. You earn for as long as the protocol exists and your tutter is active.</p>
                     </div>
                 </div>
                 <div class="bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4 flex items-start gap-3">
@@ -484,8 +484,8 @@ function render(isActive) {
                         <i class="fa-solid fa-repeat text-purple-400 text-xs"></i>
                     </div>
                     <div>
-                        <p class="text-white font-bold text-sm">Mutable by student</p>
-                        <p class="text-zinc-400 text-xs">Students can change their tutor by paying 0.0001 BNB. This keeps tutors motivated to help their students.</p>
+                        <p class="text-white font-bold text-sm">Mutable by tutter</p>
+                        <p class="text-zinc-400 text-xs">Tutters can change their tutor by paying 0.0001 BNB. This keeps tutors motivated to help their tutters.</p>
                     </div>
                 </div>
             </div>
@@ -499,19 +499,19 @@ function render(isActive) {
             <div class="space-y-2">
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-4">
                     <h4 class="text-white font-semibold text-sm mb-1">Which actions generate tutor rewards?</h4>
-                    <p class="text-zinc-400 text-xs">Every action that charges a BNB fee: Fortune Pool bets, Notary certifications, Agora badges/boosts, NFT purchases, Charity donations, and more. The tutor cut (10%) is taken off-the-top before any other split.</p>
+                    <p class="text-zinc-400 text-xs">Every action that charges a BNB fee: Fortune Pool bets, Notary certifications, Agora badges/boosts, NFT purchases, Charity donations, and more. The tutor cut (10%) is taken off-the-top from every tutter fee before any other split.</p>
                 </div>
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-4">
                     <h4 class="text-white font-semibold text-sm mb-1">How do I withdraw my earnings?</h4>
                     <p class="text-zinc-400 text-xs">BNB rewards accumulate in the Ecosystem contract under your address. You can withdraw anytime via the Dashboard. BKC rewards from staking claims are sent directly to your wallet.</p>
                 </div>
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-4">
-                    <h4 class="text-white font-semibold text-sm mb-1">Is there a limit on students?</h4>
-                    <p class="text-zinc-400 text-xs">No. You can have unlimited students. Each student independently generates rewards for you. The more students you onboard, the more you earn.</p>
+                    <h4 class="text-white font-semibold text-sm mb-1">Is there a limit on tutters?</h4>
+                    <p class="text-zinc-400 text-xs">No. You can have unlimited tutters. Each tutter independently generates rewards for you. The more tutters you onboard, the more you earn.</p>
                 </div>
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-4">
-                    <h4 class="text-white font-semibold text-sm mb-1">Can students change their tutor?</h4>
-                    <p class="text-zinc-400 text-xs">Yes. Students can change their tutor by paying 0.0001 BNB. This means you should actively help your students — if you're a good tutor, they'll stay with you.</p>
+                    <h4 class="text-white font-semibold text-sm mb-1">Can tutters change their tutor?</h4>
+                    <p class="text-zinc-400 text-xs">Yes. Tutters can change their tutor by paying 0.0001 BNB. This means you should actively help your tutters — if you're a good tutor, they'll stay with you.</p>
                 </div>
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-4">
                     <h4 class="text-white font-semibold text-sm mb-1">What's the welcome BKC bonus?</h4>
@@ -622,7 +622,7 @@ async function handleSetTutor() {
 }
 
 // ============================================================================
-// WITHDRAW ETH EARNINGS
+// WITHDRAW BNB EARNINGS
 // ============================================================================
 async function handleWithdrawEth() {
     if (TS.pendingEth === 0n) { showToast('No earnings to withdraw', 'info'); return; }
@@ -643,10 +643,10 @@ async function handleWithdrawEth() {
 
         const amount = ethers.formatEther(TS.pendingEth);
         TS.pendingEth = 0n;
-        showToast(`Withdrew ${amount} ETH!`, 'success');
+        showToast(`Withdrew ${amount} BNB!`, 'success');
 
         const pendingEl = document.getElementById('tutor-pending-eth');
-        if (pendingEl) pendingEl.textContent = '0.0 ETH';
+        if (pendingEl) pendingEl.textContent = '0.0 BNB';
         if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Withdrawn!'; }
     } catch (e) {
         console.error('[Tutor] Withdraw failed:', e);
@@ -686,7 +686,7 @@ function copyLink() {
 function shareTwitter() {
     const link = getLink();
     if (!link) return;
-    const text = encodeURIComponent(`${getShareText()} ${link}\n\n#Backchain #BKC #DeFi #Arbitrum`);
+    const text = encodeURIComponent(`${getShareText()} ${link}\n\n#Backchain #BKC #DeFi #opBNB #BNBChain`);
     window.open(`https://x.com/intent/tweet?text=${text}`, '_blank');
 }
 
@@ -734,7 +734,7 @@ async function loadStudentAddresses() {
         if (!listEl) return;
 
         if (events.length === 0) {
-            listEl.innerHTML = '<p class="text-zinc-500 text-sm text-center py-2">No students yet</p>';
+            listEl.innerHTML = '<p class="text-zinc-500 text-sm text-center py-2">No tutters yet</p>';
             return;
         }
 
@@ -750,7 +750,7 @@ async function loadStudentAddresses() {
             </div>
         `).join('');
     } catch (e) {
-        console.warn('[Tutor] Failed to load student list:', e.message);
+        console.warn('[Tutor] Failed to load tutter list:', e.message);
     }
 }
 
