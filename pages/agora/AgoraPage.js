@@ -66,7 +66,7 @@ function renderHeader() {
 function _renderWalletBtn() {
     if (State.isConnected && State.userAddress) {
         const short = State.userAddress.slice(0, 6) + '...' + State.userAddress.slice(-4);
-        return `<button class="bc-wallet-inline connected" onclick="event.stopPropagation(); AgoraPage.disconnectWallet()" title="Tap to disconnect">
+        return `<button class="bc-wallet-inline connected" onclick="event.stopPropagation(); AgoraPage.connectWallet()" title="Tap to manage wallet">
             <span class="bc-wallet-dot"></span>${short}<i class="fa-solid fa-power-off bc-disconnect-icon"></i>
         </button>`;
     }
@@ -292,12 +292,12 @@ function _renderFAB() {
 
 function _openCompose() {
     const modal = document.getElementById('modal-compose');
-    if (modal) modal.style.display = 'flex';
+    if (modal) modal.classList.add('active');
 }
 
 function _renderComposeModal() {
     return `
-        <div class="bc-modal-overlay" id="modal-compose" style="display:none;" onclick="if(event.target===this) AgoraPage.closeModal('compose')">
+        <div class="bc-modal-overlay" id="modal-compose" onclick="if(event.target===this) AgoraPage.closeModal('compose')">
             <div class="bc-modal-box" style="max-width:540px;width:95%;">
                 <div class="bc-modal-top">
                     <span class="bc-modal-title"><i class="fa-solid fa-pen-to-square" style="color:var(--bc-accent)"></i> New Post</span>

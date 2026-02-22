@@ -714,7 +714,7 @@ window.addEventListener('load', async () => {
         const existingSplash = document.getElementById('welcome-splash');
         if (existingSplash) {
             existingSplash.addEventListener('click', () => dismissSplash());
-            setTimeout(() => dismissSplash(), 5000);
+            setTimeout(() => dismissSplash(), 2500);
         }
     }
 
