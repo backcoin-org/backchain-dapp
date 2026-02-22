@@ -123,7 +123,7 @@ function renderStep2() {
                 <input id="nt-asset-desc" type="text" placeholder="${hints.descPlaceholder}"
                     style="width:100%;padding:12px 14px;background:var(--nt-bg);border:1px solid var(--nt-border);border-radius:10px;color:var(--nt-text);font-size:13px;outline:none;box-sizing:border-box;transition:border-color var(--nt-transition)"
                     onfocus="this.style.borderColor='rgba(245,158,11,0.5)'" onblur="this.style.borderColor='var(--nt-border)'"
-                    oninput="NotaryPage.onAssetDescChange(this.value)"
+                    oninput="NotaryPage.onAssetDescChange(this.value);var b=document.getElementById('nt-asset-continue');if(b)b.disabled=!this.value.trim()"
                     value="${NT.assetWizDescription || ''}">
             </div>
 
@@ -140,7 +140,7 @@ function renderStep2() {
                 <button class="nt-btn-secondary" style="flex:1;padding:12px" onclick="NotaryPage.assetWizBack()">
                     <i class="fa-solid fa-arrow-left" style="margin-right:6px"></i>Back
                 </button>
-                <button class="nt-btn-primary" style="flex:2;padding:12px" onclick="NotaryPage.assetWizToStep3()" ${!NT.assetWizDescription ? 'disabled' : ''}>
+                <button id="nt-asset-continue" class="nt-btn-primary" style="flex:2;padding:12px" onclick="NotaryPage.assetWizToStep3()" ${!NT.assetWizDescription ? 'disabled' : ''}>
                     Continue <i class="fa-solid fa-arrow-right" style="margin-left:6px"></i>
                 </button>
             </div>
