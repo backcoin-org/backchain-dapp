@@ -42,6 +42,9 @@ function renderHeader() {
                 </div>
                 <div class="bc-header-right">
                     ${_renderWalletBtn()}
+                    <button class="bc-icon-btn ${BC.feedMode === 'tiktok' ? 'bc-icon-active' : ''}" onclick="AgoraPage.setFeedMode(BC.feedMode === 'tiktok' ? 'list' : 'tiktok')" title="${BC.feedMode === 'tiktok' ? 'List view' : 'TikTok view'}">
+                        <i class="fa-solid ${BC.feedMode === 'tiktok' ? 'fa-list' : 'fa-clapperboard'}"></i>
+                    </button>
                     <button class="bc-icon-btn" onclick="AgoraPage.refresh()" title="Refresh"><i class="fa-solid fa-arrows-rotate"></i></button>
                 </div>
             </div>
@@ -75,20 +78,15 @@ function _renderWalletBtn() {
     </button>`;
 }
 
-// Hide/show the main DApp header when Agora is active (mobile only)
+// Hide/show the main DApp header when Agora is active
 function _hideDappHeader() {
     const header = document.querySelector('header.sticky');
     if (header) header.style.display = 'none';
-    // Also hide the bottom tabs on mobile — Agora has its own nav
-    const bottomTabs = document.getElementById('bottom-tabs');
-    if (bottomTabs) bottomTabs.style.display = 'none';
 }
 
 function _restoreDappHeader() {
     const header = document.querySelector('header.sticky');
     if (header) header.style.display = '';
-    const bottomTabs = document.getElementById('bottom-tabs');
-    if (bottomTabs) bottomTabs.style.display = '';
 }
 
 // ============================================================================
@@ -101,7 +99,11 @@ function renderContent() {
     let content = '';
     switch (BC.view) {
         case 'feed':
-            content = renderLiveStreamBar() + renderCompose() + renderLanguageBar() + renderTagBar() + renderFeed();
+            if (BC.feedMode === 'tiktok') {
+                content = renderFeed();
+            } else {
+                content = renderLiveStreamBar() + renderCompose() + renderLanguageBar() + renderTagBar() + renderFeed();
+            }
             break;
 
         case 'discover':
@@ -521,8 +523,9 @@ export const AgoraPage = {
 
     setFeedMode(mode) {
         BC.feedMode = mode;
-        renderContent();
+        render();
         _observeVideos();
+        _observeSentinel();
     },
 
     setWizLanguage(code) {

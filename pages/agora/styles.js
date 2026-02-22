@@ -34,17 +34,18 @@ export function injectStyles() {
 
         /* Header */
         .bc-header { position:sticky; top:0; z-index:200; background:rgba(10,10,12,0.85); backdrop-filter:blur(20px) saturate(1.4); -webkit-backdrop-filter:blur(20px) saturate(1.4); border-bottom:1px solid var(--bc-border); }
-        .bc-header-bar { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; }
+        .bc-header-bar { display:flex; align-items:center; justify-content:space-between; padding:10px 16px; }
         .bc-brand { display:flex; align-items:center; gap:10px; }
         .bc-brand-icon { width:34px; height:34px; border-radius:10px; object-fit:contain; }
         .bc-brand-name { font-size:20px; font-weight:800; letter-spacing:-0.3px; background:linear-gradient(135deg,#fbbf24,#f59e0b,#d97706); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
         .bc-header-right { display:flex; align-items:center; gap:6px; }
         .bc-icon-btn { width:36px; height:36px; border-radius:50%; background:transparent; border:1px solid var(--bc-border); color:var(--bc-text-2); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:14px; transition:all var(--bc-transition); }
         .bc-icon-btn:hover { background:var(--bc-bg3); border-color:var(--bc-border-h); color:var(--bc-text); }
+        .bc-icon-btn.bc-icon-active { border-color:var(--bc-accent); color:var(--bc-accent); background:var(--bc-accent-glow); }
 
         /* Tabs */
         .bc-nav { display:flex; padding:0 20px; }
-        .bc-nav-item { flex:1; padding:12px 0; background:none; border:none; border-bottom:2px solid transparent; color:var(--bc-text-3); font-size:13px; font-weight:600; letter-spacing:0.02em; cursor:pointer; transition:all var(--bc-transition); display:flex; align-items:center; justify-content:center; gap:7px; }
+        .bc-nav-item { flex:1; padding:8px 0; background:none; border:none; border-bottom:2px solid transparent; color:var(--bc-text-3); font-size:13px; font-weight:600; letter-spacing:0.02em; cursor:pointer; transition:all var(--bc-transition); display:flex; align-items:center; justify-content:center; gap:7px; }
         .bc-nav-item:hover { color:var(--bc-text-2); }
         .bc-nav-item.active { color:var(--bc-accent); border-bottom-color:var(--bc-accent); }
         .bc-nav-item i { font-size:14px; }
@@ -354,13 +355,16 @@ export function injectStyles() {
         .bc-mode-btn.active { background:var(--bc-accent); color:#000; }
         .bc-mode-btn:hover:not(.active) { color:var(--bc-text); }
 
-        /* TikTok Feed */
-        .bc-tiktok-feed { scroll-snap-type:y mandatory; overflow-y:auto; height:calc(100vh - 110px); scroll-behavior:smooth; }
-        .bc-tiktok-card { position:relative; width:100%; height:calc(100vh - 110px); scroll-snap-align:start; scroll-snap-stop:always; overflow:hidden; cursor:pointer; }
+        /* TikTok Feed — desktop: only Agora header (~100px); mobile: header + bottom tabs (64px) */
+        .bc-tiktok-feed { scroll-snap-type:y mandatory; overflow-y:auto; height:calc(100vh - 100px); scroll-behavior:smooth; }
+        .bc-tiktok-card { position:relative; width:100%; height:calc(100vh - 100px); scroll-snap-align:start; scroll-snap-stop:always; overflow:hidden; cursor:pointer; }
+        @media (max-width:1023px) {
+            .bc-tiktok-feed, .bc-tiktok-card { height:calc(100vh - 164px); }
+        }
         .bc-tiktok-video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
         .bc-tiktok-img-overlay { position:absolute; inset:0; background:linear-gradient(transparent 40%, rgba(0,0,0,0.7)); z-index:1; }
         .bc-tiktok-overlay { position:absolute; inset:0; z-index:2; display:flex; flex-direction:column; justify-content:flex-end; background:linear-gradient(transparent 50%, rgba(0,0,0,0.6) 80%, rgba(0,0,0,0.85)); pointer-events:none; }
-        .bc-tiktok-bottom { display:flex; align-items:flex-end; gap:12px; padding:20px 16px 24px; pointer-events:auto; }
+        .bc-tiktok-bottom { display:flex; align-items:flex-end; gap:12px; padding:20px 16px 20px; pointer-events:auto; }
         .bc-tiktok-info { flex:1; min-width:0; }
         .bc-tiktok-author { font-size:15px; color:#fff; cursor:pointer; display:flex; align-items:center; gap:8px; }
         .bc-tiktok-author strong { font-weight:700; }
@@ -452,12 +456,10 @@ export function injectStyles() {
         /* Web3Modal overrides — more subtle backdrop */
         w3m-modal { --w3m-z-index: 9999 !important; }
 
-        /* Mobile: cart bar above where bottom-tabs used to be */
+        /* Mobile: cart bar above bottom tabs */
         @media (max-width: 1023px) {
-            .bc-cart-bar { bottom:0; }
+            .bc-cart-bar { bottom:64px; }
             .bc-cart-panel { max-height:calc(100vh - 280px); }
-            /* TikTok feed full height since DApp header + bottom tabs are hidden */
-            .bc-tiktok-feed, .bc-tiktok-card { height:calc(100vh - 110px); }
         }
     `;
     document.head.appendChild(style);

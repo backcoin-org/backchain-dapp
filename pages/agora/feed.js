@@ -193,17 +193,15 @@ export function renderFeed() {
     const limit = (BC.feedPage + 1) * FEED_PAGE_SIZE;
     const visible = filteredPosts.slice(0, limit);
     const hasMore = filteredPosts.length > limit;
-    const toggle = renderModeToggle();
 
     // TikTok mode for Feed tab
     if (BC.feedMode === 'tiktok') {
-        return toggle + `
-            <div class="bc-tiktok-feed" data-tiktok-feed>
+        return `<div class="bc-tiktok-feed" data-tiktok-feed>
                 ${visible.map((post, i) => _renderTikTokCard(post, i)).join('')}
             </div>`;
     }
 
-    let html = toggle + visible.map((post, i) => renderPost(post, i)).join('');
+    let html = visible.map((post, i) => renderPost(post, i)).join('');
     if (hasMore) {
         html += `<div class="bc-feed-sentinel" data-sentinel="feed"><div class="bc-loading"><div class="bc-spinner"></div></div></div>`;
     }
