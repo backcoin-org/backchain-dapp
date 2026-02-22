@@ -4,7 +4,7 @@
 
 import { State } from '../../state.js';
 import { NT, ASSET_TYPES, EXPLORER_ADDR } from './state.js';
-import { getAssetTypeInfo, formatTimestamp } from './utils.js';
+import { getAssetTypeInfo, formatTimestamp, resolveStorageUrl } from './utils.js';
 import { addresses } from '../../config.js';
 
 export function renderAssets(el) {
@@ -79,11 +79,19 @@ function renderAssetCard(asset) {
     const typeInfo = getAssetTypeInfo(asset.assetType);
     const timeAgo = formatTimestamp(asset.registeredAt);
     const desc = asset.description || typeInfo.name;
+    const docUrl = resolveStorageUrl(asset.parsedMeta?.uri);
 
     return `
         <div class="nt-cert-card" onclick="NotaryPage.viewAsset(${asset.id})">
             <div class="nt-cert-thumb" style="background:${typeInfo.bg}">
-                <i class="${typeInfo.icon}" style="font-size:32px;color:${typeInfo.color}"></i>
+                ${docUrl ? `
+                    <img src="${docUrl}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" alt="">
+                    <div style="display:none;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;position:absolute;inset:0;background:${typeInfo.bg}">
+                        <i class="${typeInfo.icon}" style="font-size:32px;color:${typeInfo.color}"></i>
+                    </div>
+                ` : `
+                    <i class="${typeInfo.icon}" style="font-size:32px;color:${typeInfo.color}"></i>
+                `}
                 <span style="position:absolute;top:8px;right:8px;font-size:10px;font-family:monospace;color:var(--nt-accent);background:rgba(0,0,0,0.8);padding:2px 8px;border-radius:20px;font-weight:700">#${asset.id}</span>
                 ${timeAgo ? `<span style="position:absolute;top:8px;left:8px;font-size:10px;color:var(--nt-text-3);background:rgba(0,0,0,0.8);padding:2px 8px;border-radius:20px"><i class="fa-regular fa-clock" style="margin-right:4px"></i>${timeAgo}</span>` : ''}
             </div>

@@ -5,7 +5,7 @@
 import { State } from '../../state.js';
 import { addresses } from '../../config.js';
 import { NT, ASSET_TYPES, ANNOTATION_TYPES, EXPLORER_ADDR } from './state.js';
-import { getAssetTypeInfo, getAnnotationTypeInfo, formatDateFull, shortenAddress } from './utils.js';
+import { getAssetTypeInfo, getAnnotationTypeInfo, formatDateFull, shortenAddress, resolveStorageUrl, getFileTypeInfo } from './utils.js';
 
 const ethers = window.ethers;
 
@@ -23,6 +23,11 @@ export function renderAssetDetail(el) {
     const isOwner = asset.owner && State.userAddress &&
         asset.owner.toLowerCase() === State.userAddress.toLowerCase();
     const annotations = NT.selectedAssetAnnotations || [];
+    const docUrl = resolveStorageUrl(asset.parsedMeta?.uri);
+    const isImage = asset.parsedMeta?.fileType?.startsWith('image/') !== false;
+    const fileInfo = getFileTypeInfo(asset.parsedMeta?.fileType || '', asset.parsedMeta?.fileName || '');
+    const fileName = asset.parsedMeta?.fileName || '';
+    const fileSize = asset.parsedMeta?.fileSize ? `${(asset.parsedMeta.fileSize / 1024).toFixed(1)} KB` : '';
 
     el.innerHTML = `
         <div class="nt-detail" style="margin-top:8px">
@@ -41,6 +46,25 @@ export function renderAssetDetail(el) {
                     </div>
                 </div>
             </div>
+
+            ${docUrl ? `
+            <!-- Document Preview -->
+            <div style="margin-bottom:16px;cursor:pointer" onclick="window.open('${docUrl}','_blank')">
+                <div style="min-height:200px;max-height:400px;background:var(--nt-bg3);border-radius:var(--nt-radius);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;border:1px solid var(--nt-border);transition:border-color var(--nt-transition)" onmouseover="this.style.borderColor='rgba(245,158,11,0.3)'" onmouseout="this.style.borderColor='var(--nt-border)'">
+                    <img src="${docUrl}" style="width:100%;height:100%;object-fit:contain;max-height:400px" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" alt="Document">
+                    <div style="display:none;flex-direction:column;align-items:center;justify-content:center;width:100%;height:200px;position:absolute;inset:0;background:var(--nt-bg3)">
+                        <i class="${fileInfo.icon}" style="font-size:48px;color:${fileInfo.color};margin-bottom:8px"></i>
+                        <span style="font-size:12px;color:var(--nt-text-2);font-weight:600">${fileName || fileInfo.label + ' file'}</span>
+                        ${fileSize ? `<span style="font-size:11px;color:var(--nt-text-3);margin-top:2px">${fileSize}</span>` : ''}
+                        <span style="font-size:10px;color:var(--nt-accent);margin-top:6px"><i class="fa-solid fa-arrow-up-right-from-square" style="margin-right:4px"></i>Tap to open</span>
+                    </div>
+                    <div style="position:absolute;top:12px;right:12px;background:rgba(0,0,0,0.85);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;color:var(--nt-accent);font-family:monospace">#${asset.id}</div>
+                    <div style="position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.75);padding:4px 10px;border-radius:8px;font-size:10px;color:var(--nt-text-2)">
+                        <i class="fa-solid fa-arrow-up-right-from-square" style="margin-right:4px"></i>Tap to view
+                    </div>
+                </div>
+            </div>
+            ` : ''}
 
             <!-- Quick Stats -->
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
@@ -174,8 +198,13 @@ export function renderAssetDetail(el) {
                 }).join('')}
             </div>
 
-            <!-- Explorer Link -->
+            <!-- Actions -->
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+                ${docUrl ? `
+                    <a href="${docUrl}" target="_blank" class="nt-btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:12px">
+                        <i class="fa-solid fa-eye"></i>View Document
+                    </a>
+                ` : ''}
                 <a href="${EXPLORER_ADDR}${addresses?.notary}?a=${asset.id}" target="_blank" class="nt-btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:12px">
                     <i class="fa-solid fa-arrow-up-right-from-square"></i>View on Explorer
                 </a>
