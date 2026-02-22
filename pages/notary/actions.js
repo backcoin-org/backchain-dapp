@@ -643,24 +643,35 @@ export async function handleTransfer() {
 // CLIPBOARD / SHARE
 // ============================================================================
 
+let _addToWalletBusy = false;
+
 export async function addToWallet(tokenId) {
+    // Debounce — prevent rapid repeated calls that trigger MetaMask spam filter
+    if (_addToWalletBusy) {
+        showToast('Please wait...', 'info');
+        return;
+    }
+
     const contractAddress = addresses?.notary;
     if (!contractAddress) {
         showToast('Contract address not found', 'error');
         return;
     }
 
-    // Use the Web3Modal wallet provider (more reliable than raw window.ethereum)
     const provider = State.web3Provider || window.ethereum;
     if (!provider) {
         showToast('Connect your wallet first', 'error');
         return;
     }
 
-    // First-party image URL — backcoin.org redirects to the actual IPFS/Arweave gateway.
-    // More reliable for MetaMask than passing a third-party gateway URL directly.
+    if (!State.isConnected) {
+        showToast('Wallet disconnected. Please reconnect.', 'error');
+        return;
+    }
+
     const imageUrl = `https://backcoin.org/api/cert-image/${tokenId}`;
 
+    _addToWalletBusy = true;
     try {
         const result = await provider.request({
             method: 'wallet_watchAsset',
@@ -674,13 +685,33 @@ export async function addToWallet(tokenId) {
             },
         });
         if (result) {
-            showToast(`Certificate #${tokenId} added to wallet!`, 'success');
+            showToast(`Token #${tokenId} added to wallet!`, 'success');
         }
     } catch (error) {
         console.warn('[Notary] wallet_watchAsset error:', error);
-        // If user rejected, don't show fallback
-        if (error.code === 4001) return;
-        // Unsupported — try older format without type
+        const msg = (error.message || '').toLowerCase();
+
+        // User rejected — silent
+        if (error.code === 4001 || msg.includes('user rejected') || msg.includes('user denied')) {
+            _addToWalletBusy = false;
+            return;
+        }
+
+        // Spam filter — don't retry, just tell user to wait
+        if (msg.includes('spam') || msg.includes('rate limit') || msg.includes('too many')) {
+            showToast('MetaMask is rate-limited. Wait a moment and try again.', 'error');
+            _addToWalletBusy = false;
+            return;
+        }
+
+        // Network mismatch
+        if (msg.includes('network') || msg.includes('chain') || msg.includes('ownership')) {
+            showToast('Check your wallet network and try again.', 'error');
+            _addToWalletBusy = false;
+            return;
+        }
+
+        // Format not supported — try fallback with params as array
         try {
             await provider.request({
                 method: 'wallet_watchAsset',
@@ -693,11 +724,14 @@ export async function addToWallet(tokenId) {
                     },
                 }],
             });
-            showToast(`Certificate #${tokenId} added!`, 'success');
+            showToast(`Token #${tokenId} added!`, 'success');
         } catch (e2) {
             console.warn('[Notary] fallback also failed:', e2);
             showToast('Open MetaMask → NFTs → Import NFT to add manually', 'info');
         }
+    } finally {
+        // Cooldown — prevent spam filter even after success
+        setTimeout(() => { _addToWalletBusy = false; }, 3000);
     }
 }
 

@@ -105,8 +105,8 @@ async function handleCertificate(notary, certId, res) {
     const hasStoredImage = !!resolveUri(meta.uri);
 
     const metadata = {
-        name: meta.name || meta.desc || `Notary Certificate #${certId}`,
-        description: `Backchain Notary Certificate #${certId}. ${docTypeName} document certified on opBNB. Hash: ${shortHash}`,
+        name: meta.desc || `Notary Certificate #${certId}`,
+        description: `Backchain Notary Certificate #${certId}. ${docTypeName} document certified on opBNB.${meta.name ? ` File: ${meta.name}.` : ''} Hash: ${shortHash}`,
         image: hasStoredImage ? `https://backcoin.org/api/cert-image/${certId}` : `https://backcoin.org/assets/bkc_logo_3d.png`,
         external_url: `https://backcoin.org/#notary`,
         attributes: [
