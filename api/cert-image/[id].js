@@ -1,11 +1,13 @@
 // api/cert-image/[id].js
-// Redirects to the actual image for a Notary token (cert or asset).
+// Proxies the actual image for a Notary token (cert or asset).
 // Used as the `image` field in ERC-721 metadata so MetaMask can fetch
-// from a first-party URL (backcoin.org) instead of an IPFS gateway directly.
+// from a first-party URL (backcoin.org) directly.
+// Proxies instead of redirecting because MetaMask doesn't follow 302 for NFT images.
 
 import { ethers } from 'ethers';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import https from 'https';
 
 let NOTARY_ADDRESS;
 try {
@@ -21,7 +23,7 @@ const NOTARY_ABI = [
     'function getAsset(uint256 tokenId) view returns (address owner, uint48 registeredAt, uint8 assetType, uint8 annotationCount, uint32 transferCount, string memory meta, bytes32 documentHash)',
 ];
 
-const IPFS_GATEWAY = 'https://cloudflare-ipfs.com/ipfs/';
+const IPFS_GATEWAY = 'https://gateway.lighthouse.storage/ipfs/';
 const ARWEAVE_GATEWAY = 'https://gateway.irys.xyz';
 const FALLBACK_IMAGE = 'https://backcoin.org/assets/bkc_logo_3d.png';
 
@@ -48,9 +50,32 @@ function parseMeta(meta) {
     return {};
 }
 
+function fetchImage(url) {
+    return new Promise((resolve, reject) => {
+        const get = (u, redirects = 0) => {
+            if (redirects > 3) return reject(new Error('Too many redirects'));
+            https.get(u, { timeout: 8000 }, (res) => {
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                    return get(res.headers.location, redirects + 1);
+                }
+                if (res.statusCode !== 200) {
+                    return reject(new Error(`HTTP ${res.statusCode}`));
+                }
+                const chunks = [];
+                res.on('data', chunk => chunks.push(chunk));
+                res.on('end', () => resolve({
+                    buffer: Buffer.concat(chunks),
+                    contentType: res.headers['content-type'] || 'image/png'
+                }));
+                res.on('error', reject);
+            }).on('error', reject);
+        };
+        get(url);
+    });
+}
+
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=86400');
 
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'GET') return res.status(405).end();
@@ -81,7 +106,17 @@ export default async function handler(req, res) {
             }
         }
 
-        return res.redirect(302, imageUrl || FALLBACK_IMAGE);
+        if (!imageUrl) {
+            return res.redirect(302, FALLBACK_IMAGE);
+        }
+
+        // Proxy the image directly instead of redirecting
+        const { buffer, contentType } = await fetchImage(imageUrl);
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Length', buffer.length);
+        res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=86400');
+        return res.status(200).send(buffer);
+
     } catch (error) {
         console.error(`[CertImage] Error for token #${tokenId}:`, error.message);
         return res.redirect(302, FALLBACK_IMAGE);
