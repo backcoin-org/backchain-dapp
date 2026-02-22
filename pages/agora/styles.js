@@ -41,7 +41,6 @@ export function injectStyles() {
         .bc-header-right { display:flex; align-items:center; gap:6px; }
         .bc-icon-btn { width:36px; height:36px; border-radius:50%; background:transparent; border:1px solid var(--bc-border); color:var(--bc-text-2); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:14px; transition:all var(--bc-transition); }
         .bc-icon-btn:hover { background:var(--bc-bg3); border-color:var(--bc-border-h); color:var(--bc-text); }
-        .bc-icon-btn.bc-icon-active { border-color:var(--bc-accent); color:var(--bc-accent); background:var(--bc-accent-glow); }
 
         /* Tabs */
         .bc-nav { display:flex; padding:0 20px; }
@@ -446,12 +445,23 @@ export function injectStyles() {
         .bc-cart-warning { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--bc-accent); margin-top:8px; }
 
         /* Inline wallet button (Agora header) */
-        .bc-wallet-inline { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:20px; border:1px solid var(--bc-border); background:transparent; color:var(--bc-text-2); font-size:12px; font-weight:600; cursor:pointer; transition:all var(--bc-transition); font-family:inherit; }
+        .bc-wallet-inline { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:20px; border:1px solid var(--bc-border); background:transparent; color:var(--bc-text-2); font-size:12px; font-weight:600; cursor:pointer; transition:all var(--bc-transition); font-family:inherit; white-space:nowrap; }
         .bc-wallet-inline:hover { background:var(--bc-bg3); border-color:var(--bc-border-h); color:var(--bc-text); }
+        .bc-wallet-inline.disconnected { background:linear-gradient(135deg,var(--bc-accent),#d97706); color:#000; border-color:transparent; font-weight:700; }
+        .bc-wallet-inline.disconnected:hover { box-shadow:0 2px 12px rgba(245,158,11,0.3); }
+        .bc-wallet-inline.disconnected i { color:#000; }
         .bc-wallet-inline.connected { border-color:rgba(34,197,94,0.3); }
-        .bc-wallet-inline.connected:hover { border-color:rgba(239,68,68,0.4); color:var(--bc-red); }
-        .bc-wallet-dot { width:8px; height:8px; border-radius:50%; background:var(--bc-green); flex-shrink:0; box-shadow:0 0 6px rgba(34,197,94,0.5); }
-        .bc-wallet-inline i { font-size:13px; color:var(--bc-accent); }
+        .bc-wallet-inline.connected:hover { border-color:rgba(239,68,68,0.4); }
+        .bc-wallet-inline.connected:hover .bc-wallet-dot { background:var(--bc-red); box-shadow:0 0 6px rgba(239,68,68,0.5); }
+        .bc-wallet-inline.connected:hover .bc-disconnect-icon { color:var(--bc-red); }
+        .bc-wallet-dot { width:8px; height:8px; border-radius:50%; background:var(--bc-green); flex-shrink:0; box-shadow:0 0 6px rgba(34,197,94,0.5); transition:all var(--bc-transition); }
+        .bc-disconnect-icon { font-size:11px !important; color:var(--bc-text-3) !important; margin-left:2px; transition:color var(--bc-transition); }
+
+        /* FAB — Floating Action Button for compose */
+        .bc-fab { position:fixed; bottom:80px; right:max(16px, calc((100vw - 640px)/2 + 16px)); width:52px; height:52px; border-radius:50%; background:linear-gradient(135deg,var(--bc-accent),#d97706); color:#000; border:none; font-size:22px; cursor:pointer; z-index:400; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 20px rgba(245,158,11,0.4); transition:all 0.2s; }
+        .bc-fab:hover { transform:scale(1.08); box-shadow:0 6px 28px rgba(245,158,11,0.5); }
+        .bc-fab:active { transform:scale(0.95); }
+        @media (max-width:1023px) { .bc-fab { bottom:80px; right:16px; } }
 
         /* Web3Modal overrides — more subtle backdrop */
         w3m-modal { --w3m-z-index: 9999 !important; }
