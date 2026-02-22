@@ -316,6 +316,10 @@ export async function addToWallet(tokenId) {
         return;
     }
 
+    // Resolve image URL from cert data so MetaMask can display it
+    const cert = NT.selectedCert || NT.certificates?.find(c => String(c.id) === String(tokenId));
+    const imageUrl = cert?.ipfs ? resolveStorageUrl(cert.ipfs) : `https://backcoin.org/api/cert-metadata/${tokenId}`;
+
     try {
         const result = await provider.request({
             method: 'wallet_watchAsset',
@@ -324,6 +328,7 @@ export async function addToWallet(tokenId) {
                 options: {
                     address: contractAddress,
                     tokenId: String(tokenId),
+                    image: imageUrl,
                 },
             },
         });
@@ -343,6 +348,7 @@ export async function addToWallet(tokenId) {
                     options: {
                         address: contractAddress,
                         tokenId: String(tokenId),
+                        image: imageUrl,
                     },
                 }],
             });
