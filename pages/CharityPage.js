@@ -45,7 +45,7 @@ const CHARITY_API = {
     uploadMedia: '/api/upload-media'
 };
 
-const EXPLORER_ADDRESS = "https://opbnbscan.com/address/";
+const EXPLORER_ADDRESS = "https://sepolia.etherscan.io/address/";
 
 const PLACEHOLDER_IMAGES = {
     animal: 'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?w=800&q=80',

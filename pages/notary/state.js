@@ -6,7 +6,7 @@
 // CONSTANTS
 // ============================================================================
 export const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-export const EXPLORER_BASE = 'https://opbnbscan.com';
+export const EXPLORER_BASE = 'https://sepolia.etherscan.io';
 export const EXPLORER_TX = `${EXPLORER_BASE}/tx/`;
 export const EXPLORER_ADDR = `${EXPLORER_BASE}/address/`;
 export const EXPLORER_TOKEN = `${EXPLORER_BASE}/token/`;

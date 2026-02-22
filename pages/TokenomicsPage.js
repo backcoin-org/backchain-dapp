@@ -514,7 +514,7 @@ function renderContracts() {
                 <p class="text-emerald-400 text-xs font-medium text-center"><i class="fa-solid fa-shield-halved mr-1"></i>Progressive decentralization: Admin → Multisig → Timelock → DAO</p>
             </div>
             <div class="mt-3 text-center">
-                <a href="https://opbnbscan.com" target="_blank" class="inline-flex items-center gap-2 text-xs text-zinc-500 hover:text-amber-400 transition-colors">
+                <a href="https://sepolia.etherscan.io" target="_blank" class="inline-flex items-center gap-2 text-xs text-zinc-500 hover:text-amber-400 transition-colors">
                     <i class="fa-solid fa-external-link"></i> View all contracts on Explorer
                 </a>
             </div>

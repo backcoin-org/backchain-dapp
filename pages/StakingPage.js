@@ -34,7 +34,7 @@ import { StakingTx, BuybackTx } from '../modules/transactions/index.js';
 // ============================================================================
 // CONSTANTS
 // ============================================================================
-const EXPLORER_TX = "https://opbnbscan.com/tx/";
+const EXPLORER_TX = "https://sepolia.etherscan.io/tx/";
 
 const RECYCLE_TIERS = {
     NONE:    { boost: 0,    recycleRate: 50, keepRate: 50,  color: '#71717a', name: 'None',    icon: '○',  class: 'stk-tier-none' },
