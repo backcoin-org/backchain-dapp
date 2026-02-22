@@ -4,13 +4,13 @@ Imagine uma rede social onde ninguem pode deletar seus posts, banir sua conta ou
 
 Essa e a Agora.
 
-> **Contrato:** `0x60088001DB6Ae83Bc9513426e415895802DBA39a`
+> **Contrato:** `0xa4c0FC770579F644fc4595a82d0d138f7088da90`
 
 ---
 
 ## O Que e a Agora?
 
-Um protocolo social **totalmente on-chain** dentro do Backcoin. Cada post, resposta, like e follow e uma transacao na Arbitrum. O que isso significa na pratica:
+Um protocolo social **totalmente on-chain** dentro do Backcoin. Cada post, resposta, like e follow e uma transacao na Ethereum. O que isso significa na pratica:
 
 | Rede Social Tradicional | Agora |
 |------------------------|-------|

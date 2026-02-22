@@ -2,7 +2,7 @@
 
 Tudo no Backcoin gira em torno do BKC. Staking, jogos, trading de NFTs, rede social, certificacao de documentos — cada servico usa BKC de alguma forma. Mas diferente da maioria dos tokens DeFi, o BKC foi desenhado pra ficar **mais escasso** com o tempo, nao mais inflacionado.
 
-> **Endereco do contrato:** `0x1c8B7951ae769871470e9a8951d01dB39AA34123`
+> **Endereco do contrato:** `0x080627Bd394e0F34535B0F3c70090D181f87d913`
 
 ---
 
@@ -101,7 +101,7 @@ Adicionar BKC ao MetaMask programaticamente:
 
 ```javascript
 const BKC = {
-    address: "0x1c8B7951ae769871470e9a8951d01dB39AA34123",
+    address: "0x080627Bd394e0F34535B0F3c70090D181f87d913",
     symbol: "BKC",
     decimals: 18,
     image: "https://backcoin.org/assets/bkc_logo.png"

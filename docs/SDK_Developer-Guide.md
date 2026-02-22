@@ -31,7 +31,7 @@ import { ethers } from 'ethers';
 
 const bkc = new Backchain({
     operator: '0xSUA_CARTEIRA',       // voce recebe comissoes
-    network: 'arbitrum-sepolia',       // testnet
+    network: 'sepolia',               // testnet (default)
 });
 
 await bkc.connect();                   // popup MetaMask
@@ -56,7 +56,7 @@ import { EventParser, STAKING_EVENTS } from '@backchain/events';
 import { EventIndexer, FileCheckpoint } from '@backchain/indexer';
 import { ethers } from 'ethers';
 
-const provider = new ethers.JsonRpcProvider('https://sepolia-rollup.arbitrum.io/rpc');
+const provider = new ethers.JsonRpcProvider('https://ethereum-sepolia-rpc.publicnode.com');
 
 const parser = new EventParser();
 parser.register('StakingPool', STAKING_EVENTS);
@@ -90,7 +90,7 @@ app.use(express.json());
 
 setupBackchainRoutes(app, {
     operator: '0xSUA_CARTEIRA',
-    network: 'arbitrum-sepolia',
+    network: 'sepolia',
 });
 
 app.listen(3000);
@@ -410,7 +410,7 @@ const app = express();
 
 app.use(backchainMiddleware({
     operator: '0x...',
-    network: 'arbitrum-sepolia',
+    network: 'sepolia',
     privateKey: process.env.PRIVATE_KEY, // opcional, pra writes server-side
 }));
 
@@ -507,8 +507,18 @@ npx create-backchain-app
 
 O CLI interativo pergunta:
 1. Nome do projeto
-2. Quais modulos incluir (staking, nft, fusion, fortune, notary, agora, charity, rental, swap, faucet, buyback)
-3. Gera um projeto pronto com paginas, navegacao e imports corretos
+2. Endereco do operador (sua carteira)
+3. Quais modulos adicionais incluir (nft, fortune, notary, agora, charity, rental, swap, fusion, buyback)
+4. Rede (Sepolia, opBNB Testnet ou opBNB Mainnet)
+
+**Modulos Core** (sempre incluidos em todo projeto):
+- Dashboard — Visao geral do ecossistema
+- Stake & Earn — Delegar BKC, ganhar recompensas
+- Tutor System — Ganhos com referrals, info do tutor
+- Tokenomics — Supply, taxas, info do ecossistema
+- Invite & Earn — Link de referral, rastrear convites
+
+Gera um projeto Vite pronto com paginas, navegacao e imports corretos.
 
 ---
 
@@ -580,8 +590,9 @@ const fortuneFee = await ctx.calculateFee(ACTION_IDS.FORTUNE_TIER0);
 
 | Rede | Chain ID | Status |
 |------|----------|--------|
-| Arbitrum Sepolia | 421614 | Ativa (testnet) |
-| Arbitrum One | 42161 | Em breve (mainnet) |
+| Ethereum Sepolia | 11155111 | Ativa (testnet) |
+| opBNB Testnet | 5611 | Em breve |
+| opBNB Mainnet | 204 | Em breve (producao) |
 
 ---
 
@@ -644,7 +655,7 @@ console.log('Total Buybacks:', buybackStats.buybackCount);
 
 - Website: [backcoin.org](https://backcoin.org)
 - GitHub: [github.com/backcoin-org/backchain-dapp](https://github.com/backcoin-org/backchain-dapp)
-- Contratos: Verificados no [Arbiscan](https://sepolia.arbiscan.io)
+- Contratos: Verificados no [Etherscan Sepolia](https://sepolia.etherscan.io)
 - Enderecos: [Tabela Completa](./Addresses_All-Contracts.md)
 - Taxas: [Tabela de Taxas](./Fees_Complete-Table.md)
 - Telegram: [t.me/BackCoinorg](https://t.me/BackCoinorg)

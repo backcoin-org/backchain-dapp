@@ -2,7 +2,7 @@
 
 Plataformas de crowdfunding cobram 5-10% de taxa, exigem aprovacao, atrasam saques e decidem quem pode arrecadar. O Backcoin resolve isso com um contrato inteligente: crie uma campanha em 30 segundos, receba 100% das doacoes, e saque quando quiser. Sem empresa no meio.
 
-> **Contrato:** `0x31E8B7F825610aFd3d5d25C11e9C062D27289BB2`
+> **Contrato:** `0x0E0B7277A8d454155b2152d3E0b3BAa9B63F54Ab`
 
 ---
 
@@ -71,7 +71,7 @@ Tudo esta visivel na blockchain:
 | Valores de taxas | Verificaveis no Ecosystem |
 | Cada doacao individual | Registrada como transacao |
 
-Nao tem custos escondidos, nao tem cobrancas surpresa. Doadores veem exatamente quanto foi pro criador e quanto foi pra taxas, diretamente no Arbiscan.
+Nao tem custos escondidos, nao tem cobrancas surpresa. Doadores veem exatamente quanto foi pro criador e quanto foi pra taxas, diretamente no Etherscan.
 
 ---
 

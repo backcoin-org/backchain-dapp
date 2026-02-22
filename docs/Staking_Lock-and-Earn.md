@@ -2,7 +2,7 @@
 
 Staking e a forma mais direta de gerar renda passiva no Backcoin. Voce trava seus BKC, escolhe por quanto tempo, e o protocolo te paga recompensas de mineracao proporcionais ao seu poder. Quanto mais tempo, mais poder. Quanto melhor seu NFT, menos voce perde no claim.
 
-> **Contrato:** `0xeA5D34520783564a736258a9fd29775c9c1C8E78`
+> **Contrato:** `0xA7B61b8597A00D738FDb3715563F00e5cef0bB7f`
 
 ---
 

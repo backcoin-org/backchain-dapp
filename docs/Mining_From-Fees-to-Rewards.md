@@ -2,7 +2,7 @@
 
 O Buyback Miner e o coracao economico do Backcoin. Ele faz tres coisas ao mesmo tempo: compra BKC do mercado (pressao de alta), minta novos BKC como recompensa (incentivo), e queima uma parte (deflacao). Tudo automatico, sem permissao, e qualquer pessoa pode acionar — e ganhar por fazer isso.
 
-> **Contrato:** `0xD0B684Be70213dFbdeFaecaFECB50232897EC843`
+> **Contrato:** `0x47B9F6F8517542eb93130af4B04834E7da279Bcd`
 
 ---
 

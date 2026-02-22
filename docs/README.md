@@ -1,6 +1,6 @@
 # Backcoin — DeFi Imparavel para Todos
 
-Backcoin e um ecossistema completo de financas descentralizadas na Arbitrum. Sem chaves de admin, sem botao de pausa, sem blacklists. Uma vez no ar, ninguem consegue parar — nem nos mesmos.
+Backcoin e um ecossistema modular de financas descentralizadas na Ethereum. Sem chaves de admin, sem botao de pausa, sem blacklists. Uma vez no ar, ninguem consegue parar — nem nos mesmos.
 
 Todo mundo participa. Todo mundo ganha. Usuarios negociam, delegam e jogam. Operadores constroem frontends e ganham comissoes. Referenciadores trazem novos usuarios e recebem recompensas automaticas. O protocolo distribui valor para todos os participantes.
 
@@ -32,6 +32,7 @@ Justo desde o dia um. Zero tokens para o time. Zero para VCs ou investidores pri
 | Buyback Miner | Converte taxas do protocolo em recompensas |
 | NFT Boosters | 4 tiers de NFTs que reduzem burn nas recompensas |
 | NFT Pools | Trading por bonding curve para Booster NFTs |
+| NFT Fusion | Funda e divida NFT Boosters entre tiers |
 | Fortune Pool | Jogo provadamente justo (commit-reveal) |
 | Agora | Rede social descentralizada |
 | Notary | Certificacao de documentos on-chain |
@@ -56,7 +57,7 @@ Resultado: quanto mais gente usa o Backcoin, mais recompensas fluem para os part
 
 ## Contribuicao para a Rede
 
-Cada transacao Backcoin fortalece a rede Arbitrum. Nossos contratos geram atividade on-chain consistente — swaps, staking, jogos, posts sociais, certificacao de documentos — tudo contribuindo para a seguranca e crescimento da rede.
+Cada transacao Backcoin fortalece a rede Ethereum. Nossos contratos geram atividade on-chain consistente — swaps, staking, jogos, posts sociais, certificacao de documentos — tudo contribuindo para a seguranca e crescimento da rede.
 
 Nao estamos construindo so para nos. Estamos construindo infraestrutura que qualquer um pode usar, copiar ou construir em cima. O protocolo e aberto, sem permissao, e desenhado para sobreviver aos seus criadores.
 
@@ -95,4 +96,4 @@ Nao estamos construindo so para nos. Estamos construindo infraestrutura que qual
 
 - Telegram: https://t.me/BackCoinorg
 - Website: https://backcoin.org
-- Rede: Arbitrum Sepolia (testnet) → Arbitrum One (mainnet)
+- Rede: Ethereum Sepolia (testnet) → opBNB Mainnet (producao)

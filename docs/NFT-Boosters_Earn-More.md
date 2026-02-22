@@ -4,7 +4,7 @@ Se voce faz staking no Backcoin e nao tem um NFT Booster, voce esta **perdendo m
 
 Booster NFTs nao sao itens cosmeticos. Sao a diferenca entre ganhar e ganhar o dobro.
 
-> **Contrato:** `0x5507F70c71b8e1C694841E214fe8F9Dd7c899448` (ERC-721)
+> **Contrato:** `0x99E790Fac2a825654D480492CDBb779e3EB53dF4` (ERC-721)
 
 ---
 
@@ -45,10 +45,10 @@ NFT Boosters sao negociados em **pools de bonding curve** — mercados automatic
 
 | Pool | Endereco |
 |------|---------|
-| Bronze | `0xeE0953171514608f8b8F7B5A343c8123b2BfE8bD` |
-| Silver | `0xA8e76C5E21235fC2889A25Dff0769fFf5C784639` |
-| Gold | `0xbcDc78a2C985722C170153015957Acb73df08F89` |
-| Diamond | `0x2d9fb50A5d147598fBb1151F75B8C3E261fb1Dea` |
+| Bronze | `0xCF6b80128c3A355aE1775bC2E9639305B850459E` |
+| Silver | Via NFT Fusion (funda 2 Bronze) |
+| Gold | Via NFT Fusion (funda 2 Silver) |
+| Diamond | Via NFT Fusion (funda 2 Gold) |
 
 > Entenda como os precos funcionam: [Trading de NFT](./NFT-Trading_Instant-Buy-Sell.md)
 

@@ -2,7 +2,7 @@
 
 Nao precisa comprar um Diamond pra ganhar como se tivesse um. O Mercado de Aluguel do Backcoin deixa voce **alugar** um NFT Booster por um periodo, aproveitar o boost de staking, e devolver automaticamente quando acabar. Donos ganham ETH passivo. Locatarios economizam no burn.
 
-> **Contrato:** `0xa2303db7e2D63398a68Ea326a3566bC92f129D44`
+> **Contrato:** `0x9c42BF4860ad02e95A6bd944aC2a11036cC959Ed`
 
 ---
 

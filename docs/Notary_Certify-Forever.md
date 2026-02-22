@@ -2,7 +2,7 @@
 
 Voce tem um contrato importante? Um documento que precisa de prova de existencia? Com o Cartorio Digital do Backcoin, voce certifica qualquer documento na blockchain — sem revelar seu conteudo. A certificacao e permanente, verificavel por qualquer pessoa, e custa uma fracao do que um cartorio tradicional cobra.
 
-> **Contrato:** `0x89DE7ea670CeEeEFA21e4dAC499313D3E0cfbB0e`
+> **Contrato:** `0xFe3F90C76F1aAEED93b8063238658FF3CAD62d24`
 
 ---
 
@@ -103,7 +103,7 @@ Empresas certificam documentos **regularmente** — isso gera receita recorrente
 
 ## Cartorio Global, 24/7
 
-Cada certificacao e um registro permanente na Arbitrum. Nao depende de nenhum servidor, nenhuma empresa, nenhum funcionario. Funciona a qualquer hora, de qualquer lugar do mundo.
+Cada certificacao e um registro permanente na Ethereum. Nao depende de nenhum servidor, nenhuma empresa, nenhum funcionario. Funciona a qualquer hora, de qualquer lugar do mundo.
 
 Conforme mais documentos sao certificados, a rede se torna uma **fonte global de verdade** — um cartorio descentralizado que nunca fecha e nunca pode ser desligado.
 

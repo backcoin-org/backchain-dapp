@@ -2,7 +2,7 @@
 
 O Backcoin segue um modelo de **descentralizacao progressiva**. Comeca com um admin pra iterar rapido, e gradualmente transfere controle total pra comunidade em quatro fases. Cada transicao e **irreversivel** — uma vez que o poder e distribuido, nunca pode ser recentralizado.
 
-> **Contrato:** `0xA82F69f079566958c16F601A9625E40AeEeFbFf8`
+> **Contrato:** `0x28244003181711f09f9573BAf0E26F879A278227`
 
 ---
 

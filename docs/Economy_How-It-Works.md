@@ -151,11 +151,11 @@ Sem aprovacao. Sem limite de operadores. Sem exclusividade.
 
 | Contrato | Endereco |
 |----------|---------|
-| BKC Token | `0x1c8B7951ae769871470e9a8951d01dB39AA34123` |
-| Ecosystem | `0xDC88493D0979AF22e2C387A2fFd5230c62551997` |
-| Staking Pool | `0xeA5D34520783564a736258a9fd29775c9c1C8E78` |
-| Buyback Miner | `0xD0B684Be70213dFbdeFaecaFECB50232897EC843` |
-| Liquidity Pool | `0x32c80323dD73E2d30c0389Ea9fc6a0ad998770bF` |
+| BKC Token | `0x080627Bd394e0F34535B0F3c70090D181f87d913` |
+| Ecosystem | `0xB0FA8544d8bEF47Fb691c17D3086BA30ed3B400C` |
+| Staking Pool | `0xA7B61b8597A00D738FDb3715563F00e5cef0bB7f` |
+| Buyback Miner | `0x47B9F6F8517542eb93130af4B04834E7da279Bcd` |
+| Liquidity Pool | `0xAe22a5Dc2424d97F8915A49C99B924D20082Cb24` |
 
 ---
 

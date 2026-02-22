@@ -2,7 +2,7 @@
 
 Aposte BKC, escolha um numero, e veja se a sorte esta do seu lado. O Fortune Pool e um jogo on-chain que usa **commit-reveal** — um mecanismo criptografico que torna manipulacao impossivel. Nem voce, nem mineradores, nem o proprio contrato sabe o resultado antes da hora.
 
-> **Contrato:** `0x319bfC89f4d9F2364E7e454e4950ca6e440211ED`
+> **Contrato:** `0xC76b8F773414D101231FE265Af0A84C32eeb7460`
 
 ---
 
@@ -98,7 +98,7 @@ O commit-reveal e a mesma tecnica usada em protocolos de bilhoes de dolares. Fun
 3. **O numero vencedor:** calculado com `keccak256(blockhash, gameId, tierIndex)`
 4. **O resultado:** impossivel de prever porque depende de um blockhash que ainda nao existe
 
-Ate mineradores nao conseguem manipular: precisariam saber seu palpite **E** controlar o blockhash, o que e economicamente impraticavel na Arbitrum.
+Ate mineradores nao conseguem manipular: precisariam saber seu palpite **E** controlar o blockhash, o que e economicamente impraticavel na Ethereum.
 
 ---
 

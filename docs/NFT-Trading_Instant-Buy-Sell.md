@@ -10,10 +10,10 @@ Cada tier de NFT Booster tem seu proprio pool com liquidez independente:
 
 | Tier | Endereco |
 |------|---------|
-| Bronze | `0xeE0953171514608f8b8F7B5A343c8123b2BfE8bD` |
-| Silver | `0xA8e76C5E21235fC2889A25Dff0769fFf5C784639` |
-| Gold | `0xbcDc78a2C985722C170153015957Acb73df08F89` |
-| Diamond | `0x2d9fb50A5d147598fBb1151F75B8C3E261fb1Dea` |
+| Bronze | `0xCF6b80128c3A355aE1775bC2E9639305B850459E` |
+| Silver | Via NFT Fusion (funda 2 Bronze) |
+| Gold | Via NFT Fusion (funda 2 Silver) |
+| Diamond | Via NFT Fusion (funda 2 Gold) |
 
 ---
 

@@ -1,8 +1,8 @@
 # Enderecos — Todos os Contratos na Blockchain
 
-Todos os contratos do Backcoin estao deployados na **Arbitrum Sepolia** (Chain ID: 421614). Cada contrato listado abaixo (exceto o Faucet) e **totalmente imutavel** — sem admin, sem pause, sem upgrade. O unico contrato com parametros ajustaveis e o BackchainEcosystem, sujeito a [descentralizacao progressiva](./Governance_Community-Power.md).
+Todos os contratos do Backcoin estao deployados na **Ethereum Sepolia** (Chain ID: 11155111). Cada contrato listado abaixo (exceto o Faucet) e **totalmente imutavel** — sem admin, sem pause, sem upgrade. O unico contrato com parametros ajustaveis e o BackchainEcosystem, sujeito a [descentralizacao progressiva](./Governance_Community-Power.md).
 
-Todos os contratos estao verificados no [Arbiscan Sepolia](https://sepolia.arbiscan.io). Voce pode ler o codigo fonte, interagir diretamente, e verificar tudo on-chain.
+Todos os contratos estao verificados no [Etherscan Sepolia](https://sepolia.etherscan.io). Voce pode ler o codigo fonte, interagir diretamente, e verificar tudo on-chain.
 
 ---
 
@@ -10,11 +10,11 @@ Todos os contratos estao verificados no [Arbiscan Sepolia](https://sepolia.arbis
 
 | Contrato | Endereco | Operador |
 |----------|---------|:--------:|
-| BKC Token | `0x1c8B7951ae769871470e9a8951d01dB39AA34123` | — |
-| BackchainEcosystem | `0xDC88493D0979AF22e2C387A2fFd5230c62551997` | — |
-| Liquidity Pool | `0x32c80323dD73E2d30c0389Ea9fc6a0ad998770bF` | — |
-| Staking Pool | `0xeA5D34520783564a736258a9fd29775c9c1C8E78` | Sim |
-| Buyback Miner | `0xD0B684Be70213dFbdeFaecaFECB50232897EC843` | Sim |
+| BKC Token | `0x080627Bd394e0F34535B0F3c70090D181f87d913` | — |
+| BackchainEcosystem | `0xB0FA8544d8bEF47Fb691c17D3086BA30ed3B400C` | — |
+| Liquidity Pool | `0xAe22a5Dc2424d97F8915A49C99B924D20082Cb24` | — |
+| Staking Pool | `0xA7B61b8597A00D738FDb3715563F00e5cef0bB7f` | Sim |
+| Buyback Miner | `0x47B9F6F8517542eb93130af4B04834E7da279Bcd` | Sim |
 
 ---
 
@@ -22,11 +22,9 @@ Todos os contratos estao verificados no [Arbiscan Sepolia](https://sepolia.arbis
 
 | Contrato | Endereco | Operador |
 |----------|---------|:--------:|
-| RewardBooster (ERC-721) | `0x5507F70c71b8e1C694841E214fe8F9Dd7c899448` | — |
-| NFT Pool — Bronze | `0xeE0953171514608f8b8F7B5A343c8123b2BfE8bD` | Sim |
-| NFT Pool — Silver | `0xA8e76C5E21235fC2889A25Dff0769fFf5C784639` | Sim |
-| NFT Pool — Gold | `0xbcDc78a2C985722C170153015957Acb73df08F89` | Sim |
-| NFT Pool — Diamond | `0x2d9fb50A5d147598fBb1151F75B8C3E261fb1Dea` | Sim |
+| RewardBooster (ERC-721) | `0x99E790Fac2a825654D480492CDBb779e3EB53dF4` | — |
+| NFT Pool — Bronze | `0xCF6b80128c3A355aE1775bC2E9639305B850459E` | Sim |
+| NFT Fusion | `0x89605E4cf3c49bE3d7b519D1a7ac91980078D4c7` | — |
 
 ---
 
@@ -34,11 +32,11 @@ Todos os contratos estao verificados no [Arbiscan Sepolia](https://sepolia.arbis
 
 | Contrato | Endereco | Operador |
 |----------|---------|:--------:|
-| Fortune Pool | `0x319bfC89f4d9F2364E7e454e4950ca6e440211ED` | Sim |
-| Agora (Social) | `0x60088001DB6Ae83Bc9513426e415895802DBA39a` | Sim |
-| Cartorio Digital | `0x89DE7ea670CeEeEFA21e4dAC499313D3E0cfbB0e` | Sim |
-| Arrecadacao | `0x31E8B7F825610aFd3d5d25C11e9C062D27289BB2` | Sim |
-| Aluguel de NFT | `0xa2303db7e2D63398a68Ea326a3566bC92f129D44` | Sim |
+| Fortune Pool | `0xC76b8F773414D101231FE265Af0A84C32eeb7460` | Sim |
+| Agora (Social) | `0xa4c0FC770579F644fc4595a82d0d138f7088da90` | Sim |
+| Cartorio Digital | `0xFe3F90C76F1aAEED93b8063238658FF3CAD62d24` | Sim |
+| Arrecadacao | `0x0E0B7277A8d454155b2152d3E0b3BAa9B63F54Ab` | Sim |
+| Aluguel de NFT | `0x9c42BF4860ad02e95A6bd944aC2a11036cC959Ed` | Sim |
 
 ---
 
@@ -46,9 +44,8 @@ Todos os contratos estao verificados no [Arbiscan Sepolia](https://sepolia.arbis
 
 | Contrato | Endereco | Operador |
 |----------|---------|:--------:|
-| Governanca | `0xA82F69f079566958c16F601A9625E40AeEeFbFf8` | — |
-| NFT Fusion | `0x9e120fDA815fce4f3eFf5A7b666F20cc8d32aCF6` | — |
-| Faucet BKC | `0xb80e5389b16693CAEe4655b535cc7Bceb4770255` | — |
+| Governanca | `0x28244003181711f09f9573BAf0E26F879A278227` | — |
+| Faucet BKC | `0xc4B75392935541Bef1D58e152522ce60559610bf` | — |
 
 ---
 
@@ -56,24 +53,21 @@ Todos os contratos estao verificados no [Arbiscan Sepolia](https://sepolia.arbis
 
 ```javascript
 const CONTRACTS = {
-    bkcToken:             "0x1c8B7951ae769871470e9a8951d01dB39AA34123",
-    backchainEcosystem:   "0xDC88493D0979AF22e2C387A2fFd5230c62551997",
-    liquidityPool:        "0x32c80323dD73E2d30c0389Ea9fc6a0ad998770bF",
-    stakingPool:          "0xeA5D34520783564a736258a9fd29775c9c1C8E78",
-    buybackMiner:         "0xD0B684Be70213dFbdeFaecaFECB50232897EC843",
-    rewardBooster:        "0x5507F70c71b8e1C694841E214fe8F9Dd7c899448",
-    nftFusion:            "0x9e120fDA815fce4f3eFf5A7b666F20cc8d32aCF6",
-    pool_bronze:          "0xeE0953171514608f8b8F7B5A343c8123b2BfE8bD",
-    pool_silver:          "0xA8e76C5E21235fC2889A25Dff0769fFf5C784639",
-    pool_gold:            "0xbcDc78a2C985722C170153015957Acb73df08F89",
-    pool_diamond:         "0x2d9fb50A5d147598fBb1151F75B8C3E261fb1Dea",
-    fortunePool:          "0x319bfC89f4d9F2364E7e454e4950ca6e440211ED",
-    agora:                "0x60088001DB6Ae83Bc9513426e415895802DBA39a",
-    notary:               "0x89DE7ea670CeEeEFA21e4dAC499313D3E0cfbB0e",
-    charityPool:          "0x31E8B7F825610aFd3d5d25C11e9C062D27289BB2",
-    rentalManager:        "0xa2303db7e2D63398a68Ea326a3566bC92f129D44",
-    simpleBkcFaucet:      "0xb80e5389b16693CAEe4655b535cc7Bceb4770255",
-    backchainGovernance:  "0xA82F69f079566958c16F601A9625E40AeEeFbFf8",
+    bkcToken:             "0x080627Bd394e0F34535B0F3c70090D181f87d913",
+    backchainEcosystem:   "0xB0FA8544d8bEF47Fb691c17D3086BA30ed3B400C",
+    liquidityPool:        "0xAe22a5Dc2424d97F8915A49C99B924D20082Cb24",
+    stakingPool:          "0xA7B61b8597A00D738FDb3715563F00e5cef0bB7f",
+    buybackMiner:         "0x47B9F6F8517542eb93130af4B04834E7da279Bcd",
+    rewardBooster:        "0x99E790Fac2a825654D480492CDBb779e3EB53dF4",
+    nftFusion:            "0x89605E4cf3c49bE3d7b519D1a7ac91980078D4c7",
+    poolBronze:           "0xCF6b80128c3A355aE1775bC2E9639305B850459E",
+    fortunePool:          "0xC76b8F773414D101231FE265Af0A84C32eeb7460",
+    agora:                "0xa4c0FC770579F644fc4595a82d0d138f7088da90",
+    notary:               "0xFe3F90C76F1aAEED93b8063238658FF3CAD62d24",
+    charityPool:          "0x0E0B7277A8d454155b2152d3E0b3BAa9B63F54Ab",
+    rentalManager:        "0x9c42BF4860ad02e95A6bd944aC2a11036cC959Ed",
+    simpleBkcFaucet:      "0xc4B75392935541Bef1D58e152522ce60559610bf",
+    backchainGovernance:  "0x28244003181711f09f9573BAf0E26F879A278227",
 };
 ```
 
@@ -81,7 +75,7 @@ Ou use o SDK:
 
 ```typescript
 import { getAddresses } from '@backchain/core';
-const addresses = getAddresses('arbitrum-sepolia');
+const addresses = getAddresses('sepolia');
 ```
 
 ---
@@ -98,8 +92,8 @@ Contratos marcados com **"Sim"** na coluna Operador aceitam o parametro `operato
 
 | Detalhe | Valor |
 |---------|-------|
-| Rede | Arbitrum Sepolia (Chain ID 421614) |
-| Explorer | https://sepolia.arbiscan.io |
+| Rede | Ethereum Sepolia (Chain ID 11155111) |
+| Explorer | https://sepolia.etherscan.io |
 | Compilador | Solidity 0.8.28 |
 | Otimizador | runs=1, viaIR=true |
 | Status | Todos os contratos verificados |

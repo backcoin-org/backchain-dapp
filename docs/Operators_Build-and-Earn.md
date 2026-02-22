@@ -83,7 +83,7 @@ Todos lendo dos mesmos contratos, todos ganhando independentemente.
 
 ## Como Comecar
 
-1. Leia as ABIs dos contratos — Disponiveis no repositorio e no Arbiscan
+1. Leia as ABIs dos contratos — Disponiveis no repositorio e no Etherscan
 2. Construa sua interface — Qualquer tecnologia funciona (web, mobile, CLI, bot)
 3. Inclua o parametro operator — Seu endereco de carteira em cada transacao
 4. Deploy e promova — A atividade dos seus usuarios e sua receita
