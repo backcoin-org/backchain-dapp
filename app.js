@@ -519,103 +519,12 @@ function captureTutorParam() {
 // TUTOR WELCOME OVERLAY — Gasless onboarding
 // ============================================================================
 
-function showTutorWelcomeOverlay(tutorAddress) {
-    const shortAddr = `${tutorAddress.slice(0, 6)}...${tutorAddress.slice(-4)}`;
-
-    // Inject shared splash styles
-    if (!document.getElementById('splash-styles')) {
-        const s = document.createElement('style');
-        s.id = 'splash-styles';
-        s.textContent = `
-            @keyframes splash-in { 0% { opacity:0; transform:scale(0.92) translateY(12px); } 100% { opacity:1; transform:scale(1) translateY(0); } }
-            @keyframes splash-out { 0% { opacity:1; transform:scale(1); } 100% { opacity:0; transform:scale(0.95) translateY(-8px); } }
-            @keyframes quote-line { 0% { width:0; } 100% { width:100%; } }
-            @keyframes letter-in { 0% { opacity:0; transform:translateY(6px); } 100% { opacity:1; transform:translateY(0); } }
-            .splash-enter { animation: splash-in 0.6s cubic-bezier(0.16,1,0.3,1) forwards; }
-            .splash-exit  { animation: splash-out 0.4s ease-in forwards; }
-            .quote-line   { animation: quote-line 2s ease-out 0.4s both; }
-            .letter-stagger span { display:inline-block; opacity:0; animation: letter-in 0.3s ease-out both; }
-        `;
-        document.head.appendChild(s);
-    }
-
-    const title = 'Backchain';
-    const letters = [...title].map((ch, i) =>
-        `<span style="animation-delay:${0.6 + i * 0.05}s">${ch}</span>`
-    ).join('');
-
-    const overlay = document.createElement('div');
-    overlay.id = 'welcome-splash';
-    overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm';
-    overlay.style.opacity = '0';
-    overlay.style.transition = 'opacity 0.3s ease';
-
-    overlay.innerHTML = `
-        <div class="splash-enter text-center px-8 max-w-sm">
-            <img src="/assets/bkc_logo_3d.png" alt="" class="h-16 w-16 mx-auto rounded-full mb-5 ring-1 ring-amber-500/30 shadow-lg shadow-amber-500/20">
-
-            <p class="text-3xl font-black text-white tracking-wide letter-stagger mb-1">${letters}</p>
-            <p class="text-zinc-500 text-[11px] uppercase tracking-[0.25em] mb-5">Optimized for opBNB</p>
-
-            <div class="relative mb-5">
-                <div class="h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent quote-line"></div>
-                <p class="text-zinc-400 text-sm italic mt-3 leading-relaxed">
-                    "I may not agree with what you say, but I will defend to the death your right to say it."
-                </p>
-                <p class="text-amber-500/70 text-xs font-semibold mt-1.5">— Voltaire</p>
-                <div class="h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent mt-3 quote-line"></div>
-            </div>
-
-            <!-- Tutor info -->
-            <div class="mb-4">
-                <p class="text-zinc-500 text-xs mb-1.5">Your Tutor</p>
-                <span class="inline-flex items-center gap-1.5 bg-zinc-800/80 border border-zinc-700/50 rounded-full px-3 py-1">
-                    <i class="fa-solid fa-user-plus text-amber-400 text-[10px]"></i>
-                    <span class="font-mono text-sm text-amber-400">${shortAddr}</span>
-                </span>
-            </div>
-
-            <div id="referral-overlay-state">
-                <button id="referral-overlay-connect" class="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl text-base hover:shadow-lg hover:shadow-amber-500/30 transition-all">
-                    <i class="fa-solid fa-wallet mr-2"></i>Get Started
-                </button>
-            </div>
-
-            <button id="referral-overlay-skip" class="mt-3 text-zinc-600 hover:text-zinc-400 text-xs transition-colors">
-                Skip for now
-            </button>
-        </div>
-    `;
-
-    document.body.appendChild(overlay);
-    requestAnimationFrame(() => { overlay.style.opacity = '1'; });
-
-    document.getElementById('referral-overlay-connect')?.addEventListener('click', () => {
-        openConnectModal();
-    });
-    document.getElementById('referral-overlay-skip')?.addEventListener('click', () => {
-        dismissSplash();
-    });
-}
-
 async function processTutorAfterConnect() {
     const tutor = localStorage.getItem('backchain_tutor');
     if (!tutor || !State.isConnected || !State.userAddress) return;
     if (tutor.toLowerCase() === State.userAddress.toLowerCase()) {
         localStorage.removeItem('backchain_tutor');
         return;
-    }
-
-    const stateEl = document.getElementById('referral-overlay-state');
-    if (stateEl) {
-        stateEl.innerHTML = `
-            <div class="flex flex-col items-center gap-2 py-2">
-                <i class="fa-solid fa-spinner fa-spin text-amber-400 text-xl"></i>
-                <p class="text-zinc-400 text-xs">Setting up your account...</p>
-            </div>
-        `;
-        const skipBtn = document.getElementById('referral-overlay-skip');
-        if (skipBtn) skipBtn.style.display = 'none';
     }
 
     try {
@@ -633,43 +542,19 @@ async function processTutorAfterConnect() {
         if (data.success) {
             localStorage.removeItem('backchain_tutor');
 
-            if (stateEl) {
-                let successMsg = '';
-                if (data.faucetClaimed && data.ethAmount) {
-                    successMsg = `<p class="text-amber-400 font-bold mb-1">You received ${data.ethAmount} ETH!</p>`;
-                }
-                successMsg += data.referrerSet
-                    ? `<p class="text-zinc-500 text-xs">Tutor set on-chain</p>`
-                    : `<p class="text-zinc-500 text-xs">Welcome to Backchain!</p>`;
-
-                stateEl.innerHTML = `
-                    <div class="flex flex-col items-center gap-3">
-                        <div class="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                            <i class="fa-solid fa-check text-emerald-400 text-lg"></i>
-                        </div>
-                        ${successMsg}
-                        <button id="referral-overlay-done" class="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl transition-all">
-                            Start Exploring
-                        </button>
-                    </div>
-                `;
-                document.getElementById('referral-overlay-done')?.addEventListener('click', () => {
-                    dismissSplash();
-                    updateUIState(true);
-                });
+            // Show success feedback via toast (no intrusive modal)
+            if (data.referrerSet) {
+                showToast('Tutor registered! You are now earning referral rewards.', 'success');
             }
-
             if (data.faucetClaimed) {
                 showToast(`Welcome bonus: ${data.ethAmount || '0.01'} ETH sent to your wallet!`, 'success');
             }
         } else {
             localStorage.removeItem('backchain_tutor');
-            dismissSplash();
             if (data.error) showToast(data.error, 'warning');
         }
     } catch (e) {
         console.warn('[Tutor] API call failed:', e.message);
-        dismissSplash();
         showToast('Tutor setup failed. You can set it manually on the Tutor page.', 'warning');
     }
 }
@@ -703,19 +588,12 @@ window.addEventListener('load', async () => {
     if (initLoader) initLoader.remove();
 
     // Welcome splash is already in index.html (renders while JS loads).
-    // If pending tutor, replace generic splash with tutor overlay.
-    // Otherwise just set up auto-dismiss for the existing splash.
-    const pendingTutor = localStorage.getItem('backchain_tutor');
-    if (pendingTutor && !State.isConnected) {
-        dismissSplash(); // remove generic splash
-        showTutorWelcomeOverlay(pendingTutor);
-    } else {
-        // Generic splash is already visible from HTML — just wire up dismiss
-        const existingSplash = document.getElementById('welcome-splash');
-        if (existingSplash) {
-            existingSplash.addEventListener('click', () => dismissSplash());
-            setTimeout(() => dismissSplash(), 2500);
-        }
+    // Tutor param is saved silently in localStorage — no special modal.
+    // Tutor registration happens automatically when user connects wallet.
+    const existingSplash = document.getElementById('welcome-splash');
+    if (existingSplash) {
+        existingSplash.addEventListener('click', () => dismissSplash());
+        setTimeout(() => dismissSplash(), 2500);
     }
 
     // ✅ FIX: Navigate to the page specified in URL hash, or dashboard if none
