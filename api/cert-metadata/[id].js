@@ -69,7 +69,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Invalid token ID' });
     }
 
-    const rpcUrl = 'https://opbnb-mainnet-rpc.bnbchain.org';
+    const rpcUrl = 'https://ethereum-sepolia-rpc.publicnode.com';
 
     try {
         const provider = new ethers.JsonRpcProvider(rpcUrl);

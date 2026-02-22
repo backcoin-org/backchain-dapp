@@ -20,7 +20,12 @@ const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const ALLOWED_TYPES = [
     'video/webm', 'video/mp4', 'video/ogg',
     'audio/webm', 'audio/ogg', 'audio/mpeg',
-    'image/jpeg', 'image/png', 'image/gif', 'image/webp'
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+    'application/pdf', 'text/plain', 'application/json', 'text/html', 'text/csv',
+    'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/zip', 'application/x-zip-compressed',
+    'application/octet-stream'
 ];
 
 function uploadToLighthouse(fileBuffer, fileName, mimeType, apiKey) {
