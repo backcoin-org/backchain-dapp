@@ -153,13 +153,9 @@ export function renderPost(post, index = 0, options = {}) {
     const animStyle = options.noAnimation ? '' : `style="animation-delay:${Math.min(index * 0.04, 0.4)}s"`;
     const tagInfo = getTagInfo(post.tag || 0);
 
-    const rank = options.trendingRank || 0;
-    const rankBadge = rank >= 1 && rank <= 3 ? `<span class="bc-rank-badge bc-rank-${rank}">${rank}</span>` : '';
-
     return `
         <div class="bc-post" data-post-id="${post.id}" ${animStyle} onclick="AgoraPage.viewPost('${post.id}')">
             <div class="bc-post-top">
-                ${rankBadge}
                 <div class="bc-avatar ${boosted ? 'boosted' : ''}" onclick="event.stopPropagation(); AgoraPage.viewProfile('${post.author}')">
                     ${renderAvatar(post.author)}
                 </div>
