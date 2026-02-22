@@ -11,8 +11,8 @@ import { State } from '../../state.js';
 // CONSTANTS
 // ============================================================================
 
-export const EXPLORER_ADDRESS = "https://sepolia.etherscan.io/address/";
-export const EXPLORER_TX = "https://sepolia.etherscan.io/tx/";
+export const EXPLORER_ADDRESS = "https://opbnbscan.com/address/";
+export const EXPLORER_TX = "https://opbnbscan.com/tx/";
 
 export const CONTENT_LIMITS = {
     default:  2000,

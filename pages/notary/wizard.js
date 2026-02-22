@@ -115,7 +115,7 @@ function renderWizStep1(panel) {
             ` : `
                 <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:var(--nt-radius);padding:12px;margin-bottom:16px;display:flex;align-items:center;gap:8px">
                     <i class="fa-solid fa-circle-check" style="color:var(--nt-green)"></i>
-                    <span style="font-size:12px;color:var(--nt-green);font-weight:600">Hash unico — pronto para notarizar</span>
+                    <span style="font-size:12px;color:var(--nt-green);font-weight:600">Unique hash — ready to certify</span>
                 </div>
             `}
 

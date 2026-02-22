@@ -8,7 +8,7 @@ import { loadFees, loadCertificates, loadAssets, loadStats } from './data-loader
 import {
     navigateView, goBack, setTab, viewCert, viewAsset,
     handleMint, wizNext, wizBack, wizToStep3, wizRemoveFile, onDocTypeChange,
-    assetWizNext, assetWizBack, assetWizReset, assetWizToStep3, onAssetTypeChange,
+    assetWizNext, assetWizBack, assetWizReset, assetWizToStep3, assetWizSkipDoc, assetWizToReview, onAssetTypeChange,
     onAssetDescChange, onAssetMetaChange, onAssetFileSelect, removeAssetFile,
     handleRegisterAsset, handleTransferAsset, handleAddAnnotation,
     toggleAssetTransferForm, toggleAnnotationForm, refreshAssets,
@@ -212,6 +212,8 @@ export const NotaryPage = {
     assetWizBack,
     assetWizReset,
     assetWizToStep3,
+    assetWizSkipDoc,
+    assetWizToReview,
     onAssetTypeChange,
     onAssetDescChange,
     onAssetMetaChange,

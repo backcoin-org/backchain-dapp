@@ -124,7 +124,7 @@ export function onDocTypeChange(value) {
 // ============================================================================
 
 export function assetWizNext() {
-    if (NT.assetWizStep < 3) {
+    if (NT.assetWizStep < 4) {
         NT.assetWizStep++;
         NT._render();
     }
@@ -167,6 +167,18 @@ export function assetWizToStep3() {
     if (metaInput) NT.assetWizMeta = metaInput.value || '';
     if (!NT.assetWizDescription) return;
     NT.assetWizStep = 3;
+    NT._render();
+}
+
+export function assetWizSkipDoc() {
+    NT.assetWizFile = null;
+    NT.assetWizFileHash = null;
+    NT.assetWizStep = 4;
+    NT._render();
+}
+
+export function assetWizToReview() {
+    NT.assetWizStep = 4;
     NT._render();
 }
 
@@ -622,9 +634,9 @@ export async function addToWallet(tokenId) {
         return;
     }
 
-    // Resolve image URL from cert data so MetaMask can display it
-    const cert = NT.selectedCert || NT.certificates?.find(c => String(c.id) === String(tokenId));
-    const imageUrl = cert?.ipfs ? resolveStorageUrl(cert.ipfs) : `https://backcoin.org/api/cert-metadata/${tokenId}`;
+    // First-party image URL — backcoin.org redirects to the actual IPFS/Arweave gateway.
+    // More reliable for MetaMask than passing a third-party gateway URL directly.
+    const imageUrl = `https://backcoin.org/api/cert-image/${tokenId}`;
 
     try {
         const result = await provider.request({

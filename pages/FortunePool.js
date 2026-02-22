@@ -23,8 +23,8 @@ import { calculateFeeClientSide } from '../modules/core/index.js';
 // ============================================================================
 // CONSTANTS
 // ============================================================================
-const EXPLORER_TX = "https://sepolia.etherscan.io/tx/";
-const EXPLORER_ADDRESS = "https://sepolia.etherscan.io/address/";
+const EXPLORER_TX = "https://opbnbscan.com/tx/";
+const EXPLORER_ADDRESS = "https://opbnbscan.com/address/";
 const FORTUNE_POOL_ADDRESS = addresses?.fortunePool || "0x123d881D96aD01c5C47996eC18D275eC87B7Dc96";
 // Tiger image removed — cleaner mobile layout
 const SHARE_POINTS = 1000;

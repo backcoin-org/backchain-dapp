@@ -310,7 +310,7 @@ const renderFaucetCard = () => {
             <button id="toggle-faucet-pause-btn" class="${fs.isPaused ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} text-white text-sm font-bold py-2 px-4 rounded-lg transition-colors">
                 <i class="fa-solid ${fs.isPaused ? 'fa-play' : 'fa-pause'} mr-2"></i>${fs.isPaused ? 'Unpause Faucet' : 'Pause Faucet'}
             </button>
-            <a href="https://sepolia.etherscan.io/address/${addresses.faucet || ''}" target="_blank" rel="noopener noreferrer"
+            <a href="https://opbnbscan.com/address/${addresses.faucet || ''}" target="_blank" rel="noopener noreferrer"
                class="bg-zinc-700 hover:bg-zinc-600 text-white text-sm py-2 px-4 rounded-lg transition-colors inline-flex items-center gap-2">
                 <i class="fa-solid fa-arrow-up-right-from-square"></i>Explorer
             </a>

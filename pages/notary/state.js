@@ -33,21 +33,29 @@ export const FILE_TYPES = {
 
 // Asset types (0-3)
 export const ASSET_TYPES = [
-    { id: 0, name: 'Imóvel',       icon: 'fa-solid fa-house',        color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
-    { id: 1, name: 'Veículo',      icon: 'fa-solid fa-car',          color: '#3b82f6', bg: 'rgba(59,130,246,0.12)' },
-    { id: 2, name: 'Prop. Intelectual', icon: 'fa-solid fa-lightbulb', color: '#a855f7', bg: 'rgba(168,85,247,0.12)' },
-    { id: 3, name: 'Outros',       icon: 'fa-solid fa-box',          color: '#6b7280', bg: 'rgba(107,114,128,0.12)' }
+    { id: 0, name: 'Property',     desc: 'Real estate, land, buildings',     icon: 'fa-solid fa-house',        color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
+    { id: 1, name: 'Vehicle',      desc: 'Cars, motorcycles, boats',         icon: 'fa-solid fa-car',          color: '#3b82f6', bg: 'rgba(59,130,246,0.12)' },
+    { id: 2, name: 'Intellectual Property', desc: 'Patents, copyrights, trademarks', icon: 'fa-solid fa-lightbulb', color: '#a855f7', bg: 'rgba(168,85,247,0.12)' },
+    { id: 3, name: 'Other',        desc: 'Any other valuable asset',         icon: 'fa-solid fa-box',          color: '#6b7280', bg: 'rgba(107,114,128,0.12)' }
 ];
+
+// Context-sensitive hints per asset type
+export const TYPE_HINTS = {
+    0: { descPlaceholder: 'e.g. 2BR Apartment at 123 Main St',   metaLabel: 'Address, registration number, area (sqft)',   docHint: 'Upload deed, title, or property photos' },
+    1: { descPlaceholder: 'e.g. 2024 Toyota Camry, Blue',        metaLabel: 'VIN, license plate, mileage, year',           docHint: 'Upload registration, title, or vehicle photos' },
+    2: { descPlaceholder: 'e.g. Patent for Solar Panel Design',   metaLabel: 'Patent/copyright number, filing date',        docHint: 'Upload patent certificate or trademark filing' },
+    3: { descPlaceholder: 'e.g. Gold Watch, Rolex Submariner',    metaLabel: 'Serial number, brand, model',                 docHint: 'Upload certificate, receipt, or photos' }
+};
 
 // Annotation types (0-6)
 export const ANNOTATION_TYPES = [
-    { id: 0, name: 'Hipoteca',        icon: 'fa-solid fa-building-columns', color: '#ef4444' },
-    { id: 1, name: 'Penhora',         icon: 'fa-solid fa-gavel',            color: '#f97316' },
-    { id: 2, name: 'Ordem Judicial',  icon: 'fa-solid fa-scale-balanced',   color: '#dc2626' },
-    { id: 3, name: 'Seguro',          icon: 'fa-solid fa-shield-halved',    color: '#22c55e' },
-    { id: 4, name: 'Reforma',         icon: 'fa-solid fa-hammer',           color: '#eab308' },
-    { id: 5, name: 'Observação',      icon: 'fa-solid fa-note-sticky',      color: '#64748b' },
-    { id: 6, name: 'Cancelamento',    icon: 'fa-solid fa-ban',              color: '#991b1b' }
+    { id: 0, name: 'Mortgage',        icon: 'fa-solid fa-building-columns', color: '#ef4444' },
+    { id: 1, name: 'Lien',            icon: 'fa-solid fa-gavel',            color: '#f97316' },
+    { id: 2, name: 'Court Order',     icon: 'fa-solid fa-scale-balanced',   color: '#dc2626' },
+    { id: 3, name: 'Insurance',       icon: 'fa-solid fa-shield-halved',    color: '#22c55e' },
+    { id: 4, name: 'Renovation',      icon: 'fa-solid fa-hammer',           color: '#eab308' },
+    { id: 5, name: 'Note',            icon: 'fa-solid fa-note-sticky',      color: '#64748b' },
+    { id: 6, name: 'Cancellation',    icon: 'fa-solid fa-ban',              color: '#991b1b' }
 ];
 
 // ============================================================================
@@ -89,7 +97,7 @@ export const NT = {
     certificates: [],
     certsLoading: false,
 
-    // Assets (My Assets — Patrimônio)
+    // Assets
     assets: [],
     assetsLoading: false,
 

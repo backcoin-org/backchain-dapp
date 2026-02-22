@@ -30,7 +30,7 @@ const DOC_TYPE_NAMES = [
 
 const ASSET_TYPE_NAMES = ['Property', 'Vehicle', 'Intellectual Property', 'Other'];
 
-const IPFS_GATEWAY = 'https://gateway.lighthouse.storage/ipfs/';
+const IPFS_GATEWAY = 'https://cloudflare-ipfs.com/ipfs/';
 const ARWEAVE_GATEWAY = 'https://gateway.irys.xyz';
 
 function resolveUri(uri) {
@@ -101,12 +101,14 @@ async function handleCertificate(notary, certId, res) {
     const certDate = new Date(Number(result.timestamp) * 1000).toISOString();
     const shortHash = `${result.documentHash.slice(0, 10)}...${result.documentHash.slice(-8)}`;
 
-    const imageUrl = resolveUri(meta.uri) || null;
+    // Use first-party image proxy — MetaMask fetches from backcoin.org, which
+    // redirects to the IPFS/Arweave gateway. More reliable than direct gateway URLs.
+    const hasStoredImage = !!resolveUri(meta.uri);
 
     const metadata = {
         name: meta.name || meta.desc || `Notary Certificate #${certId}`,
         description: `Backchain Notary Certificate #${certId}. ${docTypeName} document certified on opBNB. Hash: ${shortHash}`,
-        image: imageUrl || `https://backcoin.org/assets/bkc_logo_3d.png`,
+        image: hasStoredImage ? `https://backcoin.org/api/cert-image/${certId}` : `https://backcoin.org/assets/bkc_logo_3d.png`,
         external_url: `https://backcoin.org/#notary`,
         attributes: [
             { trait_type: 'Token Type', value: 'Certificate' },

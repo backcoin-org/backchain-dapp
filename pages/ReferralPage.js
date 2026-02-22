@@ -521,7 +521,7 @@ function render(isActive) {
         </div>
 
         <div class="text-center py-6">
-            <p class="text-zinc-600 text-xs">Tutor relationships are stored on-chain at <a href="https://sepolia.etherscan.io/address/${addresses.backchainEcosystem}" target="_blank" class="text-zinc-500 hover:text-amber-400 transition-colors">BackchainEcosystem</a></p>
+            <p class="text-zinc-600 text-xs">Tutor relationships are stored on-chain at <a href="https://opbnbscan.com/address/${addresses.backchainEcosystem}" target="_blank" class="text-zinc-500 hover:text-amber-400 transition-colors">BackchainEcosystem</a></p>
         </div>
 
         </div><!-- max-w-3xl wrapper -->
@@ -745,7 +745,7 @@ async function loadStudentAddresses() {
                     <span class="font-bold text-sm" style="color:#f59e0b;">#${i + 1}</span>
                     <span class="text-zinc-300 font-mono text-sm">${formatAddress(e.args[0])}</span>
                 </div>
-                <a href="https://sepolia.etherscan.io/address/${e.args[0]}" target="_blank" rel="noopener" class="text-zinc-500 hover:text-zinc-300 text-xs">
+                <a href="https://opbnbscan.com/address/${e.args[0]}" target="_blank" rel="noopener" class="text-zinc-500 hover:text-zinc-300 text-xs">
                     <i class="fa-solid fa-external-link"></i>
                 </a>
             </div>

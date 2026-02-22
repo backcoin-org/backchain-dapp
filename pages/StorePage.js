@@ -27,7 +27,7 @@ import { NftTx, FusionTx } from '../modules/transactions/index.js';
 // ============================================================================
 // CONSTANTS
 // ============================================================================
-const EXPLORER_TX = "https://sepolia.etherscan.io/tx/";
+const EXPLORER_TX = "https://opbnbscan.com/tx/";
 const POOL_CACHE_TTL = 30000;
 
 const TIER_CONFIG = {
