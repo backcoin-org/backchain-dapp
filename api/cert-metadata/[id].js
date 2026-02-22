@@ -13,7 +13,7 @@ try {
     const addresses = JSON.parse(readFileSync(join(process.cwd(), 'deployment-addresses.json'), 'utf8'));
     NOTARY_ADDRESS = addresses.notary;
 } catch {
-    NOTARY_ADDRESS = '0x0C073AeBB15447Ea71d34d4BDEFb3490f5178595';
+    NOTARY_ADDRESS = '0xFe3F90C76F1aAEED93b8063238658FF3CAD62d24';
 }
 
 const NOTARY_ABI = [
@@ -69,7 +69,8 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Invalid token ID' });
     }
 
-    const rpcUrl = 'https://opbnb-mainnet-rpc.bnbchain.org';
+    // Use Sepolia RPC (contracts currently deployed on Sepolia testnet)
+    const rpcUrl = 'https://ethereum-sepolia-rpc.publicnode.com';
 
     try {
         const provider = new ethers.JsonRpcProvider(rpcUrl);

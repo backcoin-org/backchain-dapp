@@ -125,7 +125,7 @@ async function loadCertificatesFromContract() {
             const provider = NetworkManager.getProvider();
             if (provider && addresses?.notary) {
                 const contract = new ethers.Contract(addresses.notary, NOTARY_ABI_EVENTS, provider);
-                const fromBlock = 10_308_450;
+                const fromBlock = 10_313_523;
 
                 const transferFilter = contract.filters.CertificateTransferred(null, null, State.userAddress);
                 const transferEvents = await contract.queryFilter(transferFilter, fromBlock);
@@ -257,7 +257,7 @@ async function loadRecentNotarizations() {
     const contract = new ethers.Contract(addresses.notary, NOTARY_ABI_EVENTS, provider);
     const filter = contract.filters.Certified();
 
-    const fromBlock = 10_308_450;
+    const fromBlock = 10_313_523;
 
     const events = await contract.queryFilter(filter, fromBlock);
 

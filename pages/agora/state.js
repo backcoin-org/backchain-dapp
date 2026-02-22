@@ -24,7 +24,7 @@ export const CONTENT_LIMITS = {
 // Sepolia deploy block for V12 contracts (deployed 2026-02-21).
 // All Agora events exist after this block. Using a fixed fromBlock avoids
 // massive eth_getLogs ranges that public RPCs reject silently.
-export const DEPLOY_BLOCK = 10_308_450;
+export const DEPLOY_BLOCK = 10_313_523;
 export const EVENTS_LOOKBACK = DEPLOY_BLOCK;
 
 export const TAGS = [

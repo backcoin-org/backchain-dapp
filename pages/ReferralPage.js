@@ -729,7 +729,7 @@ async function loadStudentAddresses() {
         const eco = new ethers.Contract(addresses.backchainEcosystem, ecosystemManagerABI, provider);
         const filter = eco.filters.TutorSet(null, State.userAddress);
         // V12 deploy block on Sepolia — avoids huge block ranges on public RPCs
-        const events = await eco.queryFilter(filter, 10_308_450);
+        const events = await eco.queryFilter(filter, 10_313_523);
 
         const listEl = document.getElementById('tutor-student-list');
         if (!listEl) return;
