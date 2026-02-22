@@ -365,7 +365,9 @@ export function injectStyles() {
         .bc-tiktok-author { font-size:15px; color:#fff; cursor:pointer; display:flex; align-items:center; gap:8px; }
         .bc-tiktok-author strong { font-weight:700; }
         .bc-tiktok-time { font-size:12px; color:rgba(255,255,255,0.5); }
-        .bc-tiktok-caption { font-size:14px; color:rgba(255,255,255,0.85); line-height:1.4; margin-top:6px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+        .bc-tiktok-caption { font-size:14px; color:rgba(255,255,255,0.85); line-height:1.4; margin-top:6px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; cursor:pointer; }
+        .bc-tiktok-caption.expanded { -webkit-line-clamp:unset; display:block; max-height:50vh; overflow-y:auto; }
+        .bc-tiktok-more { color:var(--bc-text-3); font-weight:600; font-size:13px; }
         .bc-tiktok-actions { display:flex; flex-direction:column; align-items:center; gap:18px; flex-shrink:0; }
         .bc-tiktok-action { display:flex; flex-direction:column; align-items:center; gap:2px; color:rgba(255,255,255,0.85); cursor:pointer; transition:all 0.15s; }
         .bc-tiktok-action:hover { transform:scale(1.15); }
@@ -438,6 +440,25 @@ export function injectStyles() {
 
         .bc-cart-footer { padding:12px 20px; border-top:1px solid var(--bc-border); }
         .bc-cart-warning { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--bc-accent); margin-top:8px; }
+
+        /* Inline wallet button (Agora header) */
+        .bc-wallet-inline { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:20px; border:1px solid var(--bc-border); background:transparent; color:var(--bc-text-2); font-size:12px; font-weight:600; cursor:pointer; transition:all var(--bc-transition); font-family:inherit; }
+        .bc-wallet-inline:hover { background:var(--bc-bg3); border-color:var(--bc-border-h); color:var(--bc-text); }
+        .bc-wallet-inline.connected { border-color:rgba(34,197,94,0.3); }
+        .bc-wallet-inline.connected:hover { border-color:rgba(239,68,68,0.4); color:var(--bc-red); }
+        .bc-wallet-dot { width:8px; height:8px; border-radius:50%; background:var(--bc-green); flex-shrink:0; box-shadow:0 0 6px rgba(34,197,94,0.5); }
+        .bc-wallet-inline i { font-size:13px; color:var(--bc-accent); }
+
+        /* Web3Modal overrides — more subtle backdrop */
+        w3m-modal { --w3m-z-index: 9999 !important; }
+
+        /* Mobile: cart bar above where bottom-tabs used to be */
+        @media (max-width: 1023px) {
+            .bc-cart-bar { bottom:0; }
+            .bc-cart-panel { max-height:calc(100vh - 280px); }
+            /* TikTok feed full height since DApp header + bottom tabs are hidden */
+            .bc-tiktok-feed, .bc-tiktok-card { height:calc(100vh - 110px); }
+        }
     `;
     document.head.appendChild(style);
 }

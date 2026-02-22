@@ -223,7 +223,8 @@ function _renderTikTokCard(post, i) {
     const isVid = post.media?.[0]?.type === 'video' || post.isVideo;
     const mediaUrl = cid ? (resolveContentUrl(cid) || '') : '';
     const authorName = getProfileName(post.author);
-    const caption = post.content ? escapeHtml(post.content.slice(0, 150)) + (post.content.length > 150 ? '...' : '') : '';
+    const fullText = post.content ? escapeHtml(post.content) : '';
+    const isLong = post.content && post.content.length > 100;
     const likeCount = post.likesCount || BC.likesMap.get(post.id)?.size || 0;
     const replyCount = post.repliesCount || BC.replyCountMap.get(post.id) || 0;
     const superETH = formatETH(post.superLikeETH || 0n);
@@ -251,7 +252,7 @@ function _renderTikTokCard(post, i) {
                             <strong>${authorName}</strong>
                             <span class="bc-tiktok-time">${formatTimeAgo(post.timestamp)}</span>
                         </div>
-                        ${caption ? `<div class="bc-tiktok-caption">${caption}</div>` : ''}
+                        ${fullText ? `<div class="bc-tiktok-caption" data-caption-id="${post.id}" onclick="event.stopPropagation(); AgoraPage.toggleCaption('${post.id}')">${fullText}${isLong ? '<span class="bc-tiktok-more"> more</span>' : ''}</div>` : ''}
                     </div>
                     <div class="bc-tiktok-actions">
                         <div class="bc-tiktok-action" onclick="event.stopPropagation(); AgoraPage.viewProfile('${post.author}')">

@@ -3,6 +3,7 @@
 // ============================================================================
 
 import { State } from '../../state.js';
+import { openConnectModal, disconnectWallet as doDisconnect } from '../../modules/wallet.js';
 import { BC, getMaxContent } from './state.js';
 import { getProfileName, getInitials, escapeHtml, linkifyContent } from './utils.js';
 import { injectStyles } from './styles.js';
@@ -40,6 +41,7 @@ function renderHeader() {
                     <span class="bc-brand-name">Agora</span>
                 </div>
                 <div class="bc-header-right">
+                    ${_renderWalletBtn()}
                     <button class="bc-icon-btn" onclick="AgoraPage.refresh()" title="Refresh"><i class="fa-solid fa-arrows-rotate"></i></button>
                 </div>
             </div>
@@ -55,6 +57,38 @@ function renderHeader() {
                 </button>
             </div>
         </div>`;
+}
+
+// ============================================================================
+// WALLET BUTTON (inline in Agora header)
+// ============================================================================
+
+function _renderWalletBtn() {
+    if (State.isConnected && State.userAddress) {
+        const short = State.userAddress.slice(0, 6) + '...' + State.userAddress.slice(-4);
+        return `<button class="bc-wallet-inline connected" onclick="event.stopPropagation(); AgoraPage.disconnectWallet()" title="Disconnect ${short}">
+            <span class="bc-wallet-dot"></span>${short}
+        </button>`;
+    }
+    return `<button class="bc-wallet-inline" onclick="event.stopPropagation(); AgoraPage.connectWallet()" title="Connect Wallet">
+        <i class="fa-solid fa-plug"></i>
+    </button>`;
+}
+
+// Hide/show the main DApp header when Agora is active (mobile only)
+function _hideDappHeader() {
+    const header = document.querySelector('header.sticky');
+    if (header) header.style.display = 'none';
+    // Also hide the bottom tabs on mobile — Agora has its own nav
+    const bottomTabs = document.getElementById('bottom-tabs');
+    if (bottomTabs) bottomTabs.style.display = 'none';
+}
+
+function _restoreDappHeader() {
+    const header = document.querySelector('header.sticky');
+    if (header) header.style.display = '';
+    const bottomTabs = document.getElementById('bottom-tabs');
+    if (bottomTabs) bottomTabs.style.display = '';
 }
 
 // ============================================================================
@@ -256,6 +290,7 @@ function renderCartBar() {
 
 function render() {
     injectStyles();
+    _hideDappHeader();
     const section = document.getElementById('agora');
     if (!section) return;
     section.innerHTML = `
@@ -387,6 +422,19 @@ function _initCarouselSwipe() {
 _initCarouselSwipe();
 
 // ============================================================================
+// TIKTOK CAPTION TOGGLE
+// ============================================================================
+
+function _toggleCaption(postId) {
+    const el = document.querySelector(`.bc-tiktok-caption[data-caption-id="${postId}"]`);
+    if (!el) return;
+    el.classList.toggle('expanded');
+    // Update "more" hint
+    const hint = el.querySelector('.bc-tiktok-more');
+    if (hint) hint.textContent = el.classList.contains('expanded') ? ' less' : ' more';
+}
+
+// ============================================================================
 // EXPAND POST (inline text expansion)
 // ============================================================================
 
@@ -421,6 +469,10 @@ export const AgoraPage = {
         _observeVideos();
         _observeSentinel();
         checkDeepLink();
+    },
+
+    cleanup() {
+        _restoreDappHeader();
     },
 
     // Called by app.js when wallet state changes without full page navigation
@@ -554,10 +606,15 @@ export const AgoraPage = {
     toggleCart,
     submitCart,
 
-    // Carousel + Expand
+    // Carousel + Expand + Caption Toggle
+    toggleCaption: _toggleCaption,
     expandPost: _expandPost,
     carouselPrev(postId) { _moveCarousel(postId, -1); },
     carouselNext(postId) { _moveCarousel(postId, 1); },
+
+    // Wallet
+    connectWallet() { openConnectModal(); },
+    disconnectWallet() { doDisconnect(); },
 
     // Live streaming
     goLive,
