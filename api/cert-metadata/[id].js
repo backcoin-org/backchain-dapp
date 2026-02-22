@@ -26,7 +26,7 @@ const DOC_TYPE_NAMES = [
     'Financial', 'Legal', 'Medical', 'IP', 'Other'
 ];
 
-const IPFS_GATEWAY = 'https://dweb.link/ipfs/';
+const IPFS_GATEWAY = 'https://gateway.lighthouse.storage/ipfs/';
 const ARWEAVE_GATEWAY = 'https://gateway.irys.xyz';
 
 function resolveUri(uri) {

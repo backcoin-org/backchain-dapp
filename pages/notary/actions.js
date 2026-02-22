@@ -304,6 +304,10 @@ export async function handleTransfer() {
 export async function addToWallet(tokenId) {
     // Try wallet_watchAsset — Notary V4 IS an ERC-721 natively
     if (window.ethereum && addresses?.notary) {
+        // Resolve image URL from cert data if available
+        const cert = NT.selectedCert;
+        const imageUrl = cert?.ipfs ? resolveStorageUrl(cert.ipfs) : null;
+
         try {
             const wasAdded = await window.ethereum.request({
                 method: 'wallet_watchAsset',
@@ -312,6 +316,7 @@ export async function addToWallet(tokenId) {
                     options: {
                         address: addresses.notary,
                         tokenId: String(tokenId),
+                        ...(imageUrl ? { image: imageUrl } : {}),
                     },
                 },
             });
