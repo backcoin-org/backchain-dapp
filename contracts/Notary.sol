@@ -4,28 +4,29 @@ pragma solidity ^0.8.28;
 import "./IBackchain.sol";
 
 // ============================================================================
-// NOTARY V4 — IMMUTABLE ERC-721 CERTIFICATE NFTs (Tier 1: ETH only)
+// NOTARY V5 — CARTÓRIO DIGITAL (ERC-721)
 // ============================================================================
 //
-// On-chain document certification with native ERC-721 NFT minting.
-// Each certified document becomes a real, transferable NFT.
+// Decentralized digital registry combining document certification with
+// asset registration, ownership transfer, and on-chain annotations.
 //
-// V4 Changes (over V3):
-//   - Native ERC-721 compliance (ownerOf, balanceOf, tokenURI, transferFrom, etc.)
-//   - certify() mints an NFT (emits Transfer + Certified)
-//   - transferCertificate() emits ERC-721 Transfer event (with fee)
-//   - Standard transferFrom/safeTransferFrom (free, no ecosystem fee)
-//   - tokenURI() returns metadata API URL
-//   - supportsInterface for ERC165 + ERC721 + ERC721Metadata
-//   - Reverse mapping certIdByHash for efficient lookups
+// V5 Changes (over V4):
+//   - REMOVED: Boost system entirely (boostCertificate, isBoosted, boostExpiry)
+//   - REMOVED: totalEthCollected, totalBoostRevenue counters
+//   - REMOVED: DOC_* constants (unused, only MAX_DOC_TYPE kept)
+//   - ADDED: Asset Registry (registerAsset, transferAsset)
+//   - ADDED: Annotations/Averbações (addAnnotation)
+//   - ADDED: setBaseURI (ecosystem owner only)
+//   - MODIFIED: ownerOf/_transferNFT handle both certificates and assets
+//   - MODIFIED: verify/getCertificate return 5 fields (no boost)
+//   - MODIFIED: getStats returns (certCount, totalTransfers, assetCount, annotationTotal)
 //
-// Preserved from V3:
-//   - Per-docType fees (10 action IDs)
-//   - Certificate boost (1-30 days)
-//   - transferCertificate with fee + operator
-//   - getCertificatesBatch, verify, getStats
+// Asset Types: 0=Imóvel, 1=Veículo, 2=Propriedade Intelectual, 3=Outros
+// Annotation Types: 0=Hipoteca, 1=Penhora, 2=Ordem Judicial, 3=Seguro,
+//                   4=Reforma, 5=Observação, 6=Cancelamento
 //
-// No admin. No pause. Fully immutable and permissionless.
+// Shared tokenId sequence: certificates and assets use the same counter.
+// Both are ERC-721 NFTs in the same collection.
 //
 // ============================================================================
 
@@ -46,29 +47,20 @@ contract Notary {
     string  public constant symbol = "BKCN";
 
     bytes32 public constant MODULE_ID        = keccak256("NOTARY");
+
+    // Certificate actions
     bytes32 public constant ACTION_CERTIFY   = keccak256("NOTARY_CERTIFY");
-    bytes32 public constant ACTION_BOOST     = keccak256("NOTARY_BOOST");
     bytes32 public constant ACTION_TRANSFER  = keccak256("NOTARY_TRANSFER");
 
-    /// @notice Maximum documents per batch transaction
+    // Asset actions
+    bytes32 public constant ACTION_ASSET_REGISTER = keccak256("ASSET_REGISTER");
+    bytes32 public constant ACTION_ASSET_TRANSFER = keccak256("ASSET_TRANSFER");
+    bytes32 public constant ACTION_ASSET_ANNOTATE = keccak256("ASSET_ANNOTATE");
+
     uint8 public constant MAX_BATCH_SIZE = 20;
-
-    /// @notice Maximum boost duration in days
-    uint8 public constant MAX_BOOST_DAYS = 30;
-
-    // Document types
-    uint8 public constant DOC_GENERAL     = 0;
-    uint8 public constant DOC_CONTRACT    = 1;
-    uint8 public constant DOC_IDENTITY    = 2;
-    uint8 public constant DOC_DIPLOMA     = 3;
-    uint8 public constant DOC_PROPERTY    = 4;
-    uint8 public constant DOC_FINANCIAL   = 5;
-    uint8 public constant DOC_LEGAL       = 6;
-    uint8 public constant DOC_MEDICAL     = 7;
-    uint8 public constant DOC_IP          = 8;
-    uint8 public constant DOC_OTHER       = 9;
-
     uint8 private constant MAX_DOC_TYPE = 9;
+    uint8 public constant MAX_ASSET_TYPE = 3;
+    uint8 public constant MAX_ANNOTATION_TYPE = 6;
 
     // ERC165 interface IDs
     bytes4 private constant ERC165_ID          = 0x01ffc9a7;
@@ -82,15 +74,14 @@ contract Notary {
     IBackchainEcosystem public immutable ecosystem;
 
     // ════════════════════════════════════════════════════════════════════════
-    // STATE — NOTARY
+    // STATE — CERTIFICATES
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @dev Certificate data — packed in 1 storage slot (31 bytes)
+    /// @dev Certificate data — packed in 1 storage slot (27 bytes)
     struct Certificate {
-        address owner;
-        uint48  timestamp;
-        uint8   docType;
-        uint32  boostExpiry;
+        address owner;      // 20 bytes
+        uint48  timestamp;  // 6 bytes
+        uint8   docType;    // 1 byte
     }
 
     mapping(bytes32 => Certificate) public certs;
@@ -98,10 +89,37 @@ contract Notary {
     mapping(uint256 => bytes32) public certById;
     mapping(bytes32 => uint256) public certIdByHash;
 
-    uint256 public certCount;
-    uint256 public totalEthCollected;
-    uint256 public totalBoostRevenue;
+    uint256 public certCount;       // shared tokenId counter (certs + assets)
     uint256 public totalTransfers;
+
+    // ════════════════════════════════════════════════════════════════════════
+    // STATE — ASSET REGISTRY
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @dev Asset data — packed in 1 storage slot (32 bytes)
+    struct Asset {
+        address owner;           // 20 bytes
+        uint48  registeredAt;    // 6 bytes
+        uint8   assetType;       // 1 byte
+        uint8   annotationCount; // 1 byte (max 255)
+        uint32  transferCount;   // 4 bytes
+    }
+
+    /// @dev Annotation — packed in 1 storage slot (27 bytes)
+    struct Annotation {
+        address author;          // 20 bytes
+        uint48  timestamp;       // 6 bytes
+        uint8   annotationType;  // 1 byte
+    }
+
+    mapping(uint256 => Asset) public assets;
+    mapping(uint256 => string) public assetMeta;
+    mapping(uint256 => bytes32) public assetDocHash;
+    mapping(uint256 => mapping(uint256 => Annotation)) public annotations;
+    mapping(uint256 => mapping(uint256 => string)) public annotationMeta;
+
+    uint256 public assetCount;
+    uint256 public annotationTotal;
 
     // ════════════════════════════════════════════════════════════════════════
     // STATE — ERC-721
@@ -114,7 +132,7 @@ contract Notary {
     string private _baseTokenURI;
 
     // ════════════════════════════════════════════════════════════════════════
-    // EVENTS — NOTARY
+    // EVENTS — CERTIFICATES
     // ════════════════════════════════════════════════════════════════════════
 
     event Certified(
@@ -138,12 +156,34 @@ contract Notary {
         address indexed to
     );
 
-    event CertificateBoosted(
-        bytes32 indexed documentHash,
-        address indexed booster,
-        uint32  boostExpiry,
+    // ════════════════════════════════════════════════════════════════════════
+    // EVENTS — ASSET REGISTRY
+    // ════════════════════════════════════════════════════════════════════════
+
+    event AssetRegistered(
+        uint256 indexed tokenId,
+        address indexed owner,
+        uint8   assetType,
+        bytes32 documentHash,
         address operator
     );
+
+    event AssetTransferred(
+        uint256 indexed tokenId,
+        address indexed from,
+        address indexed to,
+        uint256 declaredValue,
+        uint48  timestamp
+    );
+
+    event AnnotationAdded(
+        uint256 indexed tokenId,
+        uint256 indexed annotationId,
+        address indexed author,
+        uint8   annotationType
+    );
+
+    event BaseURIUpdated(string newBaseURI);
 
     // ════════════════════════════════════════════════════════════════════════
     // EVENTS — ERC-721
@@ -165,12 +205,13 @@ contract Notary {
     error ZeroAddress();
     error EmptyBatch();
     error BatchTooLarge();
-    error ZeroDays();
-    error TooManyDays();
     error NotCertified();
     error TokenNotFound();
     error NotOwnerOrApproved();
     error NonERC721Receiver();
+    error InvalidAssetType();
+    error InvalidAnnotationType();
+    error NotEcosystemOwner();
 
     // ════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -209,8 +250,7 @@ contract Notary {
         certs[documentHash] = Certificate({
             owner: msg.sender,
             timestamp: uint48(block.timestamp),
-            docType: docType,
-            boostExpiry: 0
+            docType: docType
         });
 
         if (bytes(meta).length > 0) {
@@ -221,10 +261,8 @@ contract Notary {
         certById[certId] = documentHash;
         certIdByHash[documentHash] = certId;
 
-        // ERC-721 mint
         _balances[msg.sender]++;
 
-        totalEthCollected += msg.value;
         ecosystem.collectFee{value: msg.value}(
             msg.sender, operator, address(0), MODULE_ID, 0
         );
@@ -267,61 +305,30 @@ contract Notary {
             certs[hash] = Certificate({
                 owner: msg.sender,
                 timestamp: ts,
-                docType: docTypes[i],
-                boostExpiry: 0
+                docType: docTypes[i]
             });
 
             if (bytes(metas[i]).length > 0) {
                 metadata[hash] = metas[i];
             }
 
-            uint256 certId = ++certCount;
-            certById[certId] = hash;
-            certIdByHash[hash] = certId;
+            uint256 cid = ++certCount;
+            certById[cid] = hash;
+            certIdByHash[hash] = cid;
 
-            emit Transfer(address(0), msg.sender, certId);
-            emit Certified(certId, msg.sender, hash, docTypes[i], operator);
+            emit Transfer(address(0), msg.sender, cid);
+            emit Certified(cid, msg.sender, hash, docTypes[i], operator);
 
             unchecked { ++i; }
         }
 
-        // ERC-721 balance update (batch)
         _balances[msg.sender] += count;
 
-        totalEthCollected += msg.value;
         ecosystem.collectFee{value: msg.value}(
             msg.sender, operator, address(0), MODULE_ID, 0
         );
 
         emit BatchCertified(msg.sender, startId, count, operator);
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
-    // BOOST
-    // ════════════════════════════════════════════════════════════════════════
-
-    function boostCertificate(bytes32 documentHash, uint256 days_, address operator) external payable {
-        Certificate storage cert = certs[documentHash];
-        if (cert.timestamp == 0) revert NotCertified();
-        if (days_ == 0) revert ZeroDays();
-        if (days_ > MAX_BOOST_DAYS) revert TooManyDays();
-
-        uint256 feePerDay = ecosystem.calculateFee(ACTION_BOOST, 0);
-        uint256 totalFee = feePerDay * days_;
-        if (msg.value < totalFee) revert InsufficientFee();
-
-        uint256 baseTime = block.timestamp;
-        if (cert.boostExpiry > block.timestamp) {
-            baseTime = uint256(cert.boostExpiry);
-        }
-        cert.boostExpiry = uint32(baseTime + days_ * 1 days);
-
-        totalBoostRevenue += msg.value;
-        ecosystem.collectFee{value: msg.value}(
-            msg.sender, operator, address(0), MODULE_ID, 0
-        );
-
-        emit CertificateBoosted(documentHash, msg.sender, cert.boostExpiry, operator);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -337,23 +344,163 @@ contract Notary {
         if (msg.value < fee) revert InsufficientFee();
 
         address oldOwner = cert.owner;
-        uint256 certId = certIdByHash[documentHash];
+        uint256 cid = certIdByHash[documentHash];
 
         cert.owner = newOwner;
         _balances[oldOwner]--;
         _balances[newOwner]++;
-        delete _tokenApprovals[certId];
+        delete _tokenApprovals[cid];
         ++totalTransfers;
 
         if (msg.value > 0) {
-            totalEthCollected += msg.value;
             ecosystem.collectFee{value: msg.value}(
                 msg.sender, operator, address(0), MODULE_ID, 0
             );
         }
 
-        emit Transfer(oldOwner, newOwner, certId);
+        emit Transfer(oldOwner, newOwner, cid);
         emit CertificateTransferred(documentHash, oldOwner, newOwner);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // REGISTER ASSET (mints ERC-721 NFT)
+    // ════════════════════════════════════════════════════════════════════════
+
+    function registerAsset(
+        uint8 assetType,
+        string calldata meta,
+        bytes32 documentHash,
+        address operator
+    ) external payable returns (uint256 tokenId) {
+        if (assetType > MAX_ASSET_TYPE) revert InvalidAssetType();
+
+        uint256 fee = ecosystem.calculateFee(ACTION_ASSET_REGISTER, 0);
+        if (msg.value < fee) revert InsufficientFee();
+
+        tokenId = ++certCount; // shared sequence
+
+        assets[tokenId] = Asset({
+            owner: msg.sender,
+            registeredAt: uint48(block.timestamp),
+            assetType: assetType,
+            annotationCount: 0,
+            transferCount: 0
+        });
+
+        if (bytes(meta).length > 0) assetMeta[tokenId] = meta;
+        if (documentHash != bytes32(0)) assetDocHash[tokenId] = documentHash;
+
+        ++assetCount;
+        _balances[msg.sender]++;
+
+        ecosystem.collectFee{value: msg.value}(
+            msg.sender, operator, address(0), MODULE_ID, 0
+        );
+
+        emit Transfer(address(0), msg.sender, tokenId);
+        emit AssetRegistered(tokenId, msg.sender, assetType, documentHash, operator);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // TRANSFER ASSET (ownership change with audit trail)
+    // ════════════════════════════════════════════════════════════════════════
+
+    function transferAsset(
+        uint256 tokenId,
+        address newOwner,
+        uint256 declaredValue,
+        string calldata meta,
+        address operator
+    ) external payable {
+        Asset storage asset = assets[tokenId];
+        if (asset.registeredAt == 0) revert TokenNotFound();
+        if (!_isApprovedOrOwner(msg.sender, tokenId)) revert NotOwnerOrApproved();
+        if (newOwner == address(0)) revert ZeroAddress();
+
+        uint256 fee = ecosystem.calculateFee(ACTION_ASSET_TRANSFER, 0);
+        if (msg.value < fee) revert InsufficientFee();
+
+        address oldOwner = asset.owner;
+        asset.owner = newOwner;
+        asset.transferCount++;
+
+        _balances[oldOwner]--;
+        _balances[newOwner]++;
+        delete _tokenApprovals[tokenId];
+        ++totalTransfers;
+
+        // Store transfer details as annotation if meta provided
+        if (bytes(meta).length > 0) {
+            uint256 annId = asset.annotationCount;
+            annotations[tokenId][annId] = Annotation({
+                author: msg.sender,
+                timestamp: uint48(block.timestamp),
+                annotationType: 5 // Observação — transfer note
+            });
+            annotationMeta[tokenId][annId] = meta;
+            asset.annotationCount++;
+            ++annotationTotal;
+        }
+
+        ecosystem.collectFee{value: msg.value}(
+            msg.sender, operator, address(0), MODULE_ID, 0
+        );
+
+        emit Transfer(oldOwner, newOwner, tokenId);
+        emit AssetTransferred(tokenId, oldOwner, newOwner, declaredValue, uint48(block.timestamp));
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // ANNOTATIONS (averbações)
+    // ════════════════════════════════════════════════════════════════════════
+
+    function addAnnotation(
+        uint256 tokenId,
+        uint8 annotationType,
+        string calldata meta,
+        address operator
+    ) external payable returns (uint256 annotationId) {
+        Asset storage asset = assets[tokenId];
+        if (asset.registeredAt == 0) revert TokenNotFound();
+        if (!_isApprovedOrOwner(msg.sender, tokenId)) revert NotOwnerOrApproved();
+        if (annotationType > MAX_ANNOTATION_TYPE) revert InvalidAnnotationType();
+
+        uint256 fee = ecosystem.calculateFee(ACTION_ASSET_ANNOTATE, 0);
+        if (msg.value < fee) revert InsufficientFee();
+
+        annotationId = asset.annotationCount;
+        annotations[tokenId][annotationId] = Annotation({
+            author: msg.sender,
+            timestamp: uint48(block.timestamp),
+            annotationType: annotationType
+        });
+        if (bytes(meta).length > 0) {
+            annotationMeta[tokenId][annotationId] = meta;
+        }
+
+        asset.annotationCount++;
+        ++annotationTotal;
+
+        ecosystem.collectFee{value: msg.value}(
+            msg.sender, operator, address(0), MODULE_ID, 0
+        );
+
+        emit AnnotationAdded(tokenId, annotationId, msg.sender, annotationType);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // SET BASE URI (ecosystem owner only)
+    // ════════════════════════════════════════════════════════════════════════
+
+    function setBaseURI(string calldata newBaseURI) external {
+        (bool ok, bytes memory data) = address(ecosystem).staticcall(
+            abi.encodeWithSignature("owner()")
+        );
+        if (!ok || data.length != 32 || msg.sender != abi.decode(data, (address)))
+            revert NotEcosystemOwner();
+
+        _baseTokenURI = newBaseURI;
+        emit BaseURIUpdated(newBaseURI);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -365,10 +512,16 @@ contract Notary {
     }
 
     function ownerOf(uint256 tokenId) public view returns (address owner) {
+        // Check certificate
         bytes32 hash = certById[tokenId];
-        if (hash == bytes32(0)) revert TokenNotFound();
-        owner = certs[hash].owner;
-        if (owner == address(0)) revert TokenNotFound();
+        if (hash != bytes32(0)) {
+            owner = certs[hash].owner;
+            if (owner != address(0)) return owner;
+        }
+        // Check asset
+        Asset memory a = assets[tokenId];
+        if (a.registeredAt != 0) return a.owner;
+        revert TokenNotFound();
     }
 
     function balanceOf(address owner) public view returns (uint256) {
@@ -377,14 +530,16 @@ contract Notary {
     }
 
     function tokenURI(uint256 tokenId) external view returns (string memory) {
+        // Validate token exists (cert or asset)
         bytes32 hash = certById[tokenId];
-        if (hash == bytes32(0)) revert TokenNotFound();
+        if (hash == bytes32(0) && assets[tokenId].registeredAt == 0) revert TokenNotFound();
         return string(abi.encodePacked(_baseTokenURI, _toString(tokenId)));
     }
 
     function getApproved(uint256 tokenId) public view returns (address) {
+        // Validate token exists
         bytes32 hash = certById[tokenId];
-        if (hash == bytes32(0)) revert TokenNotFound();
+        if (hash == bytes32(0) && assets[tokenId].registeredAt == 0) revert TokenNotFound();
         return _tokenApprovals[tokenId];
     }
 
@@ -427,7 +582,7 @@ contract Notary {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // NOTARY — VIEWS
+    // NOTARY — VIEWS (Certificates)
     // ════════════════════════════════════════════════════════════════════════
 
     function verify(bytes32 documentHash) external view returns (
@@ -435,19 +590,11 @@ contract Notary {
         address owner,
         uint48  timestamp,
         uint8   docType,
-        string  memory meta,
-        bool    boosted,
-        uint32  boostExpiry
+        string  memory meta
     ) {
         Certificate memory cert = certs[documentHash];
-        if (cert.timestamp == 0) return (false, address(0), 0, 0, "", false, 0);
-
-        return (
-            true, cert.owner, cert.timestamp, cert.docType,
-            metadata[documentHash],
-            block.timestamp < cert.boostExpiry,
-            cert.boostExpiry
-        );
+        if (cert.timestamp == 0) return (false, address(0), 0, 0, "");
+        return (true, cert.owner, cert.timestamp, cert.docType, metadata[documentHash]);
     }
 
     function getCertificate(uint256 certId) external view returns (
@@ -455,50 +602,36 @@ contract Notary {
         address owner,
         uint48  timestamp,
         uint8   docType,
-        string  memory meta,
-        bool    boosted,
-        uint32  boostExpiry
+        string  memory meta
     ) {
         documentHash = certById[certId];
-        if (documentHash == bytes32(0)) return (bytes32(0), address(0), 0, 0, "", false, 0);
-
+        if (documentHash == bytes32(0)) return (bytes32(0), address(0), 0, 0, "");
         Certificate memory cert = certs[documentHash];
-        return (
-            documentHash, cert.owner, cert.timestamp, cert.docType,
-            metadata[documentHash],
-            block.timestamp < cert.boostExpiry,
-            cert.boostExpiry
-        );
+        return (documentHash, cert.owner, cert.timestamp, cert.docType, metadata[documentHash]);
     }
 
     function getCertificatesBatch(uint256 start, uint256 count) external view returns (
         bytes32[] memory hashes,
         address[] memory owners,
         uint48[]  memory timestamps,
-        uint8[]   memory docTypes,
-        bool[]    memory boostedFlags,
-        uint32[]  memory boostExpiries
+        uint8[]   memory docTypes
     ) {
         uint256 end = start + count;
         if (end > certCount + 1) end = certCount + 1;
         uint256 len = end > start ? end - start : 0;
 
-        hashes        = new bytes32[](len);
-        owners        = new address[](len);
-        timestamps    = new uint48[](len);
-        docTypes      = new uint8[](len);
-        boostedFlags  = new bool[](len);
-        boostExpiries = new uint32[](len);
+        hashes     = new bytes32[](len);
+        owners     = new address[](len);
+        timestamps = new uint48[](len);
+        docTypes   = new uint8[](len);
 
         for (uint256 i = 0; i < len; i++) {
             bytes32 h = certById[start + i];
             Certificate memory c = certs[h];
-            hashes[i]        = h;
-            owners[i]        = c.owner;
-            timestamps[i]    = c.timestamp;
-            docTypes[i]      = c.docType;
-            boostedFlags[i]  = block.timestamp < c.boostExpiry;
-            boostExpiries[i] = c.boostExpiry;
+            hashes[i]     = h;
+            owners[i]     = c.owner;
+            timestamps[i] = c.timestamp;
+            docTypes[i]   = c.docType;
         }
     }
 
@@ -506,21 +639,57 @@ contract Notary {
         return ecosystem.calculateFee(_getCertifyAction(0), 0);
     }
 
-    function isBoosted(bytes32 documentHash) external view returns (bool) {
-        return block.timestamp < certs[documentHash].boostExpiry;
+    // ════════════════════════════════════════════════════════════════════════
+    // ASSET — VIEWS
+    // ════════════════════════════════════════════════════════════════════════
+
+    function getAsset(uint256 tokenId) external view returns (
+        address owner,
+        uint48  registeredAt,
+        uint8   assetType,
+        uint8   annotationCount,
+        uint32  transferCount,
+        string  memory meta,
+        bytes32 documentHash
+    ) {
+        Asset memory a = assets[tokenId];
+        if (a.registeredAt == 0) return (address(0), 0, 0, 0, 0, "", bytes32(0));
+        return (a.owner, a.registeredAt, a.assetType, a.annotationCount, a.transferCount, assetMeta[tokenId], assetDocHash[tokenId]);
     }
+
+    function getAnnotation(uint256 tokenId, uint256 index) external view returns (
+        address author,
+        uint48  timestamp,
+        uint8   annotationType,
+        string  memory meta
+    ) {
+        Annotation memory ann = annotations[tokenId][index];
+        return (ann.author, ann.timestamp, ann.annotationType, annotationMeta[tokenId][index]);
+    }
+
+    function getAnnotationCount(uint256 tokenId) external view returns (uint256) {
+        return assets[tokenId].annotationCount;
+    }
+
+    function isAsset(uint256 tokenId) external view returns (bool) {
+        return assets[tokenId].registeredAt != 0;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // GLOBAL VIEWS
+    // ════════════════════════════════════════════════════════════════════════
 
     function getStats() external view returns (
         uint256 _certCount,
-        uint256 _totalEthCollected,
-        uint256 _totalBoostRevenue,
-        uint256 _totalTransfers
+        uint256 _totalTransfers,
+        uint256 _assetCount,
+        uint256 _annotationTotal
     ) {
-        return (certCount, totalEthCollected, totalBoostRevenue, totalTransfers);
+        return (certCount, totalTransfers, assetCount, annotationTotal);
     }
 
     function version() external pure returns (string memory) {
-        return "4.0.0";
+        return "5.0.0";
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -529,12 +698,22 @@ contract Notary {
 
     function _transferNFT(address from, address to, uint256 tokenId) internal {
         if (to == address(0)) revert ZeroAddress();
-        bytes32 hash = certById[tokenId];
-        if (hash == bytes32(0)) revert TokenNotFound();
-        Certificate storage cert = certs[hash];
-        if (cert.owner != from) revert NotOwnerOrApproved();
 
-        cert.owner = to;
+        // Check certificate
+        bytes32 hash = certById[tokenId];
+        if (hash != bytes32(0)) {
+            Certificate storage cert = certs[hash];
+            if (cert.owner != from) revert NotOwnerOrApproved();
+            cert.owner = to;
+        } else {
+            // Check asset
+            Asset storage asset = assets[tokenId];
+            if (asset.registeredAt == 0) revert TokenNotFound();
+            if (asset.owner != from) revert NotOwnerOrApproved();
+            asset.owner = to;
+            asset.transferCount++;
+        }
+
         _balances[from]--;
         _balances[to]++;
         delete _tokenApprovals[tokenId];

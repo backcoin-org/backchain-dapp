@@ -112,22 +112,30 @@ export {
     getMarketplaceStats
 } from './rental-tx.js';
 
-// Notary V3 (per-docType fees, boost, transfer, batch reads)
+// Notary V5 — Cartório Digital (certs + assets + annotations)
 export {
     NotaryTx,
     certify,
     notarize, // backward-compat alias
-    boostCertificate as notaryBoostCertificate,
     transferCertificate as notaryTransferCertificate,
+    registerAsset,
+    transferAsset,
+    addAnnotation,
     verify,
     verifyByHash, // backward-compat alias
     getCertificate,
     getDocument, // backward-compat alias
     getCertificatesBatch,
+    getAsset,
+    getAnnotation,
+    getAnnotations,
+    isAsset,
     getCertifyFee,
     getFee as notaryGetFee,
-    getBoostCost as notaryGetBoostCost,
     getTransferFee as notaryGetTransferFee,
+    getAssetRegisterFee,
+    getAssetTransferFee,
+    getAnnotateFee,
     getTotalDocuments,
     getStats as notaryGetStats,
     calculateFileHash,

@@ -1,5 +1,5 @@
 // pages/notary/data-loader.js
-// Notary V10 — Data loading
+// Notary V5 — Cartório Digital — Data loading
 // ============================================================================
 
 import { State } from '../../state.js';
@@ -19,6 +19,20 @@ export async function loadFees(docType = 0) {
     } catch {
         NT.ethFee = ethers?.parseEther('0.0001') || 0n;
         NT.feesLoaded = true;
+    }
+
+    // Load asset fees
+    try {
+        const [regFee, xferFee, annFee] = await Promise.all([
+            NotaryTx.getAssetRegisterFee(),
+            NotaryTx.getAssetTransferFee(),
+            NotaryTx.getAnnotateFee()
+        ]);
+        NT.assetRegisterFee = regFee.fee;
+        NT.assetTransferFee = xferFee.fee;
+        NT.annotateFee = annFee.fee;
+    } catch (e) {
+        console.warn('[NotaryPage] Could not load asset fees:', e.message);
     }
 
     // Also calculate upload cost if file is selected
@@ -55,7 +69,7 @@ async function loadCertificatesFromContract() {
     const total = await NotaryTx.getTotalDocuments();
     if (total === 0) return [];
 
-    console.log(`[NotaryPage] Total certs on-chain: ${total}, scanning for owner: ${State.userAddress}`);
+    console.log(`[NotaryPage] Total tokens on-chain: ${total}, scanning for owner: ${State.userAddress}`);
 
     const userAddr = State.userAddress.toLowerCase();
     const userCerts = [];
@@ -84,8 +98,6 @@ async function loadCertificatesFromContract() {
                 docType: cert.docType ?? detail?.docType ?? 0,
                 timestamp: cert.timestamp || detail?.timestamp || 0,
                 owner: cert.owner,
-                isBoosted: cert.isBoosted || detail?.isBoosted || false,
-                boostExpiry: cert.boostExpiry || detail?.boostExpiry || 0,
                 ipfs: parsed.uri || extractStorageUri(detail?.meta || ''),
                 mimeType: parsed.type || '',
                 fileName: parsed.name || '',
@@ -113,17 +125,13 @@ async function loadCertificatesFromContract() {
             const provider = NetworkManager.getProvider();
             if (provider && addresses?.notary) {
                 const contract = new ethers.Contract(addresses.notary, NOTARY_ABI_EVENTS, provider);
-                // V12 deploy block on Sepolia — use fixed fromBlock for public RPC compat
                 const fromBlock = 10_308_450;
 
-                // Query transfers TO current user
                 const transferFilter = contract.filters.CertificateTransferred(null, null, State.userAddress);
                 const transferEvents = await contract.queryFilter(transferFilter, fromBlock);
 
-                // Build set of received document hashes
                 const receivedHashes = new Set(transferEvents.map(ev => ev.args.documentHash.toLowerCase()));
 
-                // Mark enriched certs as received
                 for (const cert of enriched) {
                     if (receivedHashes.has(cert.hash?.toLowerCase())) {
                         cert.received = true;
@@ -137,6 +145,83 @@ async function loadCertificatesFromContract() {
 
     return enriched.sort((a, b) => b.id - a.id);
 }
+
+// ============================================================================
+// ASSET LOADING
+// ============================================================================
+
+export async function loadAssets() {
+    if (!State.isConnected || !State.userAddress) return;
+
+    NT.assetsLoading = true;
+    NT._render();
+
+    try {
+        const assets = await loadAssetsFromContract();
+        NT.assets = assets;
+        console.log('[NotaryPage] Loaded', assets.length, 'assets from contract');
+    } catch (err) {
+        console.error('[NotaryPage] Asset load failed:', err);
+        NT.assets = [];
+    }
+
+    NT.assetsLoading = false;
+    NT._render();
+}
+
+async function loadAssetsFromContract() {
+    const total = await NotaryTx.getTotalDocuments();
+    if (total === 0) return [];
+
+    const userAddr = State.userAddress.toLowerCase();
+    const userAssets = [];
+
+    // Scan all tokenIds for assets owned by user
+    for (let id = 1; id <= total; id++) {
+        try {
+            const isAsset = await NotaryTx.isAsset(id);
+            if (!isAsset) continue;
+
+            const asset = await NotaryTx.getAsset(id);
+            if (!asset) continue;
+            if (asset.owner.toLowerCase() !== userAddr) continue;
+
+            const parsed = parseMetaJson(asset.meta || '');
+            userAssets.push({
+                id: asset.id,
+                owner: asset.owner,
+                assetType: asset.assetType,
+                assetTypeName: asset.assetTypeName,
+                registeredAt: asset.registeredAt,
+                date: asset.date,
+                annotationCount: asset.annotationCount,
+                transferCount: asset.transferCount,
+                documentHash: asset.documentHash,
+                description: parsed.desc || parsed.name || '',
+                meta: asset.meta,
+                parsedMeta: parsed
+            });
+        } catch {
+            // Skip failed reads
+        }
+    }
+
+    return userAssets.sort((a, b) => b.id - a.id);
+}
+
+export async function loadAssetAnnotations(tokenId) {
+    try {
+        const annotations = await NotaryTx.getAnnotations(tokenId);
+        NT.selectedAssetAnnotations = annotations || [];
+    } catch (err) {
+        console.error('[NotaryPage] Annotations load failed:', err);
+        NT.selectedAssetAnnotations = [];
+    }
+}
+
+// ============================================================================
+// STATS
+// ============================================================================
 
 export async function loadStats() {
     NT.statsLoading = true;
@@ -172,7 +257,6 @@ async function loadRecentNotarizations() {
     const contract = new ethers.Contract(addresses.notary, NOTARY_ABI_EVENTS, provider);
     const filter = contract.filters.Certified();
 
-    // V12 deploy block on Sepolia — use fixed fromBlock for public RPC compat
     const fromBlock = 10_308_450;
 
     const events = await contract.queryFilter(filter, fromBlock);
@@ -180,7 +264,6 @@ async function loadRecentNotarizations() {
     // Get 20 most recent
     const recent = events.slice(-20).reverse();
 
-    // V9: Certified event args: certId, owner, documentHash, docType, operator
     NT.recentNotarizations = recent.map(ev => ({
         tokenId: Number(ev.args.certId),
         owner: ev.args.owner,

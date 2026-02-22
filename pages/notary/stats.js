@@ -1,5 +1,5 @@
 // pages/notary/stats.js
-// Notary V10 — Stats tab
+// Notary V5 — Stats tab
 // ============================================================================
 
 import { addresses } from '../../config.js';
@@ -26,29 +26,29 @@ export function renderStats(el) {
                     <div style="width:36px;height:36px;border-radius:50%;background:var(--nt-accent-glow);display:inline-flex;align-items:center;justify-content:center;margin-bottom:10px">
                         <i class="fa-solid fa-stamp" style="font-size:16px;color:var(--nt-accent)"></i>
                     </div>
-                    <div class="nt-stat-value">${stats?.totalNotarizations ?? '—'}</div>
+                    <div class="nt-stat-value">${stats?.totalCertifications ?? stats?.totalNotarizations ?? '—'}</div>
                     <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">Notarizations</div>
                 </div>
                 <div class="nt-stat-card">
                     <div style="width:36px;height:36px;border-radius:50%;background:rgba(34,197,94,0.1);display:inline-flex;align-items:center;justify-content:center;margin-bottom:10px">
-                        <i class="fa-solid fa-certificate" style="font-size:16px;color:var(--nt-green)"></i>
+                        <i class="fa-solid fa-right-left" style="font-size:16px;color:var(--nt-green)"></i>
                     </div>
-                    <div class="nt-stat-value">${supply ?? '—'}</div>
-                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">Certificates</div>
+                    <div class="nt-stat-value">${stats?.totalTransfers ?? '—'}</div>
+                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">Transfers</div>
                 </div>
                 <div class="nt-stat-card">
-                    <div style="width:36px;height:36px;border-radius:50%;background:rgba(251,191,36,0.1);display:inline-flex;align-items:center;justify-content:center;margin-bottom:10px">
-                        <i class="fa-solid fa-coins" style="font-size:16px;color:#fbbf24"></i>
+                    <div style="width:36px;height:36px;border-radius:50%;background:rgba(245,158,11,0.1);display:inline-flex;align-items:center;justify-content:center;margin-bottom:10px">
+                        <i class="fa-solid fa-house" style="font-size:16px;color:var(--nt-accent)"></i>
                     </div>
-                    <div class="nt-stat-value" style="font-size:18px">${stats?.totalBKCFormatted ?? '—'}</div>
-                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">BKC Collected</div>
+                    <div class="nt-stat-value">${stats?.totalAssets ?? '—'}</div>
+                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">Assets</div>
                 </div>
                 <div class="nt-stat-card">
                     <div style="width:36px;height:36px;border-radius:50%;background:rgba(96,165,250,0.1);display:inline-flex;align-items:center;justify-content:center;margin-bottom:10px">
-                        <i class="fa-solid fa-coins" style="font-size:16px;color:var(--nt-blue)"></i>
+                        <i class="fa-solid fa-note-sticky" style="font-size:16px;color:var(--nt-blue)"></i>
                     </div>
-                    <div class="nt-stat-value" style="font-size:18px">${stats?.totalETHFormatted ?? '—'}</div>
-                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">BNB Collected</div>
+                    <div class="nt-stat-value">${stats?.totalAnnotations ?? '—'}</div>
+                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">Annotations</div>
                 </div>
             </div>
 

@@ -1,5 +1,5 @@
 // api/cert-metadata/[id].js
-// ERC-721 Metadata endpoint for Notary V4 (native ERC-721)
+// ERC-721 Metadata endpoint for Notary V5 (certs + assets)
 //
 // GET /api/cert-metadata/42
 // Returns: { name, description, image, external_url, attributes }
@@ -17,7 +17,9 @@ try {
 }
 
 const NOTARY_ABI = [
-    'function getCertificate(uint256 certId) view returns (bytes32 documentHash, address owner, uint48 timestamp, uint8 docType, string memory meta, bool boosted, uint32 boostExpiry)',
+    'function getCertificate(uint256 certId) view returns (bytes32 documentHash, address owner, uint48 timestamp, uint8 docType, string memory meta)',
+    'function isAsset(uint256 tokenId) view returns (bool)',
+    'function getAsset(uint256 tokenId) view returns (address owner, uint48 registeredAt, uint8 assetType, uint8 annotationCount, uint32 transferCount, string memory meta, bytes32 documentHash)',
     'function certCount() view returns (uint256)'
 ];
 
@@ -25,6 +27,8 @@ const DOC_TYPE_NAMES = [
     'General', 'Contract', 'Identity', 'Diploma', 'Property',
     'Financial', 'Legal', 'Medical', 'IP', 'Other'
 ];
+
+const ASSET_TYPE_NAMES = ['Property', 'Vehicle', 'Intellectual Property', 'Other'];
 
 const IPFS_GATEWAY = 'https://gateway.lighthouse.storage/ipfs/';
 const ARWEAVE_GATEWAY = 'https://gateway.irys.xyz';
@@ -60,49 +64,88 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
 
-    const certId = parseInt(req.query.id);
-    if (isNaN(certId) || certId < 1) {
-        return res.status(400).json({ error: 'Invalid certificate ID' });
+    const tokenId = parseInt(req.query.id);
+    if (isNaN(tokenId) || tokenId < 1) {
+        return res.status(400).json({ error: 'Invalid token ID' });
     }
 
-    // Sepolia RPC (public — Alchemy key is Arbitrum-only)
-    const rpcUrl = 'https://ethereum-sepolia-rpc.publicnode.com';
+    const rpcUrl = 'https://opbnb-mainnet-rpc.bnbchain.org';
 
     try {
         const provider = new ethers.JsonRpcProvider(rpcUrl);
         const notary = new ethers.Contract(NOTARY_ADDRESS, NOTARY_ABI, provider);
 
-        const result = await notary.getCertificate(certId);
-        if (result.documentHash === '0x' + '0'.repeat(64)) {
-            return res.status(404).json({ error: 'Certificate not found' });
+        // Check if it's an asset
+        const isAssetToken = await notary.isAsset(tokenId);
+
+        if (isAssetToken) {
+            return await handleAsset(notary, tokenId, res);
+        } else {
+            return await handleCertificate(notary, tokenId, res);
         }
-
-        const meta = parseMeta(result.meta);
-        const docTypeName = DOC_TYPE_NAMES[Number(result.docType)] || 'Unknown';
-        const certDate = new Date(Number(result.timestamp) * 1000).toISOString();
-        const shortHash = `${result.documentHash.slice(0, 10)}...${result.documentHash.slice(-8)}`;
-
-        const imageUrl = resolveUri(meta.uri) || null;
-
-        const metadata = {
-            name: meta.name || meta.desc || `Notary Certificate #${certId}`,
-            description: `Backchain Notary Certificate #${certId}. ${docTypeName} document certified on opBNB. Hash: ${shortHash}`,
-            image: imageUrl || `https://backcoin.org/assets/bkc_logo_3d.png`,
-            external_url: `https://backcoin.org/#notary`,
-            attributes: [
-                { trait_type: 'Certificate ID', value: certId.toString() },
-                { trait_type: 'Document Type', value: docTypeName },
-                { trait_type: 'Certified Date', value: certDate, display_type: 'date' },
-                { trait_type: 'Owner', value: result.owner },
-                { trait_type: 'Content Hash', value: result.documentHash },
-                ...(result.boosted ? [{ trait_type: 'Boosted', value: 'Yes' }] : []),
-                ...(meta.type ? [{ trait_type: 'File Type', value: meta.type }] : []),
-            ]
-        };
-
-        return res.status(200).json(metadata);
     } catch (error) {
-        console.error(`[CertMetadata] Error for cert #${certId}:`, error.message);
-        return res.status(500).json({ error: 'Failed to fetch certificate data' });
+        console.error(`[CertMetadata] Error for token #${tokenId}:`, error.message);
+        return res.status(500).json({ error: 'Failed to fetch token data' });
     }
+}
+
+async function handleCertificate(notary, certId, res) {
+    const result = await notary.getCertificate(certId);
+    if (result.documentHash === '0x' + '0'.repeat(64)) {
+        return res.status(404).json({ error: 'Certificate not found' });
+    }
+
+    const meta = parseMeta(result.meta);
+    const docTypeName = DOC_TYPE_NAMES[Number(result.docType)] || 'Unknown';
+    const certDate = new Date(Number(result.timestamp) * 1000).toISOString();
+    const shortHash = `${result.documentHash.slice(0, 10)}...${result.documentHash.slice(-8)}`;
+
+    const imageUrl = resolveUri(meta.uri) || null;
+
+    const metadata = {
+        name: meta.name || meta.desc || `Notary Certificate #${certId}`,
+        description: `Backchain Notary Certificate #${certId}. ${docTypeName} document certified on opBNB. Hash: ${shortHash}`,
+        image: imageUrl || `https://backcoin.org/assets/bkc_logo_3d.png`,
+        external_url: `https://backcoin.org/#notary`,
+        attributes: [
+            { trait_type: 'Token Type', value: 'Certificate' },
+            { trait_type: 'Certificate ID', value: certId.toString() },
+            { trait_type: 'Document Type', value: docTypeName },
+            { trait_type: 'Certified Date', value: certDate, display_type: 'date' },
+            { trait_type: 'Owner', value: result.owner },
+            { trait_type: 'Content Hash', value: result.documentHash },
+            ...(meta.type ? [{ trait_type: 'File Type', value: meta.type }] : []),
+        ]
+    };
+
+    return res.status(200).json(metadata);
+}
+
+async function handleAsset(notary, tokenId, res) {
+    const result = await notary.getAsset(tokenId);
+    if (result.owner === '0x' + '0'.repeat(40)) {
+        return res.status(404).json({ error: 'Asset not found' });
+    }
+
+    const meta = parseMeta(result.meta);
+    const assetTypeName = ASSET_TYPE_NAMES[Number(result.assetType)] || 'Other';
+    const regDate = new Date(Number(result.registeredAt) * 1000).toISOString();
+
+    const metadata = {
+        name: meta.desc || `Registered ${assetTypeName} #${tokenId}`,
+        description: `Backchain Digital Notary — ${assetTypeName} asset registered on opBNB. Token #${tokenId}. ${Number(result.transferCount)} transfers, ${Number(result.annotationCount)} annotations.`,
+        image: `https://backcoin.org/assets/bkc_logo_3d.png`,
+        external_url: `https://backcoin.org/#notary`,
+        attributes: [
+            { trait_type: 'Token Type', value: 'Asset' },
+            { trait_type: 'Asset Type', value: assetTypeName },
+            { trait_type: 'Registered Date', value: regDate, display_type: 'date' },
+            { trait_type: 'Owner', value: result.owner },
+            { trait_type: 'Transfers', value: Number(result.transferCount).toString() },
+            { trait_type: 'Annotations', value: Number(result.annotationCount).toString() },
+            ...(meta.extra ? [{ trait_type: 'Additional Info', value: meta.extra }] : []),
+        ]
+    };
+
+    return res.status(200).json(metadata);
 }

@@ -11,7 +11,8 @@ export function showOverlay(step, tokenId) {
         uploading: { icon: 'fa-solid fa-cloud-arrow-up', text: 'Uploading to Arweave...', sub: 'Permanent decentralized storage', pct: 20 },
         funding: { icon: 'fa-solid fa-wallet', text: 'Funding storage...', sub: 'Confirm in MetaMask', pct: 15, animate: true },
         minting: { icon: 'fa-solid fa-stamp', text: 'Certifying on Blockchain...', sub: 'Waiting for confirmation', pct: 65, animate: true },
-        success: { icon: 'fa-solid fa-check', text: 'Certified!', sub: tokenId ? `Certificate #${tokenId}` : 'Certificate created', pct: 100, success: true }
+        success: { icon: 'fa-solid fa-check', text: 'Certified!', sub: tokenId ? `Certificate #${tokenId}` : 'Certificate created', pct: 100, success: true },
+        'asset-success': { icon: 'fa-solid fa-check', text: 'Asset Registered!', sub: tokenId ? `Asset #${tokenId}` : 'Asset registered', pct: 100, success: true }
     };
 
     const cfg = configs[step] || configs.uploading;

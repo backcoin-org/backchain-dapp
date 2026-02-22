@@ -1,12 +1,24 @@
 // pages/notary/NotaryPage.js
-// Notary V10 — Main orchestrator
+// Notary V5 — Cartório Digital — Main orchestrator
 // ============================================================================
 
 import { NT } from './state.js';
 import { injectStyles } from './styles.js';
-import { loadFees, loadCertificates, loadStats } from './data-loader.js';
-import { navigateView, goBack, setTab, viewCert, handleMint, wizNext, wizBack, wizToStep3, wizRemoveFile, onDocTypeChange, addToWallet, copyHash, viewDocument, toggleTransferForm, handleTransfer, showCertCard, hideNftCard } from './actions.js';
+import { loadFees, loadCertificates, loadAssets, loadStats } from './data-loader.js';
+import {
+    navigateView, goBack, setTab, viewCert, viewAsset,
+    handleMint, wizNext, wizBack, wizToStep3, wizRemoveFile, onDocTypeChange,
+    assetWizNext, assetWizBack, assetWizReset, assetWizToStep3, onAssetTypeChange,
+    onAssetDescChange, onAssetMetaChange, onAssetFileSelect, removeAssetFile,
+    handleRegisterAsset, handleTransferAsset, handleAddAnnotation,
+    toggleAssetTransferForm, toggleAnnotationForm, refreshAssets,
+    addToWallet, copyHash, viewDocument, toggleTransferForm, handleTransfer,
+    showCertCard, hideNftCard
+} from './actions.js';
 import { renderDocuments } from './documents.js';
+import { renderAssets } from './assets.js';
+import { renderAssetWizard } from './asset-wizard.js';
+import { renderAssetDetail } from './asset-detail.js';
 import { renderNotarize, renderWizStep2 } from './wizard.js';
 import { renderVerify } from './verify.js';
 import { renderStats } from './stats.js';
@@ -35,13 +47,43 @@ function renderHeader() {
         return;
     }
 
+    if (NT.view === 'asset-detail') {
+        el.innerHTML = `
+            <div class="nt-back-header">
+                <button class="nt-back-btn" onclick="NotaryPage.goBack()">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </button>
+                <div>
+                    <div style="font-size:15px;font-weight:700;color:var(--nt-text)">Asset #${NT.selectedAsset?.id || ''}</div>
+                    <div style="font-size:11px;color:var(--nt-text-3)">Property details</div>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    if (NT.view === 'register-asset') {
+        el.innerHTML = `
+            <div class="nt-back-header">
+                <button class="nt-back-btn" onclick="NotaryPage.goBack()">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </button>
+                <div>
+                    <div style="font-size:15px;font-weight:700;color:var(--nt-text)">Register Asset</div>
+                    <div style="font-size:11px;color:var(--nt-text-3)">On-chain property registration</div>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
     el.innerHTML = `
         <div class="nt-header-bar">
             <div class="nt-brand">
                 <div class="nt-brand-icon"><i class="fa-solid fa-stamp"></i></div>
                 <div>
-                    <div class="nt-brand-name">Decentralized Notary</div>
-                    <div class="nt-brand-sub">Permanent blockchain certification</div>
+                    <div class="nt-brand-name">Digital Notary</div>
+                    <div class="nt-brand-sub">Blockchain registry &amp; certification</div>
                 </div>
             </div>
         </div>
@@ -49,8 +91,8 @@ function renderHeader() {
             <button class="nt-nav-item ${NT.activeTab === 'documents' ? 'active' : ''}" onclick="NotaryPage.setTab('documents')">
                 <i class="fa-solid fa-certificate"></i><span>Documents</span>
             </button>
-            <button class="nt-nav-item ${NT.activeTab === 'notarize' ? 'active' : ''}" onclick="NotaryPage.setTab('notarize')">
-                <i class="fa-solid fa-stamp"></i><span>Notarize</span>
+            <button class="nt-nav-item ${NT.activeTab === 'assets' ? 'active' : ''}" onclick="NotaryPage.setTab('assets')">
+                <i class="fa-solid fa-house"></i><span>Assets</span>
             </button>
             <button class="nt-nav-item ${NT.activeTab === 'verify' ? 'active' : ''}" onclick="NotaryPage.setTab('verify')">
                 <i class="fa-solid fa-shield-check"></i><span>Verify</span>
@@ -71,12 +113,15 @@ function renderContent() {
     if (!el) return;
 
     switch (NT.view) {
-        case 'documents':   renderDocuments(el);  break;
-        case 'notarize':    renderNotarize(el);   break;
-        case 'verify':      renderVerify(el);     break;
-        case 'stats':       renderStats(el);      break;
-        case 'cert-detail': renderCertDetail(el); break;
-        default:            renderDocuments(el);
+        case 'documents':      renderDocuments(el);    break;
+        case 'notarize':       renderNotarize(el);     break;
+        case 'assets':         renderAssets(el);       break;
+        case 'register-asset': renderAssetWizard(el);  break;
+        case 'asset-detail':   renderAssetDetail(el);  break;
+        case 'verify':         renderVerify(el);       break;
+        case 'stats':          renderStats(el);        break;
+        case 'cert-detail':    renderCertDetail(el);   break;
+        default:               renderDocuments(el);
     }
 }
 
@@ -109,6 +154,7 @@ function render(isActive) {
     Promise.all([
         loadFees(),
         loadCertificates(),
+        loadAssets(),
         loadStats()
     ]).catch(() => {});
 }
@@ -151,14 +197,34 @@ export const NotaryPage = {
     setTab,
     goBack,
     viewCert,
+    viewAsset,
 
-    // Wizard
+    // Document Wizard
     wizNext,
     wizBack,
     wizToStep3,
     wizRemoveFile,
     onDocTypeChange,
     handleMint,
+
+    // Asset Wizard
+    assetWizNext,
+    assetWizBack,
+    assetWizReset,
+    assetWizToStep3,
+    onAssetTypeChange,
+    onAssetDescChange,
+    onAssetMetaChange,
+    onAssetFileSelect,
+    removeAssetFile,
+    handleRegisterAsset,
+
+    // Asset Detail actions
+    handleTransferAsset,
+    handleAddAnnotation,
+    toggleAssetTransferForm,
+    toggleAnnotationForm,
+    refreshAssets,
 
     // Document / Transfer
     viewDocument,

@@ -2,7 +2,7 @@
 // Notary V10 — Utility functions
 // ============================================================================
 
-import { FILE_TYPES } from './state.js';
+import { FILE_TYPES, ASSET_TYPES, ANNOTATION_TYPES } from './state.js';
 import { resolveContentUrl } from '../../modules/core/index.js';
 
 export function getFileTypeInfo(mimeType = '', fileName = '') {
@@ -77,6 +77,14 @@ export function parseMetaJson(meta) {
         }
     } catch {}
     return { desc: meta };
+}
+
+export function getAssetTypeInfo(assetType) {
+    return ASSET_TYPES[assetType] || ASSET_TYPES[3];
+}
+
+export function getAnnotationTypeInfo(annotationType) {
+    return ANNOTATION_TYPES[annotationType] || ANNOTATION_TYPES[5];
 }
 
 export function extractStorageUri(meta) {

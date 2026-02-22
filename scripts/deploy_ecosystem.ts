@@ -336,10 +336,12 @@ const ACTION_FEE_CONFIGS: Record<string, { feeType: number; bps: number; multipl
     "FORTUNE_TIER0":          FIXED_CONTENT,   // 0.0002  (~$0.12) — 1/5 odds
     "FORTUNE_TIER1":          FIXED_SOCIAL,    // 0.00008 (~$0.05) — 1/10 odds
     "FORTUNE_TIER2":          FIXED_MICRO,     // 0.00003 (~$0.02) — 1/150 odds
-    // ── Notary ──
+    // ── Notary / Cartório Digital ──
     "NOTARY_CERTIFY":         FIXED_FINANCIAL, // 0.0005  (~$0.30)
-    "NOTARY_BOOST":           FIXED_CONTENT,   // 0.0002  (~$0.12)
     "NOTARY_TRANSFER":        FIXED_CONTENT,   // 0.0002  (~$0.12)
+    "ASSET_REGISTER":         FIXED_PREMIUM,   // 0.001   (~$0.60)
+    "ASSET_TRANSFER":         FIXED_FINANCIAL, // 0.0005  (~$0.30)
+    "ASSET_ANNOTATE":         FIXED_CONTENT,   // 0.0002  (~$0.12)
     // ── CharityPool ──
     "CHARITY_CREATE":         FIXED_FINANCIAL, // 0.0005  (~$0.30)
     "CHARITY_BOOST":          FIXED_CONTENT,   // 0.0002  (~$0.12)
@@ -827,9 +829,7 @@ async function main() {
 
         // Notary constructor(address _ecosystem, string memory baseTokenURI_)
         const Notary = await ethers.getContractFactory("Notary");
-        const notaryBaseURI = isMainnet
-            ? "https://backcoin.org/api/cert-metadata/"
-            : "https://backchain-dapp.vercel.app/api/cert-metadata/";
+        const notaryBaseURI = "https://backcoin.org/api/cert-metadata/";
         const { contract: notary, address: notaryAddr } = await deployContractWithRetry(
             Notary, [ecoAddr, notaryBaseURI], "Notary"
         );
