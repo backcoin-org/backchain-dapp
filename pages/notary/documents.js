@@ -61,9 +61,14 @@ export function renderDocuments(el) {
     el.innerHTML = `
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;margin-bottom:4px">
             <div style="font-size:13px;color:var(--nt-text-2)">${NT.certificates.length} certificate${NT.certificates.length > 1 ? 's' : ''}</div>
-            <button class="nt-btn-icon" onclick="NotaryPage.refreshHistory()" title="Refresh">
-                <i class="fa-solid fa-rotate-right" style="font-size:12px"></i>
-            </button>
+            <div style="display:flex;gap:8px;align-items:center">
+                <button class="nt-btn-primary" style="padding:6px 14px;font-size:12px" onclick="NotaryPage.setTab('notarize')">
+                    <i class="fa-solid fa-plus" style="margin-right:6px"></i>Notarize
+                </button>
+                <button class="nt-btn-icon" onclick="NotaryPage.refreshHistory()" title="Refresh">
+                    <i class="fa-solid fa-rotate-right" style="font-size:12px"></i>
+                </button>
+            </div>
         </div>
         <div class="nt-cert-grid">
             ${NT.certificates.map(cert => renderCertCard(cert)).join('')}

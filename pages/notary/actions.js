@@ -339,10 +339,33 @@ export async function handleRegisterAsset() {
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>Registering...'; }
 
     try {
-        const meta = JSON.stringify({
+        // Upload supporting document to Arweave if provided
+        let uploadUri = '';
+        if (NT.assetWizFile) {
+            if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>Uploading document...';
+            const uploadResult = await irysUploadFile(NT.assetWizFile, {
+                tags: [
+                    { name: 'Type', value: 'notary-asset-doc' },
+                    { name: 'Asset-Type', value: String(NT.assetWizType) },
+                    { name: 'File-Name', value: NT.assetWizFile.name }
+                ]
+            });
+            uploadUri = `ipfs://${uploadResult.id}`;
+            console.log('[NotaryPage] Asset doc upload:', uploadResult.url);
+            if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>Registering...';
+        }
+
+        const metaObj = {
             desc: NT.assetWizDescription || '',
             extra: NT.assetWizMeta || ''
-        });
+        };
+        if (uploadUri) {
+            metaObj.uri = uploadUri;
+            metaObj.fileName = NT.assetWizFile.name;
+            metaObj.fileType = NT.assetWizFile.type;
+            metaObj.fileSize = NT.assetWizFile.size;
+        }
+        const meta = JSON.stringify(metaObj);
 
         const docHash = NT.assetWizFileHash || ('0x' + '0'.repeat(64));
 

@@ -60,7 +60,7 @@ export default async function handler(req, res) {
         return res.redirect(302, FALLBACK_IMAGE);
     }
 
-    const rpcUrl = 'https://ethereum-sepolia-rpc.publicnode.com';
+    const rpcUrl = 'https://opbnb-mainnet-rpc.bnbchain.org';
 
     try {
         const provider = new ethers.JsonRpcProvider(rpcUrl);

@@ -69,8 +69,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Invalid token ID' });
     }
 
-    // Use Sepolia RPC (contracts currently deployed on Sepolia testnet)
-    const rpcUrl = 'https://ethereum-sepolia-rpc.publicnode.com';
+    const rpcUrl = 'https://opbnb-mainnet-rpc.bnbchain.org';
 
     try {
         const provider = new ethers.JsonRpcProvider(rpcUrl);
@@ -134,10 +133,12 @@ async function handleAsset(notary, tokenId, res) {
     const assetTypeName = ASSET_TYPE_NAMES[Number(result.assetType)] || 'Other';
     const regDate = new Date(Number(result.registeredAt) * 1000).toISOString();
 
+    const hasStoredImage = !!resolveUri(meta.uri);
+
     const metadata = {
         name: meta.desc || `Registered ${assetTypeName} #${tokenId}`,
         description: `Backchain Digital Notary — ${assetTypeName} asset registered on opBNB. Token #${tokenId}. ${Number(result.transferCount)} transfers, ${Number(result.annotationCount)} annotations.`,
-        image: `https://backcoin.org/assets/bkc_logo_3d.png`,
+        image: hasStoredImage ? `https://backcoin.org/api/cert-image/${tokenId}` : `https://backcoin.org/assets/bkc_logo_3d.png`,
         external_url: `https://backcoin.org/#notary`,
         attributes: [
             { trait_type: 'Token Type', value: 'Asset' },
