@@ -107,6 +107,18 @@ function renderSkeleton() {
 // FEED VIEW
 // ============================================================================
 
+function renderModeToggle() {
+    return `
+        <div class="bc-discover-mode-toggle" style="display:flex;justify-content:flex-end;padding:4px 12px;">
+            <button class="bc-mode-btn ${BC.feedMode === 'list' ? 'active' : ''}" onclick="AgoraPage.setFeedMode('list')" title="List view">
+                <i class="fa-solid fa-list"></i>
+            </button>
+            <button class="bc-mode-btn ${BC.feedMode === 'tiktok' ? 'active' : ''}" onclick="AgoraPage.setFeedMode('tiktok')" title="Vertical scroll">
+                <i class="fa-solid fa-clapperboard"></i>
+            </button>
+        </div>`;
+}
+
 export function renderFeed() {
     if (!BC.contractAvailable) {
         return `<div class="bc-empty">
@@ -181,8 +193,17 @@ export function renderFeed() {
     const limit = (BC.feedPage + 1) * FEED_PAGE_SIZE;
     const visible = filteredPosts.slice(0, limit);
     const hasMore = filteredPosts.length > limit;
+    const toggle = renderModeToggle();
 
-    let html = visible.map((post, i) => renderPost(post, i)).join('');
+    // TikTok mode for Feed tab
+    if (BC.feedMode === 'tiktok') {
+        return toggle + `
+            <div class="bc-tiktok-feed" data-tiktok-feed>
+                ${visible.map((post, i) => _renderTikTokCard(post, i)).join('')}
+            </div>`;
+    }
+
+    let html = toggle + visible.map((post, i) => renderPost(post, i)).join('');
     if (hasMore) {
         html += `<div class="bc-feed-sentinel" data-sentinel="feed"><div class="bc-loading"><div class="bc-spinner"></div></div></div>`;
     }

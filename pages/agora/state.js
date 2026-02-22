@@ -133,7 +133,7 @@ export const BC = {
     composeTag: 0,
     // Infinite scroll & feed mode
     feedPage: 0,
-    feedMode: 'list',  // 'list' | 'tiktok'
+    feedMode: 'tiktok',  // 'list' | 'tiktok'
     // Stats
     globalStats: null,
     // UI flags

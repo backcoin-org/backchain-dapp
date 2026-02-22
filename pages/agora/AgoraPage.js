@@ -69,6 +69,7 @@ function renderContent() {
         case 'feed':
             content = renderLiveStreamBar() + renderCompose() + renderLanguageBar() + renderTagBar() + renderFeed();
             break;
+
         case 'discover':
             content = renderDiscover();
             break;
@@ -449,7 +450,6 @@ export const AgoraPage = {
         BC.view = tab;
         BC.selectedTag = -1;
         BC.feedPage = 0;
-        BC.feedMode = 'list';
         render();
     },
 
