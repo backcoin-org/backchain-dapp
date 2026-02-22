@@ -33,7 +33,7 @@ export function createContext(config) {
         throw new Error(`Invalid operator address: ${config.operator}`);
     }
     const operator = ethers.getAddress(config.operator);
-    const network = config.network || 'arbitrum-sepolia';
+    const network = config.network || 'sepolia';
     const defaults = getAddresses(network);
     const addresses = { ...defaults, ...config.addresses };
     const provider = new ProviderManager(network, config.rpcUrl);

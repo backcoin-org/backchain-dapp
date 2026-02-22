@@ -1,5 +1,5 @@
 import type { ethers } from 'ethers';
-export type NetworkId = 'arbitrum-sepolia' | 'arbitrum-one';
+export type NetworkId = 'sepolia' | 'opbnb-testnet' | 'opbnb-mainnet';
 export interface NetworkConfig {
     chainId: number;
     name: string;
@@ -7,11 +7,11 @@ export interface NetworkConfig {
     explorerUrl: string;
 }
 export interface BackchainConfig {
-    /** Your operator wallet address — earns 10-20% of all ETH fees */
+    /** Your operator wallet address — earns 10-20% of all fees */
     operator: string;
     /** Network to connect to */
     network?: NetworkId;
-    /** Custom RPC URL (overrides default Alchemy) */
+    /** Custom RPC URL (overrides default) */
     rpcUrl?: string;
     /** Custom contract addresses (overrides defaults) */
     addresses?: Partial<ContractAddresses>;
@@ -25,16 +25,16 @@ export interface ContractAddresses {
     rewardBooster: string;
     nftFusion: string;
     poolBronze: string;
-    poolSilver: string;
-    poolGold: string;
-    poolDiamond: string;
+    poolSilver?: string;
+    poolGold?: string;
+    poolDiamond?: string;
     fortunePool: string;
     agora: string;
     notary: string;
     charityPool: string;
     rentalManager: string;
-    simpleBkcFaucet: string;
     backchainGovernance: string;
+    simpleBkcFaucet?: string;
 }
 export interface DualProvider {
     /** Read-only provider (Alchemy RPC) — for background reads without wallet popups */
@@ -282,20 +282,6 @@ export interface BuybackStats {
     avgEthPerBuyback: bigint;
     avgBkcPerBuyback: bigint;
 }
-export interface FaucetStatus {
-    ethBalance: bigint;
-    tokenBalance: bigint;
-    ethPerDrip: bigint;
-    tokensPerDrip: bigint;
-    estimatedEthClaims: bigint;
-    estimatedTokenClaims: bigint;
-}
-export interface UserFaucetInfo {
-    lastClaim: bigint;
-    claims: bigint;
-    eligible: boolean;
-    cooldownLeft: bigint;
-}
 export interface FusionPreview {
     sourceTier: number;
     resultTier: number;
@@ -320,5 +306,16 @@ export interface FeeConfig {
     bps: bigint;
     multiplier: bigint;
     gasEstimate: bigint;
+}
+export interface FaucetStatus {
+    ethBalance: bigint;
+    ethPerDrip: bigint;
+    estimatedClaims: bigint;
+}
+export interface UserFaucetInfo {
+    lastClaim: bigint;
+    claims: bigint;
+    eligible: boolean;
+    cooldownLeft: bigint;
 }
 //# sourceMappingURL=index.d.ts.map

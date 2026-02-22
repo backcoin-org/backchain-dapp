@@ -81,6 +81,10 @@ export type {
     // Ecosystem
     EcosystemStats,
     FeeConfig,
+
+    // Faucet
+    FaucetStatus,
+    UserFaucetInfo,
 } from './types/index.js';
 
 // Re-export enums (value exports)

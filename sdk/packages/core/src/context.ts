@@ -76,7 +76,7 @@ export function createContext(config: BackchainConfig): BackchainContext {
     }
 
     const operator = ethers.getAddress(config.operator);
-    const network: NetworkId = config.network || 'arbitrum-sepolia';
+    const network: NetworkId = config.network || 'sepolia';
     const defaults = getAddresses(network);
     const addresses: ContractAddresses = { ...defaults, ...config.addresses };
     const provider = new ProviderManager(network, config.rpcUrl);

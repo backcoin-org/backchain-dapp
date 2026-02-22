@@ -41,7 +41,7 @@ export class Backchain {
             throw new Error(`Invalid operator address: ${config.operator}. Must be a valid Ethereum address.`);
         }
         this.operator = ethers.getAddress(config.operator); // checksummed
-        this.network = config.network || 'arbitrum-sepolia';
+        this.network = config.network || 'sepolia';
         // Merge addresses (user overrides take precedence)
         const defaults = getAddresses(this.network);
         this.addresses = { ...defaults, ...config.addresses };

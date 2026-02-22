@@ -18,7 +18,6 @@ import { AgoraModule } from '@backchain/agora';
 import { CharityModule } from '@backchain/charity';
 import { RentalModule } from '@backchain/rental';
 import { SwapModule } from '@backchain/swap';
-import { FaucetModule } from '@backchain/faucet';
 import { FusionModule } from '@backchain/fusion';
 import { BuybackModule } from '@backchain/buyback';
 export class Backchain {
@@ -35,7 +34,6 @@ export class Backchain {
     charity;
     rental;
     swap;
-    faucet;
     fusion;
     buyback;
     constructor(config) {
@@ -43,7 +41,7 @@ export class Backchain {
             throw new Error(`Invalid operator address: ${config.operator}. Must be a valid Ethereum address.`);
         }
         this.operator = ethers.getAddress(config.operator);
-        this.network = config.network || 'arbitrum-sepolia';
+        this.network = config.network || 'sepolia';
         const defaults = getAddresses(this.network);
         this.addresses = { ...defaults, ...config.addresses };
         this.provider = new ProviderManager(this.network, config.rpcUrl);
@@ -56,7 +54,6 @@ export class Backchain {
         this.charity = new CharityModule(this);
         this.rental = new RentalModule(this);
         this.swap = new SwapModule(this);
-        this.faucet = new FaucetModule(this);
         this.fusion = new FusionModule(this);
         this.buyback = new BuybackModule(this);
     }
@@ -120,6 +117,27 @@ export class Backchain {
             throw new Error('No address provided and wallet not connected.');
         const eco = this.provider.getReadContract(this.addresses.backchainEcosystem, ECOSYSTEM_ABI);
         return eco.tutorOf(addr);
+    }
+    /** Get number of students (referrals) for an address */
+    async getTutorCount(address) {
+        const addr = address || this.provider.address;
+        if (!addr)
+            throw new Error('No address provided and wallet not connected.');
+        const eco = this.provider.getReadContract(this.addresses.backchainEcosystem, ECOSYSTEM_ABI);
+        return Number(await eco.tutorCount(addr));
+    }
+    /** Set tutor (referrer) — pays tutorFee */
+    async setTutor(tutor) {
+        const eco = this.provider.getWriteContract(this.addresses.backchainEcosystem, ECOSYSTEM_ABI);
+        const fee = await eco.tutorFee();
+        const tx = await eco.setTutor(tutor, { value: fee });
+        const receipt = await tx.wait(1);
+        return {
+            hash: receipt.hash,
+            blockNumber: receipt.blockNumber,
+            gasUsed: receipt.gasUsed,
+            events: {},
+        };
     }
     /** Get pending operator ETH earnings */
     async getPendingEarnings(address) {

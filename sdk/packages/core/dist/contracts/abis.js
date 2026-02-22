@@ -264,12 +264,8 @@ export const FAUCET_ABI = [
     'function claim() external',
     'function canClaim(address user) view returns (bool)',
     'function getUserInfo(address user) view returns (uint256 lastClaim, uint256 claims, bool eligible, uint256 cooldownLeft)',
-    'function getFaucetStatus() view returns (uint256 ethBalance, uint256 tokenBalance, uint256 ethPerDrip, uint256 tokensPerDrip, uint256 estimatedEthClaims, uint256 estimatedTokenClaims)',
-    'function getStats() view returns (uint256 tokens, uint256 eth, uint256 claims, uint256 users)',
-    'function cooldown() view returns (uint256)',
-    'function tokensPerClaim() view returns (uint256)',
-    'function ethPerClaim() view returns (uint256)',
+    'function getFaucetStatus() view returns (uint256 ethBalance, uint256 ethPerDrip, uint256 estimatedClaims)',
+    'function getStats() view returns (uint256 eth, uint256 claims, uint256 users)',
     'function paused() view returns (bool)',
-    'event Claimed(address indexed recipient, uint256 tokens, uint256 eth, address indexed via)',
 ];
 //# sourceMappingURL=abis.js.map

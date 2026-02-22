@@ -5,7 +5,7 @@ import type { ethers } from 'ethers';
 
 // ── Network ─────────────────────────────────────────────────────────────────
 
-export type NetworkId = 'opbnb-testnet' | 'opbnb-mainnet';
+export type NetworkId = 'sepolia' | 'opbnb-testnet' | 'opbnb-mainnet';
 
 export interface NetworkConfig {
     chainId: number;
@@ -45,6 +45,7 @@ export interface ContractAddresses {
     charityPool: string;
     rentalManager: string;
     backchainGovernance: string;
+    simpleBkcFaucet?: string;
 }
 
 // ── Provider ────────────────────────────────────────────────────────────────
@@ -376,4 +377,19 @@ export interface FeeConfig {
     bps: bigint;
     multiplier: bigint;
     gasEstimate: bigint;
+}
+
+// ── Faucet ─────────────────────────────────────────────────────────────────
+
+export interface FaucetStatus {
+    ethBalance: bigint;
+    ethPerDrip: bigint;
+    estimatedClaims: bigint;
+}
+
+export interface UserFaucetInfo {
+    lastClaim: bigint;
+    claims: bigint;
+    eligible: boolean;
+    cooldownLeft: bigint;
 }

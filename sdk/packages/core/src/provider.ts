@@ -10,6 +10,12 @@ import type { NetworkId, NetworkConfig } from './types/index.js';
 // ── Network Configs ─────────────────────────────────────────────────────────
 
 const NETWORKS: Record<NetworkId, NetworkConfig> = {
+    'sepolia': {
+        chainId: 11155111,
+        name: 'Ethereum Sepolia',
+        rpcUrl: 'https://ethereum-sepolia-rpc.publicnode.com',
+        explorerUrl: 'https://sepolia.etherscan.io',
+    },
     'opbnb-testnet': {
         chainId: 5611,
         name: 'opBNB Testnet',

@@ -53,7 +53,7 @@ export class Backchain implements BackchainContext {
         }
 
         this.operator = ethers.getAddress(config.operator);
-        this.network = config.network || 'arbitrum-sepolia';
+        this.network = config.network || 'sepolia';
 
         const defaults = getAddresses(this.network);
         this.addresses = { ...defaults, ...config.addresses };
@@ -141,6 +141,28 @@ export class Backchain implements BackchainContext {
         if (!addr) throw new Error('No address provided and wallet not connected.');
         const eco = this.provider.getReadContract(this.addresses.backchainEcosystem, ECOSYSTEM_ABI);
         return eco.tutorOf(addr);
+    }
+
+    /** Get number of students (referrals) for an address */
+    async getTutorCount(address?: string): Promise<number> {
+        const addr = address || this.provider.address;
+        if (!addr) throw new Error('No address provided and wallet not connected.');
+        const eco = this.provider.getReadContract(this.addresses.backchainEcosystem, ECOSYSTEM_ABI);
+        return Number(await eco.tutorCount(addr));
+    }
+
+    /** Set tutor (referrer) — pays tutorFee */
+    async setTutor(tutor: string): Promise<TxResult> {
+        const eco = this.provider.getWriteContract(this.addresses.backchainEcosystem, ECOSYSTEM_ABI);
+        const fee = await eco.tutorFee();
+        const tx = await eco.setTutor(tutor, { value: fee });
+        const receipt = await tx.wait(1);
+        return {
+            hash: receipt.hash,
+            blockNumber: receipt.blockNumber,
+            gasUsed: receipt.gasUsed,
+            events: {},
+        };
     }
 
     /** Get pending operator ETH earnings */

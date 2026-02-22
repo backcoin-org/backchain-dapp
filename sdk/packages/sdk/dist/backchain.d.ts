@@ -10,7 +10,6 @@ import { AgoraModule } from '@backchain/agora';
 import { CharityModule } from '@backchain/charity';
 import { RentalModule } from '@backchain/rental';
 import { SwapModule } from '@backchain/swap';
-import { FaucetModule } from '@backchain/faucet';
 import { FusionModule } from '@backchain/fusion';
 import { BuybackModule } from '@backchain/buyback';
 export declare class Backchain implements BackchainContext {
@@ -26,7 +25,6 @@ export declare class Backchain implements BackchainContext {
     readonly charity: CharityModule;
     readonly rental: RentalModule;
     readonly swap: SwapModule;
-    readonly faucet: FaucetModule;
     readonly fusion: FusionModule;
     readonly buyback: BuybackModule;
     constructor(config: BackchainConfig);
@@ -44,6 +42,10 @@ export declare class Backchain implements BackchainContext {
     getEthBalance(address?: string): Promise<bigint>;
     /** Get the tutor (referrer) of an address */
     getTutor(address?: string): Promise<string>;
+    /** Get number of students (referrals) for an address */
+    getTutorCount(address?: string): Promise<number>;
+    /** Set tutor (referrer) — pays tutorFee */
+    setTutor(tutor: string): Promise<TxResult>;
     /** Get pending operator ETH earnings */
     getPendingEarnings(address?: string): Promise<bigint>;
     /** Withdraw accumulated operator ETH earnings */

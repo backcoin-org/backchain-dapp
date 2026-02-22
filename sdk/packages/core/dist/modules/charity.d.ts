@@ -6,7 +6,7 @@ export declare class CharityModule {
     /**
      * Create a charity campaign.
      * @param title - Campaign title
-     * @param metadataUri - Metadata URI (IPFS/Arweave link)
+     * @param metadataUri - Metadata URI (IPFS/Lighthouse link)
      * @param goalAmount - Goal in wei (ETH)
      * @param durationDays - Campaign duration
      */

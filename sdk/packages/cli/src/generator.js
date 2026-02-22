@@ -21,12 +21,15 @@ export function generateProject(dir, config) {
     writeFileSync(join(dir, 'main.js'), genMainJs(config));
     writeFileSync(join(dir, 'style.css'), genStyleCss());
 
-    // Dashboard (always included)
+    // Core pages — always included
     writeFileSync(join(dir, 'modules', 'dashboard.js'), genDashboard(config));
+    writeFileSync(join(dir, 'modules', 'staking.js'), genStakingPage(config));
+    writeFileSync(join(dir, 'modules', 'tutor.js'), genTutorPage(config));
+    writeFileSync(join(dir, 'modules', 'tokenomics.js'), genTokenomicsPage(config));
+    writeFileSync(join(dir, 'modules', 'invite.js'), genInvitePage(config));
 
-    // Selected module pages
+    // Feature pages — user-selected
     const generators = {
-        staking: genStakingPage,
         nft: genNftPage,
         fortune: genFortunePage,
         notary: genNotaryPage,
@@ -327,12 +330,14 @@ body {
 // ── index.html ──────────────────────────────────────────────────────────────
 
 function genIndexHtml(config) {
+    // Core nav items (always present)
     const navItems = [
         { id: 'dashboard', icon: '&#9632;', label: 'Dashboard' },
+        { id: 'staking', icon: '&#9733;', label: 'Stake & Earn' },
     ];
 
-    const moduleNav = {
-        staking: { icon: '&#9733;', label: 'Staking' },
+    // Feature nav items (user-selected)
+    const featureNav = {
         nft: { icon: '&#9830;', label: 'NFT Store' },
         fortune: { icon: '&#9752;', label: 'Fortune Pool' },
         notary: { icon: '&#9998;', label: 'Notary' },
@@ -345,8 +350,15 @@ function genIndexHtml(config) {
     };
 
     for (const mod of config.modules) {
-        if (moduleNav[mod]) navItems.push({ id: mod, ...moduleNav[mod] });
+        if (featureNav[mod]) navItems.push({ id: mod, ...featureNav[mod] });
     }
+
+    // Core nav items at bottom
+    navItems.push(
+        { id: 'tutor', icon: '&#9734;', label: 'Tutor System' },
+        { id: 'invite', icon: '&#9993;', label: 'Invite & Earn' },
+        { id: 'tokenomics', icon: '&#9673;', label: 'Tokenomics' },
+    );
 
     const navHtml = navItems.map(n =>
         `            <a href="#${n.id}" class="nav-link" data-page="${n.id}">
@@ -401,15 +413,18 @@ ${pageSlots}
 // ── main.js ─────────────────────────────────────────────────────────────────
 
 function genMainJs(config) {
-    const moduleImports = config.modules.map(m =>
+    const CORE_MODULES = ['staking', 'tutor', 'tokenomics', 'invite'];
+    const allModules = [...CORE_MODULES, ...config.modules];
+
+    const moduleImports = allModules.map(m =>
         `import { render as render${capitalize(m)}, load as load${capitalize(m)} } from './modules/${m}.js';`
     ).join('\n');
 
-    const moduleRenders = ['dashboard', ...config.modules].map(m =>
+    const moduleRenders = ['dashboard', ...allModules].map(m =>
         `        case '${m}': await render${capitalize(m)}(document.getElementById('page-${m}'), bkc); break;`
     ).join('\n');
 
-    const moduleLoads = config.modules.map(m =>
+    const moduleLoads = allModules.map(m =>
         `            try { await load${capitalize(m)}(bkc); } catch(e) { console.warn('${m} load:', e.message); }`
     ).join('\n');
 
@@ -1163,6 +1178,265 @@ export async function render(el, bkc) {
             render(el, bkc);
         } catch (err) { toast(err.message, 'error'); }
     };
+}
+`;
+}
+
+// ── Core Page Generators (always included) ─────────────────────────────────
+
+function genTutorPage(config) {
+    return `// Tutor System — Referral earnings & tutor management
+import { ethers } from 'ethers';
+import { toast } from '../main.js';
+
+let _data = {};
+
+export async function load(bkc) {
+    const [tutor, count, earnings] = await Promise.all([
+        bkc.getTutor(),
+        bkc.getTutorCount(),
+        bkc.getPendingEarnings(bkc.address),
+    ]);
+    _data = { tutor, count, earnings };
+}
+
+export async function render(el, bkc) {
+    if (!_data.tutor && _data.tutor !== ethers.ZeroAddress) await load(bkc);
+    const hasTutor = _data.tutor && _data.tutor !== ethers.ZeroAddress;
+    const shortTutor = hasTutor ? _data.tutor.slice(0, 6) + '...' + _data.tutor.slice(-4) : 'None';
+
+    el.innerHTML = \`
+        <h1 class="page-title">Tutor System</h1>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Your Tutor</div>
+                <div class="stat-value" style="font-size:0.9rem;">\${shortTutor}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Your Students</div>
+                <div class="stat-value accent">\${_data.count}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Pending Earnings</div>
+                <div class="stat-value">\${Number(ethers.formatEther(_data.earnings)).toFixed(6)} ETH</div>
+            </div>
+        </div>
+
+        \${_data.earnings > 0n ? \`
+        <div class="card">
+            <div class="card-title">Withdraw Earnings</div>
+            <p style="color:var(--text-dim);margin-bottom:12px;">
+                You have \${Number(ethers.formatEther(_data.earnings)).toFixed(6)} ETH in pending referral earnings.
+            </p>
+            <button id="withdrawBtn" class="btn btn-primary">Withdraw ETH</button>
+        </div>
+        \` : ''}
+
+        \${!hasTutor ? \`
+        <div class="card">
+            <div class="card-title">Set Your Tutor</div>
+            <p style="color:var(--text-dim);margin-bottom:12px;">
+                A tutor earns 10% of all ETH fees you generate. Set a tutor to support someone in the ecosystem.
+            </p>
+            <div class="form-group">
+                <label class="form-label">Tutor Address</label>
+                <input type="text" id="tutorAddr" class="input" placeholder="0x..." />
+            </div>
+            <button id="setTutorBtn" class="btn btn-primary">Set Tutor</button>
+        </div>
+        \` : ''}
+
+        <div class="card">
+            <div class="card-title">How It Works</div>
+            <p style="color:var(--text-dim);line-height:1.6;">
+                <strong style="color:var(--accent);">Earn 10% ETH</strong> — Every time your students pay a fee, you get 10% in ETH automatically.<br><br>
+                <strong style="color:var(--accent);">Earn 5% BKC</strong> — When students claim staking rewards, you earn 5% bonus BKC.<br><br>
+                <strong>Dual rewards</strong> — You earn from both your students' transactions AND your own activity.<br><br>
+                <strong>On-chain & trustless</strong> — All referral earnings are tracked and distributed by the smart contract.
+            </p>
+        </div>
+    \`;
+
+    el.querySelector('#withdrawBtn')?.addEventListener('click', async () => {
+        try {
+            const result = await bkc.withdrawEarnings();
+            toast('Earnings withdrawn! TX: ' + result.hash.slice(0, 10) + '...', 'success');
+            await load(bkc);
+            render(el, bkc);
+        } catch (err) { toast(err.message, 'error'); }
+    });
+
+    el.querySelector('#setTutorBtn')?.addEventListener('click', async () => {
+        try {
+            const addr = el.querySelector('#tutorAddr').value.trim();
+            if (!ethers.isAddress(addr)) { toast('Invalid address', 'error'); return; }
+            const result = await bkc.setTutor(addr);
+            toast('Tutor set! TX: ' + result.hash.slice(0, 10) + '...', 'success');
+            await load(bkc);
+            render(el, bkc);
+        } catch (err) { toast(err.message, 'error'); }
+    });
+}
+`;
+}
+
+function genTokenomicsPage(config) {
+    return `// Tokenomics — Token supply, fees, ecosystem info
+import { ethers } from 'ethers';
+
+let _stats = null;
+
+export async function load(bkc) {
+    try { _stats = await bkc.getEcosystemStats(); } catch {}
+}
+
+export async function render(el, bkc) {
+    if (!_stats) await load(bkc);
+
+    const fmtEth = (v) => v ? Number(ethers.formatEther(v)).toFixed(4) : '0';
+    const fmtBkc = (v) => v ? Number(ethers.formatEther(v)).toLocaleString() : '0';
+
+    el.innerHTML = \`
+        <h1 class="page-title">Tokenomics</h1>
+
+        <div class="card">
+            <div class="card-title">BKC Token</div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Max Supply</div>
+                    <div class="stat-value accent">200M BKC</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">TGE (Initial)</div>
+                    <div class="stat-value">20M BKC</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">ETH Collected</div>
+                    <div class="stat-value">\${fmtEth(_stats?.ethCollected)} ETH</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Fee Events</div>
+                    <div class="stat-value">\${_stats?.feeEvents?.toString() || '0'}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Token Distribution</div>
+            <p style="color:var(--text-dim);line-height:1.8;">
+                <strong style="color:var(--accent);">50% — Mining Rewards</strong><br>
+                Earned through staking, buyback mining, and ecosystem participation.<br><br>
+                <strong style="color:var(--accent);">40% — Staking Pool</strong><br>
+                Distributed to BKC delegators proportional to pStake.<br><br>
+                <strong style="color:var(--accent);">10% — TGE (Initial Liquidity)</strong><br>
+                Used for initial DEX liquidity and ecosystem bootstrapping.
+            </p>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Fee Distribution</div>
+            <p style="color:var(--text-dim);line-height:1.8;">
+                Every transaction generates an ETH fee, distributed as follows:<br><br>
+                <strong style="color:var(--accent);">10-20% → Operator</strong> — App operators earn commission on every fee.<br>
+                <strong style="color:var(--accent);">10% → Tutor</strong> — Referral earnings for the user's tutor.<br>
+                <strong style="color:var(--accent);">30-50% → Buyback & Burn</strong> — ETH buys BKC from the market and burns it.<br>
+                <strong style="color:var(--accent);">10-30% → Treasury</strong> — Ecosystem development fund.
+            </p>
+        </div>
+
+        <div class="card">
+            <div class="card-title">6 Ways to Earn</div>
+            <p style="color:var(--text-dim);line-height:1.8;">
+                1. <strong>Stake BKC</strong> — Delegate and earn rewards over time<br>
+                2. <strong>NFT Boosters</strong> — Hold NFTs to boost staking rewards<br>
+                3. <strong>Tutor Referrals</strong> — Earn 10% ETH + 5% BKC from students<br>
+                4. <strong>Buyback Mining</strong> — Execute buybacks for 5% caller reward<br>
+                5. <strong>Fortune Pool</strong> — Win prediction games<br>
+                6. <strong>Operate an App</strong> — Build with the SDK, earn 10-20% of all fees
+            </p>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Operator</div>
+            <p style="font-family:monospace;color:var(--accent);word-break:break-all;">${config.operator}</p>
+            <p style="color:var(--text-dim);font-size:0.85rem;margin-top:8px;">
+                This app's operator earns 10-20% of every ETH fee. Network: ${config.network}
+            </p>
+        </div>
+    \`;
+}
+`;
+}
+
+function genInvitePage(config) {
+    return `// Invite & Earn — Share referral link
+import { ethers } from 'ethers';
+import { toast } from '../main.js';
+
+let _data = {};
+
+export async function load(bkc) {
+    const [count, earnings] = await Promise.all([
+        bkc.getTutorCount(),
+        bkc.getPendingEarnings(bkc.address),
+    ]);
+    _data = { count, earnings };
+}
+
+export async function render(el, bkc) {
+    if (!_data.count && _data.count !== 0) await load(bkc);
+
+    const link = window.location.origin + '/#dashboard?ref=' + bkc.address;
+    const msg = encodeURIComponent('Join Backchain and start earning! ' + link);
+
+    el.innerHTML = \`
+        <h1 class="page-title">Invite & Earn</h1>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Your Invites</div>
+                <div class="stat-value accent">\${_data.count}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Pending Earnings</div>
+                <div class="stat-value">\${Number(ethers.formatEther(_data.earnings)).toFixed(6)} ETH</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Your Referral Link</div>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <input type="text" class="input" value="\${link}" readonly id="refLink" style="flex:1;font-size:0.8rem;" />
+                <button id="copyBtn" class="btn btn-primary" style="white-space:nowrap;">Copy</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Share</div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                <a href="https://twitter.com/intent/tweet?text=\${msg}" target="_blank" class="btn btn-secondary">Twitter / X</a>
+                <a href="https://t.me/share/url?url=\${encodeURIComponent(link)}&text=\${encodeURIComponent('Join Backchain!')}" target="_blank" class="btn btn-secondary">Telegram</a>
+                <a href="https://wa.me/?text=\${msg}" target="_blank" class="btn btn-secondary">WhatsApp</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">How It Works</div>
+            <p style="color:var(--text-dim);line-height:1.8;">
+                1. <strong>Share your link</strong> — Send it to friends, post on social media.<br><br>
+                2. <strong>They join & connect</strong> — Your friend connects their wallet through your link.<br><br>
+                3. <strong>You become their tutor</strong> — Registered on-chain automatically (gasless).<br><br>
+                4. <strong>Earn forever</strong> — Get <strong style="color:var(--accent);">10% ETH</strong> of every fee + <strong style="color:var(--accent);">5% BKC</strong> of their staking rewards. Permanently.
+            </p>
+        </div>
+    \`;
+
+    el.querySelector('#copyBtn').addEventListener('click', () => {
+        navigator.clipboard.writeText(el.querySelector('#refLink').value)
+            .then(() => toast('Link copied!', 'success'))
+            .catch(() => toast('Copy failed', 'error'));
+    });
 }
 `;
 }

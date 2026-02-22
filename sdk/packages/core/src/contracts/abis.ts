@@ -274,3 +274,12 @@ export const NFT_FUSION_ABI = [
     'event Split(address indexed user, uint256 indexed burnedTokenId, uint8 sourceTier, uint8 targetTier, uint256 mintCount, uint256[] newTokenIds, address operator)',
 ];
 
+export const FAUCET_ABI = [
+    'function claim() external',
+    'function canClaim(address user) view returns (bool)',
+    'function getUserInfo(address user) view returns (uint256 lastClaim, uint256 claims, bool eligible, uint256 cooldownLeft)',
+    'function getFaucetStatus() view returns (uint256 ethBalance, uint256 ethPerDrip, uint256 estimatedClaims)',
+    'function getStats() view returns (uint256 eth, uint256 claims, uint256 users)',
+    'function paused() view returns (bool)',
+];
+
