@@ -674,7 +674,7 @@ async function withdrawEarnings() {
     OS.isWithdrawing = true;
 
     await txEngine.execute({
-        contract: State.ecosystemManagerContract,
+        getContract: async (signer) => new ethers.Contract(addresses.backchainEcosystem, ecosystemManagerABI, signer),
         method: 'withdrawEth',
         args: () => [],
         description: 'Withdraw Operator Earnings',

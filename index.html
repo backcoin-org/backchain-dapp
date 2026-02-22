@@ -476,7 +476,7 @@
         .splash-exit{animation:splash-out .4s ease-in forwards}
         .quote-line{animation:quote-line 2s ease-out .4s both}
         .splash-letter{display:inline-block;opacity:0;animation:letter-in .3s ease-out both}
-        .splash-bar{height:2px;background:linear-gradient(90deg,#b45309,#f59e0b,#b45309);border-radius:9999px;animation:splash-progress 5s linear forwards}
+        .splash-bar{height:2px;background:linear-gradient(90deg,#b45309,#f59e0b,#b45309);border-radius:9999px;animation:splash-progress 3.5s linear forwards}
     </style>
     <div id="welcome-splash" class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm cursor-pointer" style="transition:opacity .3s ease">
         <div class="splash-enter text-center px-8 max-w-sm">
@@ -509,5 +509,15 @@
             </div>
         </div>
     </div>
+    <script>
+    // Auto-dismiss splash after 3.5s from page load (not from DOMContentLoaded)
+    setTimeout(function(){
+        var s=document.getElementById('welcome-splash');
+        if(!s)return;
+        var inner=s.querySelector('.splash-enter');
+        if(inner){inner.classList.remove('splash-enter');inner.classList.add('splash-exit');}
+        setTimeout(function(){if(s.parentNode)s.parentNode.removeChild(s);},500);
+    },3500);
+    </script>
 </body>
 </html>

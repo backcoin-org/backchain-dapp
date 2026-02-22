@@ -377,7 +377,7 @@ function injectSplashStyles() {
         .splash-exit  { animation: splash-out 0.4s ease-in forwards; }
         .quote-line   { animation: quote-line 2s ease-out 0.4s both; }
         .letter-stagger span { display:inline-block; opacity:0; animation: letter-in 0.3s ease-out both; }
-        .splash-bar { height:2px; background:linear-gradient(90deg,#b45309,#f59e0b,#b45309); border-radius:9999px; animation: splash-progress 6s linear forwards; }
+        .splash-bar { height:2px; background:linear-gradient(90deg,#b45309,#f59e0b,#b45309); border-radius:9999px; animation: splash-progress 3.5s linear forwards; }
     `;
     document.head.appendChild(s);
 }
