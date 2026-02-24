@@ -274,6 +274,18 @@ All contracts deployed and tested on Ethereum Sepolia testnet. **130 integration
 
 **~9,400 lines of Solidity, 44,000+ lines of frontend JavaScript, 7,700+ lines of tests**, 3 years of development, **880+ commits**.
 
+### Security Analysis (Pre-Audit)
+
+Full Slither v0.11.5 static analysis completed — the industry-standard security scanner used by Trail of Bits and every major Web3 auditor:
+
+- **362 findings analyzed**, zero critical vulnerabilities
+- All ETH/BKC-handling functions protected with `nonReentrant` guards
+- CEI (Checks-Effects-Interactions) pattern enforced across all contracts
+- High-severity findings are accepted design decisions (trusted internal token, commit-reveal PRNG)
+- Full report available in repository: [`assets/slither-report.md`](https://github.com/backcoin-org/backchain-dapp/blob/main/assets/slither-report.md)
+
+**All 15 contracts verified on Sepolia Etherscan** — source code publicly readable and auditable by anyone.
+
 ### Developer SDK (Architecture Complete)
 
 ```bash
@@ -489,6 +501,44 @@ All deployed and verified, ready for opBNB mainnet migration:
 | BackchainGovernance | `0x28244003181711f09f9573BAF0E26F879A278227` |
 
 **Explorer:** [sepolia.etherscan.io](https://sepolia.etherscan.io)
+
+---
+
+## Try It Yourself (5-Minute Testnet Demo)
+
+Everything works right now on Sepolia testnet. Here's how to test it:
+
+**Setup (1 minute):**
+1. Open [backcoin.org](https://backcoin.org) on desktop with MetaMask installed
+2. Switch MetaMask to **Sepolia** network
+3. Get free Sepolia ETH from any faucet ([sepoliafaucet.com](https://sepoliafaucet.com) or [cloud.google.com/web3/faucet](https://cloud.google.com/application/web3/faucet/ethereum/sepolia))
+4. Click **Connect Wallet** on the site
+
+**Test Agora — Decentralized Social (1 minute):**
+1. Go to the **Agora** page
+2. Create a profile (display name, bio, avatar)
+3. Write a post — it's stored permanently on-chain
+4. Like other posts, follow users, add social links to your profile
+
+**Test Notary — Document Certification (1 minute):**
+1. Go to the **Notary** page
+2. Select any file from your computer (it never leaves your device — only the hash is stored)
+3. Click **Certify** — you now have permanent, tamper-proof proof of that document
+4. Try the **Verify** tab — paste any certification hash to check it
+
+**Test FortunePool — Prediction Game (1 minute):**
+1. Go to the **Fortune Pool** page
+2. Choose Bronze tier (cheapest)
+3. Pick numbers and commit — wait for the reveal block
+4. Reveal your result — the outcome is determined by the blockchain, provably fair
+
+**Explore the rest:**
+- **Dashboard** — See ecosystem stats, your balances, and staking overview
+- **NFT Store** — Buy Bronze NFTs from the bonding curve pool
+- **Staking** — Lock BKC tokens to earn yield (requires buying BKC on Trade page first)
+- **Trade** — Swap ETH/BKC on the built-in AMM
+
+All transactions are real Sepolia transactions — verifiable on [sepolia.etherscan.io](https://sepolia.etherscan.io).
 
 ---
 
