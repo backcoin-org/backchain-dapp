@@ -155,27 +155,10 @@ const SECURITY_CONFIG = {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-//                    🌐 MULTI-RPC CONFIGURATION
-// ════════════════════════════════════════════════════════════════════════════
-
-const TESTNET_RPC_ENDPOINTS = [
-    { name: 'PublicNode', url: 'https://ethereum-sepolia-rpc.publicnode.com', priority: 1 },
-    { name: 'Sepolia Official', url: 'https://rpc.sepolia.org', priority: 2 },
-];
-
-const MAINNET_RPC_ENDPOINTS = [
-    { name: 'opBNB Official', url: 'https://opbnb-mainnet-rpc.bnbchain.org', priority: 1 },
-    { name: 'PublicNode', url: 'https://opbnb.publicnode.com', priority: 2 },
-].filter(rpc => rpc.url) as { name: string; url: string; priority: number }[];
-
-let RPC_ENDPOINTS = TESTNET_RPC_ENDPOINTS;
-let rpcFailCounts: Record<string, number> = {};
-
-// ════════════════════════════════════════════════════════════════════════════
 //                    ⚙️ CONFIGURAÇÃO GERAL
 // ════════════════════════════════════════════════════════════════════════════
 
-const DEPLOY_DELAY_MS = 2000;  // Arbitrum L2: blocos rápidos
+const DEPLOY_DELAY_MS = 2000;  // L2: blocos rápidos
 const TX_DELAY_MS = 1000;
 const RETRY_DELAY_MS = 3000;
 
@@ -207,8 +190,8 @@ const LIQUIDITY_CONFIG = {
     // LiquidityPool: ETH + BKC initial liquidity (define o preço inicial)
     LIQUIDITY_POOL_BKC: 4_000_000n * 10n**18n,
     LIQUIDITY_POOL_ETH: "1.0", // 1 ETH → preço inicial: 0.00000025 ETH/BKC
-    // Referral BKC bonus pool (1 BKC per referred wallet = 1M wallets max)
-    REFERRAL_BONUS_BKC: 1_000_000n * 10n**18n,
+    // Tutor BKC bonus pool (1 BKC per tutored wallet = 1M wallets max)
+    TUTOR_BONUS_BKC: 1_000_000n * 10n**18n,
     // Remaining 12M (airdrop + reserve) goes to Treasury in FASE 14
 };
 
@@ -256,9 +239,8 @@ const MODULE_CONFIGS = {
 // feeType: 0 = gas-based (gasEstimate × gasPrice × bps × multiplier / 10000)
 // feeType: 1 = value-based (txValue × bps / 10000)
 //
-// V10 Fee Tiers (gas-based formula: gasEstimate × gasPrice × bps × multiplier / 10000):
-// On Arbitrum Sepolia (~0.1 gwei): fees ~100x higher than opBNB — fine for testing
-// On opBNB (~0.001 gwei): SOCIAL ~$0.025, CONTENT ~$0.10, FINANCIAL ~$1.00
+// V12 Fee Tiers (fixed fees — gasEstimate × multiplier = direct wei amount):
+// On Sepolia/opBNB: prices denominated in native token (ETH/BNB)
 //   SOCIAL:    low-friction actions (like, follow, reply, claim)
 //   CONTENT:   content creation (post, certify, report)
 //   FINANCIAL: financial actions (delegate, NFT buy/sell, fortune tier1/2)
@@ -348,8 +330,6 @@ const ACTION_FEE_CONFIGS: Record<string, { feeType: number; bps: number; multipl
     // ── RentalManager ──
     "RENTAL_BOOST":           FIXED_PREMIUM,   // 0.001   (~$0.60)
     // (RENTAL_RENT e CHARITY_DONATE são value-based, definidos separadamente)
-    // ── AirdropClaim ──
-    "AIRDROP_CLAIM":          FIXED_SOCIAL,    // 0.00008 (~$0.05) — barato para adoção
     // ── NFTFusion (ascending fees by tier) ──
     "FUSION_BRONZE":          FIXED_CONTENT,   // 0.0002  (~$0.12)
     "FUSION_SILVER":          FIXED_FINANCIAL,  // 0.0005  (~$0.30)
@@ -380,14 +360,25 @@ const NFT_SELL_FEES = [
     FIXED(2000000000000000n),   // T3 Diamond: 0.002  (~$1.20) = 2x buy
 ];
 
+// Agora username pricing (per-length, 7+ chars = free)
+// Uses abi.encode("AGORA_USERNAME", length) for action IDs
+const USERNAME_FEES: Record<number, ReturnType<typeof FIXED>> = {
+    1: FIXED(500000000000000000n),  // 1 char: 0.5    (~$300)
+    2: FIXED(100000000000000000n),  // 2 chars: 0.1   (~$60)
+    3: FIXED(50000000000000000n),   // 3 chars: 0.05  (~$30)
+    4: FIXED(10000000000000000n),   // 4 chars: 0.01  (~$6)
+    5: FIXED(5000000000000000n),    // 5 chars: 0.005 (~$3)
+    6: FIXED(1000000000000000n),    // 6 chars: 0.001 (~$0.60)
+};
+
 // ════════════════════════════════════════════════════════════════════════════
 //                    🔥 BKC DISTRIBUTION (burn / operator / stakers / treasury)
 // ════════════════════════════════════════════════════════════════════════════
 // burn + operator + staker + treasury = 10000
-// V11: No burn in ecosystem — deflation via StakingPool recycling only
+// V12: 5% burn + 95% stakers (operators/treasury earn only ETH/BNB)
 
 const BKC_DISTRIBUTION = {
-    burnBps: 500,       // 5% burn (constant deflation)
+    burnBps: 500,       // 5% burn (constant deflation via BuybackMiner)
     operatorBps: 0,     // 0% — operators earn only ETH/BNB
     stakerBps: 9500,    // 95% to stakers via notifyReward
     treasuryBps: 0,     // 0% — treasury earns only ETH/BNB
@@ -601,8 +592,6 @@ async function main() {
     const networkName = hre.network.name;
 
     const isMainnet = networkName === "opbnbMainnet";
-    RPC_ENDPOINTS = isMainnet ? MAINNET_RPC_ENDPOINTS : TESTNET_RPC_ENDPOINTS;
-    RPC_ENDPOINTS.forEach(rpc => { rpcFailCounts[rpc.name] = 0; });
 
     const chainId = Number((await ethers.provider.getNetwork()).chainId);
     initTransactionLog(networkName, chainId, deployer.address);
@@ -855,7 +844,7 @@ async function main() {
         // ══════════════════════════════════════════════════════════════════════
         // FASE 8b: AirdropClaim — IGNORADO (tokens vão para Treasury)
         // ══════════════════════════════════════════════════════════════════════
-        console.log("\n   ⏩ FASE 8b: AirdropClaim IGNORADO — 7M BKC vai para Treasury em FASE 14");
+        console.log("\n   ⏩ FASE 8b: AirdropClaim IGNORADO — 12M BKC vai para Treasury em FASE 14");
 
         // ══════════════════════════════════════════════════════════════════════
         // FASE 9: Configuração do Ecossistema
@@ -951,6 +940,14 @@ async function main() {
             feeConfigs.push([sellFee.feeType, sellFee.bps, sellFee.multiplier, sellFee.gasEstimate]);
         }
 
+        // 4) Agora username fees — per-length (7+ chars = free, no config needed)
+        for (const [lengthStr, fee] of Object.entries(USERNAME_FEES)) {
+            const length = Number(lengthStr);
+            const usernameActionId = ethers.keccak256(abiCoder.encode(["string", "uint256"], ["AGORA_USERNAME", length]));
+            actionIds.push(usernameActionId);
+            feeConfigs.push([fee.feeType, fee.bps, fee.multiplier, fee.gasEstimate]);
+        }
+
         console.log(`   📋 Configurando ${actionIds.length} action fees...`);
 
         await sendTxWithRetry(
@@ -958,7 +955,7 @@ async function main() {
             `Ecosystem.setFeeConfigBatch() — ${actionIds.length} ações`
         );
 
-        // 4) BKC Distribution (burn / operator / stakers / treasury)
+        // 5) BKC Distribution (burn / operator / stakers / treasury)
         // Contract defaults match, but configure explicitly for clarity
         await sendTxWithRetry(
             async () => await eco.setBkcDistribution(
@@ -976,7 +973,8 @@ async function main() {
         updateRulesJSON("feeConfigs", "totalActions", actionIds.length.toString());
         updateRulesJSON("feeConfigs", "gasBased", Object.keys(ACTION_FEE_CONFIGS).length.toString());
         updateRulesJSON("feeConfigs", "valueBased", Object.keys(VALUE_FEE_CONFIGS).length.toString());
-        updateRulesJSON("feeConfigs", "nftActions", "2");
+        updateRulesJSON("feeConfigs", "nftActions", "8");
+        updateRulesJSON("feeConfigs", "usernameActions", Object.keys(USERNAME_FEES).length.toString());
         updateRulesJSON("feeConfigs", "fusionActions", "6");
         updateRulesJSON("bkcDistribution", "burnBps", BKC_DISTRIBUTION.burnBps.toString());
         updateRulesJSON("bkcDistribution", "operatorBps", BKC_DISTRIBUTION.operatorBps.toString());
@@ -1049,8 +1047,8 @@ async function main() {
             `LiquidityPool: ${ethers.formatEther(lpBkcAmount)} BKC + ${LIQUIDITY_CONFIG.LIQUIDITY_POOL_ETH} ETH`
         );
 
-        // Fund Tutor Bonus Pool (100K BKC welcome gifts for tutored users)
-        const tutorBonusBkc = LIQUIDITY_CONFIG.REFERRAL_BONUS_BKC;
+        // Fund Tutor Bonus Pool (1M BKC — 1 BKC per tutored wallet, up to 1M wallets)
+        const tutorBonusBkc = LIQUIDITY_CONFIG.TUTOR_BONUS_BKC;
         await sendTxWithRetry(
             async () => await bkc.approve(ecoAddr, tutorBonusBkc),
             "Approve BKC para Tutor Bonus Pool"
@@ -1060,8 +1058,8 @@ async function main() {
             `Ecosystem.fundTutorBonus(${ethers.formatEther(tutorBonusBkc)} BKC)`
         );
 
-        // AirdropClaim IGNORADO — 7M BKC permanece com deployer → Treasury em FASE 14
-        console.log("   ⏩ AirdropClaim ignorado — 7M BKC extra vai para Treasury");
+        // AirdropClaim IGNORADO — 12M BKC permanece com deployer → Treasury em FASE 14
+        console.log("   ⏩ AirdropClaim ignorado — 12M BKC restante vai para Treasury");
 
         // ══════════════════════════════════════════════════════════════════════
         // FASE 12: Faucet (testnet only)
@@ -1192,7 +1190,7 @@ async function main() {
         console.log(`   BKC Distribution: ${BKC_DISTRIBUTION.operatorBps/100}% operator / ${BKC_DISTRIBUTION.stakerBps/100}% stakers / ${BKC_DISTRIBUTION.treasuryBps/100}% treasury`);
         console.log(`   Staking: V2 Recycle Model (60/40/30/20/0% per NFT tier, 10% burn if no tutor)`);
         console.log(`   Rental: 20% ecosystem fee (standard split, owner gets rentalCost directly)`);
-        console.log(`   Tutor Bonus Pool: ${ethers.formatEther(LIQUIDITY_CONFIG.REFERRAL_BONUS_BKC)} BKC (1 BKC/wallet, ~1M wallets)`);
+        console.log(`   Tutor Bonus Pool: ${ethers.formatEther(LIQUIDITY_CONFIG.TUTOR_BONUS_BKC)} BKC (1 BKC/wallet, ~1M wallets)`);
 
         printTransactionSummary();
 
