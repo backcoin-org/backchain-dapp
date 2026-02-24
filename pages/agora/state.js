@@ -67,6 +67,18 @@ export const MEDIA_LIMITS = {
 
 export const GALLERY_MAX_ITEMS = 10;
 
+export const SOCIAL_LINK_TYPES = [
+    { id: 'website',   label: 'Website',   icon: 'fa-globe',           color: '#3b82f6', placeholder: 'https://yoursite.com' },
+    { id: 'x',         label: 'X',         icon: 'fa-brands fa-x-twitter', color: '#ededf0', placeholder: 'https://x.com/username' },
+    { id: 'instagram', label: 'Instagram', icon: 'fa-brands fa-instagram', color: '#e1306c', placeholder: 'https://instagram.com/username' },
+    { id: 'youtube',   label: 'YouTube',   icon: 'fa-brands fa-youtube',   color: '#ff0000', placeholder: 'https://youtube.com/@channel' },
+    { id: 'tiktok',    label: 'TikTok',    icon: 'fa-brands fa-tiktok',    color: '#ededf0', placeholder: 'https://tiktok.com/@username' },
+    { id: 'github',    label: 'GitHub',    icon: 'fa-brands fa-github',    color: '#ededf0', placeholder: 'https://github.com/username' },
+    { id: 'telegram',  label: 'Telegram',  icon: 'fa-brands fa-telegram',  color: '#26a5e4', placeholder: 'https://t.me/username' },
+    { id: 'discord',   label: 'Discord',   icon: 'fa-brands fa-discord',   color: '#5865f2', placeholder: 'discord.gg/invite or username' },
+    { id: 'linkedin',  label: 'LinkedIn',  icon: 'fa-brands fa-linkedin',  color: '#0a66c2', placeholder: 'https://linkedin.com/in/username' },
+];
+
 export const bkcABI = [
     "function balanceOf(address) view returns (uint256)",
     "function allowance(address owner, address spender) view returns (uint256)",

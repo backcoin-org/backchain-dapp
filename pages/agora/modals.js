@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { showToast } from '../../ui-feedback.js';
-import { BC, TAGS, LANGUAGES, getMaxContent } from './state.js';
+import { BC, TAGS, LANGUAGES, SOCIAL_LINK_TYPES, getMaxContent } from './state.js';
 import { formatETH, escapeHtml, getIPFSUrl } from './utils.js';
 import {
     doSuperLike, doDownvote, doObtainBadge, doBoostProfile, doRepost,
@@ -135,12 +135,24 @@ export function renderModals() {
 
         <!-- Edit Profile Modal -->
         <div class="bc-modal-overlay" id="modal-edit-profile" onclick="if(event.target===this) AgoraPage.closeModal('edit-profile')">
-            <div class="bc-modal-box">
+            <div class="bc-modal-box" style="max-width:480px;">
                 <div class="bc-modal-top">
                     <span class="bc-modal-title"><i class="fa-solid fa-pen" style="color:var(--bc-accent)"></i> Edit Profile</span>
                     <button class="bc-modal-x" onclick="AgoraPage.closeModal('edit-profile')"><i class="fa-solid fa-xmark"></i></button>
                 </div>
-                <div class="bc-modal-inner">
+                <div class="bc-modal-inner" style="max-height:70vh;overflow-y:auto;">
+                    <!-- Banner -->
+                    <div class="bc-field">
+                        <label class="bc-label">Cover Image</label>
+                        <div class="bc-edit-banner-wrap" id="edit-banner-preview">
+                            ${BC.userProfile?.banner ? `<img src="${getIPFSUrl(BC.userProfile.banner)}" style="width:100%;height:100%;object-fit:cover;border-radius:var(--bc-radius-sm);">` : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--bc-text-3);font-size:13px;"><i class="fa-solid fa-image" style="margin-right:6px;"></i> No cover</div>'}
+                            <label class="bc-edit-banner-btn">
+                                <i class="fa-solid fa-camera"></i>
+                                <input type="file" id="edit-banner-file" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none;" onchange="AgoraPage.previewBanner(this)">
+                            </label>
+                        </div>
+                    </div>
+                    <!-- Avatar -->
                     <div class="bc-field">
                         <label class="bc-label">Profile Picture</label>
                         <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
@@ -153,13 +165,25 @@ export function renderModals() {
                             </label>
                         </div>
                     </div>
+                    <!-- Name & Bio -->
                     <div class="bc-field"><label class="bc-label">Display Name</label><input type="text" id="edit-displayname" class="bc-input" value="${escapeHtml(BC.userProfile?.displayName || '')}" maxlength="30" placeholder="Your display name"></div>
                     <div class="bc-field"><label class="bc-label">Bio</label><textarea id="edit-bio" class="bc-input" maxlength="160" rows="3" placeholder="About you..." style="resize:none;">${escapeHtml(BC.userProfile?.bio || '')}</textarea></div>
+                    <!-- Location -->
+                    <div class="bc-field"><label class="bc-label"><i class="fa-solid fa-location-dot" style="color:var(--bc-red);margin-right:4px;"></i> Location</label><input type="text" id="edit-location" class="bc-input" value="${escapeHtml(BC.userProfile?.location || '')}" maxlength="50" placeholder="e.g. São Paulo, Brazil"></div>
+                    <!-- Language -->
                     <div class="bc-field">
                         <label class="bc-label">Language</label>
                         <select id="edit-language" class="bc-input" style="padding:10px 12px;">
                             ${LANGUAGES.map(l => `<option value="${l.code}" ${(BC.userProfile?.language || '') === l.code ? 'selected' : ''}>${l.flag} ${l.name}</option>`).join('')}
                         </select>
+                    </div>
+                    <!-- Social Links -->
+                    <div class="bc-field">
+                        <label class="bc-label"><i class="fa-solid fa-link" style="color:var(--bc-accent);margin-right:4px;"></i> Social Links</label>
+                        <div id="edit-social-links" class="bc-edit-links-list">
+                            ${_renderEditLinks()}
+                        </div>
+                        <button class="bc-btn bc-btn-outline" style="width:100%;margin-top:8px;font-size:12px;justify-content:center;" onclick="AgoraPage.addSocialLink()"><i class="fa-solid fa-plus"></i> Add Link</button>
                     </div>
                     <p style="font-size:12px;color:var(--bc-text-3);margin-bottom:16px;">Username cannot be changed. Only gas fee applies.</p>
                     <button id="bc-edit-profile-btn" class="bc-btn bc-btn-primary" style="width:100%;justify-content:center;" onclick="AgoraPage.confirmEditProfile()"><i class="fa-solid fa-check"></i> Save Changes</button>
@@ -316,7 +340,73 @@ export function openRepostConfirm(postId) {
 export async function confirmRepost() { await doRepost(selectedPostForAction); }
 
 export function openEditProfile() {
+    // Initialize edit links from current profile
+    _editLinks = (BC.userProfile?.links || []).map(l => ({ ...l }));
+    if (_editLinks.length === 0) _editLinks.push({ type: '', url: '' });
     BC._render();
     document.getElementById('modal-edit-profile')?.classList.add('active');
 }
 export async function confirmEditProfile() { await doUpdateProfile(); }
+
+// Banner preview
+export function previewBanner(input) {
+    const file = input?.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { showToast('Image too large. Maximum 5MB.', 'error'); return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        const preview = document.getElementById('edit-banner-preview');
+        if (preview) preview.innerHTML = `<img src="${ev.target.result}" style="width:100%;height:100%;object-fit:cover;border-radius:var(--bc-radius-sm);">
+            <label class="bc-edit-banner-btn"><i class="fa-solid fa-camera"></i><input type="file" id="edit-banner-file" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none;" onchange="AgoraPage.previewBanner(this)"></label>`;
+    };
+    reader.readAsDataURL(file);
+}
+
+// Social links editing
+let _editLinks = [{ type: '', url: '' }];
+
+function _renderEditLinks() {
+    return _editLinks.map((link, i) => `
+        <div class="bc-edit-link-row" data-link-idx="${i}">
+            <select class="bc-input bc-link-type-select" onchange="AgoraPage.updateLinkType(${i}, this.value)" style="padding:8px;flex:0 0 110px;">
+                <option value="">Platform</option>
+                ${SOCIAL_LINK_TYPES.map(t => `<option value="${t.id}" ${link.type === t.id ? 'selected' : ''}>${t.label}</option>`).join('')}
+            </select>
+            <input type="text" class="bc-input" value="${escapeHtml(link.url || '')}" placeholder="${_getLinkPlaceholder(link.type)}" maxlength="200" style="flex:1;padding:8px;" onchange="AgoraPage.updateLinkUrl(${i}, this.value)">
+            <button class="bc-btn bc-btn-outline" style="padding:6px 8px;border-color:var(--bc-red);color:var(--bc-red);flex-shrink:0;" onclick="AgoraPage.removeSocialLink(${i})"><i class="fa-solid fa-xmark"></i></button>
+        </div>`).join('');
+}
+
+function _getLinkPlaceholder(type) {
+    const found = SOCIAL_LINK_TYPES.find(t => t.id === type);
+    return found?.placeholder || 'https://...';
+}
+
+export function addSocialLink() {
+    if (_editLinks.length >= 9) { showToast('Maximum 9 links', 'error'); return; }
+    _editLinks.push({ type: '', url: '' });
+    const container = document.getElementById('edit-social-links');
+    if (container) container.innerHTML = _renderEditLinks();
+}
+
+export function removeSocialLink(index) {
+    _editLinks.splice(index, 1);
+    if (_editLinks.length === 0) _editLinks.push({ type: '', url: '' });
+    const container = document.getElementById('edit-social-links');
+    if (container) container.innerHTML = _renderEditLinks();
+}
+
+export function updateLinkType(index, value) {
+    if (_editLinks[index]) _editLinks[index].type = value;
+    // Update placeholder
+    const row = document.querySelector(`[data-link-idx="${index}"] input[type="text"]`);
+    if (row) row.placeholder = _getLinkPlaceholder(value);
+}
+
+export function updateLinkUrl(index, value) {
+    if (_editLinks[index]) _editLinks[index].url = value.trim();
+}
+
+export function getEditLinks() {
+    return _editLinks.filter(l => l.type && l.url);
+}

@@ -86,12 +86,21 @@ export function parsePostContent(content) {
 }
 
 export function parseMetadata(metadataURI) {
-    if (!metadataURI) return { displayName: '', bio: '', avatar: '', language: '' };
+    const empty = { displayName: '', bio: '', avatar: '', banner: '', language: '', location: '', links: [] };
+    if (!metadataURI) return empty;
     try {
         const data = JSON.parse(metadataURI);
-        return { displayName: data.displayName || '', bio: data.bio || '', avatar: data.avatar || '', language: data.language || '' };
+        return {
+            displayName: data.displayName || '',
+            bio: data.bio || '',
+            avatar: data.avatar || '',
+            banner: data.banner || '',
+            language: data.language || '',
+            location: data.location || '',
+            links: Array.isArray(data.links) ? data.links.filter(l => l && l.type && l.url) : []
+        };
     } catch {
-        return { displayName: '', bio: '', avatar: '', language: '' };
+        return empty;
     }
 }
 

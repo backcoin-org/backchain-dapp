@@ -111,7 +111,10 @@ export async function loadProfiles() {
                 displayName: meta.displayName,
                 bio: meta.bio,
                 avatar: meta.avatar,
-                language: meta.language
+                banner: meta.banner,
+                language: meta.language,
+                location: meta.location,
+                links: meta.links
             });
         }
 
@@ -126,7 +129,10 @@ export async function loadProfiles() {
                 displayName: meta.displayName || existing.displayName,
                 bio: meta.bio,
                 avatar: meta.avatar || existing.avatar,
-                language: meta.language || existing.language
+                banner: meta.banner || existing.banner,
+                language: meta.language || existing.language,
+                location: meta.location,
+                links: meta.links.length > 0 ? meta.links : (existing.links || [])
             });
         }
 
@@ -138,7 +144,7 @@ export async function loadProfiles() {
                     const profile = await BackchatTx.getUserProfile(State.userAddress);
                     if (profile && profile.usernameHash && profile.usernameHash !== ethers.ZeroHash) {
                         const meta = parseMetadata(profile.metadataURI);
-                        myProfile = { username: null, metadataURI: profile.metadataURI, displayName: meta.displayName, bio: meta.bio, avatar: meta.avatar, language: meta.language };
+                        myProfile = { username: null, metadataURI: profile.metadataURI, displayName: meta.displayName, bio: meta.bio, avatar: meta.avatar, banner: meta.banner, language: meta.language, location: meta.location, links: meta.links };
                         BC.profiles.set(myAddr, myProfile);
                     }
                     if (profile) {

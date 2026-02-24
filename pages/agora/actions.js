@@ -10,7 +10,7 @@ import { agoraABI } from '../../config.js';
 import { BackchatTx } from '../../modules/transactions/index.js';
 import { irysUploadFile } from '../../modules/core/index.js';
 import { LiveStream } from '../../modules/webrtc-live.js';
-import { BC, getMaxContent, getOperatorAddress, MEDIA_LIMITS, GALLERY_MAX_ITEMS } from './state.js';
+import { BC, getMaxContent, getOperatorAddress, MEDIA_LIMITS, GALLERY_MAX_ITEMS, SOCIAL_LINK_TYPES } from './state.js';
 import { getProfileName, getProfileUsername, getIPFSUrl } from './utils.js';
 import { loadPosts } from './data-loader.js';
 
@@ -323,14 +323,19 @@ export async function doCreateProfile() {
 export async function doUpdateProfile() {
     const displayName = document.getElementById('edit-displayname')?.value?.trim() || '';
     const bio = document.getElementById('edit-bio')?.value?.trim() || '';
+    const location = document.getElementById('edit-location')?.value?.trim() || '';
     const btn = document.getElementById('bc-edit-profile-btn');
+
+    // Import getEditLinks dynamically to avoid circular deps
+    const { getEditLinks } = await import('./modals.js');
+    const links = getEditLinks();
 
     let avatar = BC.userProfile?.avatar || '';
     const avatarFile = document.getElementById('edit-avatar-file')?.files?.[0];
     if (avatarFile) {
         try {
             btn && (btn.disabled = true);
-            btn && (btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Optimizing & uploading avatar...');
+            btn && (btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading avatar...');
             const result = await irysUploadFile(avatarFile, {
                 tags: [{ name: 'Type', value: 'agora-avatar' }],
                 optimize: { maxWidth: 512, maxHeight: 512, quality: 0.8 }
@@ -344,8 +349,27 @@ export async function doUpdateProfile() {
         }
     }
 
+    let banner = BC.userProfile?.banner || '';
+    const bannerFile = document.getElementById('edit-banner-file')?.files?.[0];
+    if (bannerFile) {
+        try {
+            btn && (btn.disabled = true);
+            btn && (btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading cover...');
+            const result = await irysUploadFile(bannerFile, {
+                tags: [{ name: 'Type', value: 'agora-banner' }],
+                optimize: { maxWidth: 1200, maxHeight: 400, quality: 0.85 }
+            });
+            banner = result.id;
+        } catch (e) {
+            showToast('Cover upload error: ' + e.message, 'error');
+            btn && (btn.disabled = false);
+            btn && (btn.innerHTML = '<i class="fa-solid fa-check"></i> Save Changes');
+            return;
+        }
+    }
+
     const language = document.getElementById('edit-language')?.value || BC.userProfile?.language || '';
-    const metadataURI = JSON.stringify({ displayName, bio, avatar, language });
+    const metadataURI = JSON.stringify({ displayName, bio, avatar, banner, language, location, links });
 
     await BackchatTx.updateProfile({
         metadataURI, button: btn,
@@ -353,8 +377,11 @@ export async function doUpdateProfile() {
             BC.userProfile.displayName = displayName;
             BC.userProfile.bio = bio;
             BC.userProfile.avatar = avatar;
+            BC.userProfile.banner = banner;
             BC.userProfile.language = language;
-            BC.profiles.set(State.userAddress.toLowerCase(), { ...BC.profiles.get(State.userAddress.toLowerCase()), displayName, bio, avatar, language });
+            BC.userProfile.location = location;
+            BC.userProfile.links = links;
+            BC.profiles.set(State.userAddress.toLowerCase(), { ...BC.profiles.get(State.userAddress.toLowerCase()), displayName, bio, avatar, banner, language, location, links });
             closeModal('edit-profile');
             showToast('Profile updated!', 'success');
             BC._render();

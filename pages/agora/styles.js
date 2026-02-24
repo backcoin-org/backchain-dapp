@@ -158,6 +158,19 @@ export function injectStyles() {
         .bc-profile-handle a i { font-size:10px; margin-left:4px; }
         .bc-profile-bio { margin-top:8px; font-size:14px; color:var(--bc-text-2); line-height:1.5; }
         .bc-profile-username { color:var(--bc-text-3); font-size:14px; margin-top:2px; }
+        .bc-profile-location { margin-top:6px; font-size:13px; color:var(--bc-text-3); display:flex; align-items:center; gap:5px; }
+        .bc-profile-location i { color:var(--bc-red); font-size:12px; }
+        .bc-profile-links { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
+        .bc-social-pill { display:inline-flex; align-items:center; gap:5px; padding:5px 12px; border-radius:20px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03); color:var(--pill-color, var(--bc-text-2)); font-size:12px; font-weight:600; text-decoration:none; transition:all var(--bc-transition); cursor:pointer; }
+        .bc-social-pill:hover { background:rgba(255,255,255,0.06); border-color:var(--pill-color, var(--bc-border-h)); transform:translateY(-1px); }
+        .bc-social-pill i { font-size:13px; }
+        .bc-social-pill span { font-size:12px; }
+        .bc-edit-banner-wrap { position:relative; height:100px; border-radius:var(--bc-radius-sm); background:var(--bc-bg3); border:1px dashed var(--bc-border); overflow:hidden; }
+        .bc-edit-banner-btn { position:absolute; bottom:8px; right:8px; width:32px; height:32px; border-radius:50%; background:rgba(0,0,0,0.6); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:13px; transition:background var(--bc-transition); }
+        .bc-edit-banner-btn:hover { background:rgba(0,0,0,0.8); }
+        .bc-edit-links-list { display:flex; flex-direction:column; gap:6px; }
+        .bc-edit-link-row { display:flex; gap:6px; align-items:center; }
+        .bc-link-type-select { font-size:12px; }
         .bc-profile-stats { display:grid; grid-template-columns:repeat(3, 1fr); gap:1px; margin-top:20px; background:var(--bc-border); border-radius:var(--bc-radius); overflow:hidden; }
         .bc-stat-cell { background:var(--bc-bg2); padding:16px 12px; text-align:center; }
         .bc-stat-cell:first-child { border-radius:var(--bc-radius) 0 0 var(--bc-radius); }

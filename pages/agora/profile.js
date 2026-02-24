@@ -4,12 +4,28 @@
 
 import { State } from '../../state.js';
 import { BackchatTx } from '../../modules/transactions/index.js';
-import { BC, EXPLORER_ADDRESS, LANGUAGES, getMaxContent, formatExpiry, renderExpiryWarnings } from './state.js';
+import { BC, EXPLORER_ADDRESS, LANGUAGES, SOCIAL_LINK_TYPES, getMaxContent, formatExpiry, renderExpiryWarnings } from './state.js';
 import {
     shortenAddress, escapeHtml, formatETH, getIPFSUrl, getInitials,
     getProfileAvatar, getProfileName, getProfileUsername
 } from './utils.js';
 import { renderPost } from './post-card.js';
+
+// ============================================================================
+// SOCIAL LINKS RENDERER
+// ============================================================================
+
+function renderSocialLinks(links) {
+    if (!links || links.length === 0) return '';
+    return links.map(link => {
+        const def = SOCIAL_LINK_TYPES.find(t => t.id === link.type);
+        if (!def) return '';
+        const url = link.url.startsWith('http') ? link.url : `https://${link.url}`;
+        return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="bc-social-pill" style="--pill-color:${def.color};" onclick="event.stopPropagation();" title="${def.label}">
+            <i class="${def.icon}"></i><span>${def.label}</span>
+        </a>`;
+    }).join('');
+}
 
 // ============================================================================
 // OWN PROFILE
@@ -31,11 +47,14 @@ export function renderProfile() {
     const followingCount = BC.followCounts.get(myAddr)?.following ?? BC.following.size;
     const displayName = BC.userProfile?.displayName || BC.userProfile?.username || shortenAddress(State.userAddress);
     const avatarUrl = BC.userProfile?.avatar ? getIPFSUrl(BC.userProfile.avatar) : '';
+    const bannerUrl = BC.userProfile?.banner ? getIPFSUrl(BC.userProfile.banner) : '';
+    const location = BC.userProfile?.location || '';
+    const links = BC.userProfile?.links || [];
     const totalSuperLikeETH = userPosts.reduce((sum, p) => sum + (p.superLikeETH || 0n), 0n);
 
     return `
         <div class="bc-profile-section">
-            <div class="bc-profile-banner"></div>
+            <div class="bc-profile-banner"${bannerUrl ? ` style="background:url('${bannerUrl}') center/cover no-repeat;"` : ''}></div>
             <div class="bc-profile-main">
                 <div class="bc-profile-top-row">
                     <div class="bc-profile-pic ${BC.isBoosted ? 'boosted' : ''}">${avatarUrl ? `<img src="${avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.outerHTML='${BC.userProfile?.username ? BC.userProfile.username.charAt(0).toUpperCase() : getInitials(State.userAddress)}'">` : (BC.userProfile?.username ? BC.userProfile.username.charAt(0).toUpperCase() : getInitials(State.userAddress))}</div>
@@ -52,9 +71,11 @@ export function renderProfile() {
                 </div>
                 ${BC.userProfile?.username ? `<div class="bc-profile-username">@${BC.userProfile.username}</div>` : ''}
                 ${BC.userProfile?.bio ? `<div class="bc-profile-bio">${escapeHtml(BC.userProfile.bio)}</div>` : ''}
+                ${location ? `<div class="bc-profile-location"><i class="fa-solid fa-location-dot"></i> ${escapeHtml(location)}</div>` : ''}
                 <div class="bc-profile-handle">
                     <a href="${EXPLORER_ADDRESS}${State.userAddress}" target="_blank" rel="noopener">View on Explorer <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
                 </div>
+                ${links.length > 0 ? `<div class="bc-profile-links">${renderSocialLinks(links)}</div>` : ''}
                 <div class="bc-profile-stats" style="grid-template-columns:repeat(4,1fr);">
                     <div class="bc-stat-cell"><div class="bc-stat-value">${userPosts.length}</div><div class="bc-stat-label">Posts</div></div>
                     <div class="bc-stat-cell"><div class="bc-stat-value">${followersCount}</div><div class="bc-stat-label">Followers</div></div>
@@ -86,7 +107,10 @@ export function renderUserProfile() {
     const displayName = profile?.displayName || profile?.username || shortenAddress(addr);
     const username = profile?.username;
     const bio = profile?.bio;
+    const location = profile?.location || '';
+    const links = profile?.links || [];
     const avatarUrl = getProfileAvatar(addr);
+    const bannerUrl = profile?.banner ? getIPFSUrl(profile.banner) : '';
     const avatarFallback = username ? username.charAt(0).toUpperCase() : getInitials(addr);
     const isMe = addrLower === State.userAddress?.toLowerCase();
     const isFollowing = BC.following.has(addrLower);
@@ -106,7 +130,7 @@ export function renderUserProfile() {
 
     return `
         <div class="bc-profile-section">
-            <div class="bc-profile-banner"></div>
+            <div class="bc-profile-banner"${bannerUrl ? ` style="background:url('${bannerUrl}') center/cover no-repeat;"` : ''}></div>
             <div class="bc-profile-main">
                 <div class="bc-profile-top-row">
                     <div class="bc-profile-pic">${avatarUrl ? `<img src="${avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.outerHTML='${avatarFallback}'">` : avatarFallback}</div>
@@ -125,9 +149,11 @@ export function renderUserProfile() {
                 <div class="bc-profile-name-row"><span class="bc-profile-name">${escapeHtml(displayName)}</span></div>
                 ${username ? `<div class="bc-profile-username">@${username}</div>` : ''}
                 ${bio ? `<div class="bc-profile-bio">${escapeHtml(bio)}</div>` : ''}
+                ${location ? `<div class="bc-profile-location"><i class="fa-solid fa-location-dot"></i> ${escapeHtml(location)}</div>` : ''}
                 <div class="bc-profile-handle">
                     <a href="${EXPLORER_ADDRESS}${addr}" target="_blank" rel="noopener">${shortenAddress(addr)} <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
                 </div>
+                ${links.length > 0 ? `<div class="bc-profile-links">${renderSocialLinks(links)}</div>` : ''}
                 <div class="bc-profile-stats">
                     <div class="bc-stat-cell"><div class="bc-stat-value">${userPosts.length}</div><div class="bc-stat-label">Posts</div></div>
                     <div class="bc-stat-cell"><div class="bc-stat-value">${counts.followers}</div><div class="bc-stat-label">Followers</div></div>

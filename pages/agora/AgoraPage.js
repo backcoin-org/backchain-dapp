@@ -13,7 +13,7 @@ import { renderCompose } from './composer.js';
 import { renderFeed, renderDiscover, renderTagBar, renderLanguageBar, renderLiveStreamBar } from './feed.js';
 import { renderProfile, renderUserProfile, renderProfileSetup } from './profile.js';
 import { renderPostDetail } from './post-detail.js';
-import { renderModals, openSuperLike, confirmSuperLike, openDownvote, confirmDownvote, openBadge, confirmBadge, openBoost, confirmBoost, openReport, confirmReport, openBoostPost, confirmBoostPost, openTip, confirmTip, openEditPost, confirmEditPost, previewAvatar, openRepostConfirm, confirmRepost, openEditProfile, confirmEditProfile } from './modals.js';
+import { renderModals, openSuperLike, confirmSuperLike, openDownvote, confirmDownvote, openBadge, confirmBadge, openBoost, confirmBoost, openReport, confirmReport, openBoostPost, confirmBoostPost, openTip, confirmTip, openEditPost, confirmEditPost, previewAvatar, previewBanner, openRepostConfirm, confirmRepost, openEditProfile, confirmEditProfile, addSocialLink, removeSocialLink, updateLinkType, updateLinkUrl } from './modals.js';
 
 // ============================================================================
 // HEADER
@@ -623,8 +623,15 @@ export const AgoraPage = {
     openTip,
     confirmTip,
     previewAvatar,
+    previewBanner,
     openEditPost,
     confirmEditPost,
+
+    // Social Links
+    addSocialLink,
+    removeSocialLink,
+    updateLinkType,
+    updateLinkUrl,
 
     // Action Cart
     removeFromCart,
