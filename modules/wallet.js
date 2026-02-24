@@ -41,8 +41,8 @@ const ethers = window.ethers;
 // ============================================================================
 // 1. CONFIGURAÇÃO
 // ============================================================================
-const OPBNB_TESTNET_ID_DECIMAL = 11155111;
-const OPBNB_TESTNET_ID_HEX = '0xaa36a7';
+const NETWORK_ID_DECIMAL = 11155111;  // Sepolia testnet
+const NETWORK_ID_HEX = '0xaa36a7';
 
 let balancePollingInterval = null;
 
@@ -85,7 +85,7 @@ const ethersConfig = defaultConfig({
     enableInjected: true,
     enableCoinbase: false,
     rpcUrl: sepoliaRpcUrl,
-    defaultChainId: OPBNB_TESTNET_ID_DECIMAL,
+    defaultChainId: NETWORK_ID_DECIMAL,
     enableEmail: true,
     enableEns: false,
     auth: {
@@ -410,10 +410,10 @@ async function ensureNetwork(provider) {
 
     try {
         const network = await provider.getNetwork();
-        if (Number(network.chainId) === OPBNB_TESTNET_ID_DECIMAL) return true;
+        if (Number(network.chainId) === NETWORK_ID_DECIMAL) return true;
 
         try {
-            await provider.send("wallet_switchEthereumChain", [{ chainId: OPBNB_TESTNET_ID_HEX }]);
+            await provider.send("wallet_switchEthereumChain", [{ chainId: NETWORK_ID_HEX }]);
             return true;
         } catch (switchError) { return true; }
     } catch (e) { return true; }
@@ -440,9 +440,9 @@ async function setupSignerAndLoadData(provider, address) {
         if (isEmbedded) {
             try {
                 const chainId = web3modal.getChainId();
-                if (chainId !== OPBNB_TESTNET_ID_DECIMAL) {
+                if (chainId !== NETWORK_ID_DECIMAL) {
                     console.log(`[Wallet] Embedded wallet on chain ${chainId}, switching...`);
-                    await web3modal.switchNetwork(OPBNB_TESTNET_ID_DECIMAL);
+                    await web3modal.switchNetwork(NETWORK_ID_DECIMAL);
                     try { web3modal.close(); } catch(_) {}
                 }
             } catch (e) {
