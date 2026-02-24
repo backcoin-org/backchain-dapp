@@ -133,6 +133,16 @@ contract BuybackMiner is IBuybackMiner {
     error NotOwner();
     error NotPendingOwner();
     error ZeroAddress();
+    error Reentrancy();
+
+    uint8 private _locked;
+
+    modifier nonReentrant() {
+        if (_locked == 1) revert Reentrancy();
+        _locked = 1;
+        _;
+        _locked = 0;
+    }
 
     // ════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -159,7 +169,7 @@ contract BuybackMiner is IBuybackMiner {
     ///         Caller must send >= executionFee ETH (anti-spam).
     ///         Fee is ADDED to buyback, amplifying BKC purchase.
     ///         Caller earns 5% of total ETH (ecosystem + fee) as incentive.
-    function executeBuyback() external payable override {
+    function executeBuyback() external payable override nonReentrant {
         if (paused) revert BuybackPaused();
         if (msg.value < executionFee) revert InsufficientFee();
         _executeBuyback(0);
@@ -168,7 +178,7 @@ contract BuybackMiner is IBuybackMiner {
     /// @notice Execute buyback with slippage protection.
     ///         Same as executeBuyback() but reverts if total BKC output
     ///         (purchased + mined) is less than minTotalBkcOut.
-    function executeBuybackWithSlippage(uint256 minTotalBkcOut) external payable {
+    function executeBuybackWithSlippage(uint256 minTotalBkcOut) external payable nonReentrant {
         if (paused) revert BuybackPaused();
         if (msg.value < executionFee) revert InsufficientFee();
         _executeBuyback(minTotalBkcOut);

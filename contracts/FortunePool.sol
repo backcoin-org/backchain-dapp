@@ -145,6 +145,16 @@ contract FortunePool {
     error BlockhashUnavailable();
     error InvalidTier();
     error WagerTooLarge();
+    error Reentrancy();
+
+    uint8 private _locked;
+
+    modifier nonReentrant() {
+        if (_locked == 1) revert Reentrancy();
+        _locked = 1;
+        _;
+        _locked = 0;
+    }
 
     // ════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -173,7 +183,7 @@ contract FortunePool {
         uint256 wagerAmount,
         uint8 tierMask,
         address operator
-    ) external payable returns (uint256 gameId) {
+    ) external payable nonReentrant returns (uint256 gameId) {
         if (wagerAmount == 0) revert ZeroAmount();
         if (commitHash == bytes32(0)) revert InvalidCommitment();
         if (tierMask == 0 || tierMask > 7) revert InvalidTierMask();
@@ -246,7 +256,7 @@ contract FortunePool {
         uint256 gameId,
         uint256[] calldata guesses,
         bytes32 userSecret
-    ) external returns (uint256 prizeWon) {
+    ) external nonReentrant returns (uint256 prizeWon) {
         Commitment storage g = games[gameId];
         if (g.player != msg.sender) revert NotCommitted();
         if (g.status != S_COMMITTED) revert AlreadyFinalized();
@@ -336,7 +346,7 @@ contract FortunePool {
     // ════════════════════════════════════════════════════════════════════════
 
     /// @notice Mark an expired game as forfeited. Permissionless.
-    function claimExpired(uint256 gameId) external {
+    function claimExpired(uint256 gameId) external nonReentrant {
         Commitment storage g = games[gameId];
         if (g.status != S_COMMITTED) revert NotCommitted();
 

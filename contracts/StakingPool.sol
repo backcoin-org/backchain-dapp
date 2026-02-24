@@ -223,6 +223,16 @@ contract StakingPool is IStakingPool {
     error InsufficientFee();
     error TransferFailed();
     error InvalidPenalty();
+    error Reentrancy();
+
+    uint8 private _locked;
+
+    modifier nonReentrant() {
+        if (_locked == 1) revert Reentrancy();
+        _locked = 1;
+        _;
+        _locked = 0;
+    }
 
     // ════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -293,7 +303,7 @@ contract StakingPool is IStakingPool {
         uint256 amount,
         uint256 lockDays,
         address operator
-    ) external payable override {
+    ) external payable override nonReentrant {
         if (amount == 0) revert ZeroAmount();
         if (lockDays < MIN_LOCK_DAYS) revert LockTooShort();
         if (lockDays > MAX_LOCK_DAYS) revert LockTooLong();
@@ -382,7 +392,7 @@ contract StakingPool is IStakingPool {
     /// @notice Unstake a specific delegation after its lock period expires.
     ///         Pending rewards for this delegation are saved (not auto-claimed).
     ///         Call claimRewards() separately to claim with optimal NFT boost.
-    function unstake(uint256 index) external override {
+    function unstake(uint256 index) external override nonReentrant {
         if (index >= _delegations[msg.sender].length) revert InvalidIndex();
 
         Delegation storage d = _delegations[msg.sender][index];
@@ -423,7 +433,7 @@ contract StakingPool is IStakingPool {
     ///
     /// @param index    Delegation index to force unstake
     /// @param operator Frontend operator address
-    function forceUnstake(uint256 index, address operator) external payable {
+    function forceUnstake(uint256 index, address operator) external payable nonReentrant {
         if (index >= _delegations[msg.sender].length) revert InvalidIndex();
         if (msg.value < forceUnstakeEthFee) revert InsufficientFee();
 
@@ -511,7 +521,7 @@ contract StakingPool is IStakingPool {
     ///         5. ETH fee → ecosystem
     ///
     /// @param operator Frontend operator address
-    function claimRewards(address operator) external payable {
+    function claimRewards(address operator) external payable nonReentrant {
         _executeClaim(msg.sender, operator);
 
         // ETH fee → ecosystem (optional, sent after claim)
@@ -528,7 +538,7 @@ contract StakingPool is IStakingPool {
     }
 
     /// @notice Simplified claimRewards() without operator (interface compliance)
-    function claimRewards() external override {
+    function claimRewards() external override nonReentrant {
         _executeClaim(msg.sender, address(0));
     }
 
@@ -537,7 +547,7 @@ contract StakingPool is IStakingPool {
     ///
     /// @param lockDays  Lock duration for the new compound delegation
     /// @param operator  Frontend operator address
-    function compoundRewards(uint256 lockDays, address operator) external payable {
+    function compoundRewards(uint256 lockDays, address operator) external payable nonReentrant {
         if (lockDays < MIN_LOCK_DAYS) revert LockTooShort();
         if (lockDays > MAX_LOCK_DAYS) revert LockTooLong();
 

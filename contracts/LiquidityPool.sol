@@ -89,6 +89,16 @@ contract LiquidityPool is ILiquidityPool {
     error InsufficientInitialLiquidity();
     error SlippageExceeded();
     error TransferFailed();
+    error Reentrancy();
+
+    uint8 private _locked;
+
+    modifier nonReentrant() {
+        if (_locked == 1) revert Reentrancy();
+        _locked = 1;
+        _;
+        _locked = 0;
+    }
 
     // ════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -119,7 +129,7 @@ contract LiquidityPool is ILiquidityPool {
     function addLiquidity(
         uint256 bkcAmount,
         uint256 minShares
-    ) external payable returns (uint256 shares) {
+    ) external payable nonReentrant returns (uint256 shares) {
         if (msg.value == 0 || bkcAmount == 0) revert ZeroAmount();
 
         // Pull BKC from sender
@@ -172,7 +182,7 @@ contract LiquidityPool is ILiquidityPool {
         uint256 shares,
         uint256 minEthOut,
         uint256 minBkcOut
-    ) external returns (uint256 ethAmount, uint256 bkcAmount) {
+    ) external nonReentrant returns (uint256 ethAmount, uint256 bkcAmount) {
         if (shares == 0) revert ZeroAmount();
         if (shares > lpShares[msg.sender]) revert InsufficientShares();
 
@@ -209,7 +219,7 @@ contract LiquidityPool is ILiquidityPool {
     /// @return bkcOut   Amount of BKC received
     function swapETHforBKC(
         uint256 minBkcOut
-    ) external payable override returns (uint256 bkcOut) {
+    ) external payable override nonReentrant returns (uint256 bkcOut) {
         if (msg.value == 0) revert ZeroAmount();
         if (bkcReserve == 0) revert InsufficientLiquidity();
 
@@ -254,7 +264,7 @@ contract LiquidityPool is ILiquidityPool {
     function swapBKCforETH(
         uint256 bkcAmount,
         uint256 minEthOut
-    ) external override returns (uint256 ethOut) {
+    ) external override nonReentrant returns (uint256 ethOut) {
         if (bkcAmount == 0) revert ZeroAmount();
         if (ethReserve == 0) revert InsufficientLiquidity();
 
