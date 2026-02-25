@@ -348,7 +348,7 @@ export function openEditProfile() {
 }
 export async function confirmEditProfile() { await doUpdateProfile(); }
 
-// Banner preview
+// Banner preview — update only the image, preserve the file input
 export function previewBanner(input) {
     const file = input?.files?.[0];
     if (!file) return;
@@ -356,8 +356,14 @@ export function previewBanner(input) {
     const reader = new FileReader();
     reader.onload = (ev) => {
         const preview = document.getElementById('edit-banner-preview');
-        if (preview) preview.innerHTML = `<img src="${ev.target.result}" style="width:100%;height:100%;object-fit:cover;border-radius:var(--bc-radius-sm);">
-            <label class="bc-edit-banner-btn"><i class="fa-solid fa-camera"></i><input type="file" id="edit-banner-file" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none;" onchange="AgoraPage.previewBanner(this)"></label>`;
+        if (!preview) return;
+        // Remove existing image/placeholder but keep the label with file input
+        const existing = preview.querySelector('img, div');
+        if (existing) existing.remove();
+        const img = document.createElement('img');
+        img.src = ev.target.result;
+        img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:var(--bc-radius-sm);';
+        preview.insertBefore(img, preview.firstChild);
     };
     reader.readAsDataURL(file);
 }
