@@ -300,9 +300,9 @@ async function requestSmartFaucet(btnElement) {
         if (response.ok && data.success) {
             apiSuccess = true;
             const ethAmt = data.ethAmount || FAUCET_ETH_AMOUNT;
-            showToast(`Faucet: ${ethAmt} ETH sent to your wallet!`, "success");
+            showToast(`Faucet: ${ethAmt} tBNB sent to your wallet!`, "success");
             DashboardState.faucet.canClaim = false;
-            try { localStorage.setItem('bkc_faucet_' + State.userAddress.toLowerCase(), '1'); } catch(e) {}
+            try { localStorage.setItem('bkc_faucet_' + State.userAddress.toLowerCase(), String(Date.now())); } catch(e) {}
             updateFaucetWidget();
             // Force refresh with cache bypass — tokens are already confirmed on-chain
             console.log('[Faucet] Claim success, txHash:', data.txHash, '— refreshing balance in 3s...');
@@ -321,11 +321,11 @@ async function requestSmartFaucet(btnElement) {
             console.warn('[Faucet] API error:', msg);
             apiSuccess = true; // API responded — don't show generic error
 
-            // Already claimed (one-time per wallet)
-            if (data.alreadyClaimed || msg.toLowerCase().includes("already claimed") || msg.toLowerCase().includes("one-time")) {
-                showToast("You already claimed your one-time faucet tokens.", "warning");
+            // Cooldown active
+            if (data.alreadyClaimed || data.cooldownSeconds || msg.toLowerCase().includes("cooldown") || msg.toLowerCase().includes("already claimed")) {
+                showToast("Faucet on cooldown. Try again in 24h.", "warning");
                 DashboardState.faucet.canClaim = false;
-                try { localStorage.setItem('bkc_faucet_' + State.userAddress.toLowerCase(), '1'); } catch(e) {}
+                try { localStorage.setItem('bkc_faucet_' + State.userAddress.toLowerCase(), String(Date.now())); } catch(e) {}
                 updateFaucetWidget();
             } else {
                 showToast(msg, "error");
@@ -357,7 +357,7 @@ function updateFaucetWidget() {
     if (!State.isConnected) {
         widget.style.opacity = '0.5';
         if (titleEl) titleEl.innerText = "Get Free Testnet Tokens";
-        if (descEl) descEl.innerText = "Connect your wallet to claim ETH for gas";
+        if (descEl) descEl.innerText = "Connect your wallet to claim tBNB for gas";
         if (statusEl) statusEl.classList.add('hidden');
         if (btn) { btn.className = 'dash-btn-secondary'; btn.innerHTML = '<i class="fa-solid fa-wallet"></i> Connect Wallet'; btn.disabled = true; }
         return;
@@ -365,14 +365,14 @@ function updateFaucetWidget() {
     widget.style.opacity = '1';
 
     if (!DashboardState.faucet.canClaim) {
-        // Already claimed (one-time per wallet)
+        // Claimed today — comes back in 24h
         if (titleEl) titleEl.innerText = "Testnet Tokens Received";
-        if (descEl) descEl.innerText = `Already received ${FAUCET_ETH_AMOUNT} ETH for testing on this wallet`;
-        if (statusEl) { statusEl.classList.remove('hidden'); statusEl.innerHTML = `<i class="fa-solid fa-circle-check" style="margin-right:4px;color:#4ade80"></i>One-time claim used`; }
-        if (btn) { btn.className = 'dash-btn-secondary'; btn.innerHTML = '<i class="fa-solid fa-check"></i> Already Claimed'; btn.disabled = true; }
+        if (descEl) descEl.innerText = `Already received ${FAUCET_ETH_AMOUNT} tBNB today — come back in 24h`;
+        if (statusEl) { statusEl.classList.remove('hidden'); statusEl.innerHTML = `<i class="fa-solid fa-circle-check" style="margin-right:4px;color:#4ade80"></i>Daily claim used`; }
+        if (btn) { btn.className = 'dash-btn-secondary'; btn.innerHTML = '<i class="fa-solid fa-check"></i> Claimed Today'; btn.disabled = true; }
     } else {
         if (titleEl) titleEl.innerText = "Get Free Testnet Tokens";
-        if (descEl) descEl.innerText = "Claim ETH for gas — one-time per wallet";
+        if (descEl) descEl.innerText = "Claim tBNB for gas — once per day";
         if (statusEl) statusEl.classList.add('hidden');
         if (btn) { btn.className = 'dash-btn-primary dash-btn-cyan'; btn.innerHTML = '<i class="fa-solid fa-faucet"></i> Claim Free Tokens'; btn.disabled = false; }
     }
@@ -1191,10 +1191,10 @@ function renderDashboardLayout() {
                 </div>
                 <div class="dash-faucet-info">
                     <h3 id="faucet-title">Get Free Testnet Tokens</h3>
-                    <p id="faucet-desc">Claim ETH for gas — one-time per wallet</p>
+                    <p id="faucet-desc">Claim tBNB for gas — once per day</p>
                     <div class="dash-faucet-amounts">
                         <span class="dash-faucet-badge" style="color:#4ade80">
-                            <i class="fa-brands fa-ethereum" style="font-size:10px"></i>${FAUCET_ETH_AMOUNT} ETH
+                            <i class="fa-solid fa-coins" style="font-size:10px"></i>${FAUCET_ETH_AMOUNT} tBNB
                         </span>
                     </div>
                     <p id="faucet-status" class="faucet-status-text hidden"></p>
@@ -1465,7 +1465,7 @@ function renderGasModal() {
                     <i class="fa-solid fa-gas-pump" style="font-size:18px;color:#ef4444"></i>
                 </div>
                 <h3 style="font-size:16px;font-weight:700;color:var(--dash-text);margin:0 0 4px">No Gas</h3>
-                <p style="font-size:11px;color:var(--dash-text-2);margin-bottom:14px">You need ETH for gas</p>
+                <p style="font-size:11px;color:var(--dash-text-2);margin-bottom:14px">You need tBNB for gas</p>
                 <button id="emergency-faucet-btn" class="dash-btn-primary dash-btn-green" style="width:100%;justify-content:center;margin-bottom:10px">
                     <i class="fa-solid fa-hand-holding-medical"></i> Get Free Gas + BKC
                 </button>
@@ -2251,11 +2251,15 @@ export const DashboardPage = {
         fetchAndProcessActivities();
         updateTutorWidget();
 
-        // Restore faucet claimed state from localStorage
+        // Restore faucet claimed state from localStorage (daily cooldown)
         if (State.isConnected && State.userAddress) {
             try {
-                if (localStorage.getItem('bkc_faucet_' + State.userAddress.toLowerCase())) {
-                    DashboardState.faucet.canClaim = false;
+                const lastClaim = localStorage.getItem('bkc_faucet_' + State.userAddress.toLowerCase());
+                if (lastClaim) {
+                    const elapsed = Date.now() - Number(lastClaim);
+                    if (elapsed < 86400000) { // 24h in ms
+                        DashboardState.faucet.canClaim = false;
+                    }
                 }
             } catch(e) {}
             updateFaucetWidget();

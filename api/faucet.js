@@ -66,29 +66,21 @@ export default async function handler(req, res) {
         if (!canClaimNow) {
             const cooldownLeft = await faucet.getCooldownRemaining(address);
             const cooldownSecs = Number(cooldownLeft);
-            // One-time per wallet (100yr cooldown) → show "already claimed"
-            if (cooldownSecs > 31536000) {
-                return res.status(429).json({
-                    success: false,
-                    error: 'Already claimed. This faucet is one-time per wallet.',
-                    alreadyClaimed: true
-                });
-            }
             const hoursLeft = Math.ceil(cooldownSecs / 3600);
             return res.status(429).json({
                 success: false,
-                error: `Cooldown active. Try again in ${hoursLeft} hours.`,
+                error: `Cooldown active. Try again in ${hoursLeft}h.`,
                 cooldownSeconds: cooldownSecs
             });
         }
 
-        // 3. Check funds (V12: ETH-only faucet — 3 returns)
+        // 3. Check funds (V12: tBNB-only faucet — 3 returns)
         const status = await faucet.getFaucetStatus();
         const ethBalance = status[0];
         const ethPerDrip = status[1];
 
         if (ethPerDrip > 0n && ethBalance < ethPerDrip) {
-            return res.status(503).json({ success: false, error: 'Faucet out of ETH' });
+            return res.status(503).json({ success: false, error: 'Faucet out of tBNB' });
         }
 
         // 4. Execute distributeTo
@@ -105,7 +97,7 @@ export default async function handler(req, res) {
             success: true,
             txHash: receipt.hash,
             ethAmount: ethers.formatEther(ethPerDrip),
-            message: 'ETH sent successfully!'
+            message: 'tBNB sent successfully!'
         });
 
     } catch (e) {
@@ -118,7 +110,7 @@ export default async function handler(req, res) {
             return res.status(429).json({ success: false, error: 'Cooldown active. Try again later.' });
         }
         if (e.message?.includes('InsufficientETH')) {
-            return res.status(503).json({ success: false, error: 'Faucet out of ETH' });
+            return res.status(503).json({ success: false, error: 'Faucet out of tBNB' });
         }
 
         return res.status(500).json({ success: false, error: e.message || 'Transaction failed. Try again later.' });
