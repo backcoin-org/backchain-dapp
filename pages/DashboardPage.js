@@ -202,7 +202,7 @@ function getActivityStyle(type, details = {}) {
     if (t === 'RENTAL_LIST' || t === 'RENTALLISTED' || t === 'RENTAL_LISTED' || t === 'LISTED' || (t.includes('LIST') && t.includes('RENTAL'))) return ACTIVITY_ICONS.RENTAL_LIST;
     if (t === 'RENTAL_RENT' || t === 'RENTALRENTED' || t === 'RENTAL_RENTED' || t === 'RENTED' || (t.includes('RENT') && !t.includes('LIST'))) return ACTIVITY_ICONS.RENTAL_RENT;
     if (t === 'RENTAL_WITHDRAW' || t === 'RENTALWITHDRAWN' || t === 'RENTAL_WITHDRAWN') return ACTIVITY_ICONS.RENTAL_WITHDRAW;
-    if (t === 'RENTAL_PROMOTE' || t === 'RENTALPROMOTED' || t === 'RENTAL_PROMOTED' || t.includes('PROMOT') || t.includes('ADS') || t.includes('ADVERTIS')) return ACTIVITY_ICONS.RENTAL_PROMOTE;
+    if (t === 'RENTAL_PROMOTE' || t === 'RENTALPROMOTED' || t === 'RENTAL_PROMOTED' || t === 'RENTALLISTINGBOOSTED' || t === 'RENTAL_LISTING_BOOSTED' || t.includes('PROMOT') || t.includes('ADS') || t.includes('ADVERTIS')) return ACTIVITY_ICONS.RENTAL_PROMOTE;
     if (t === 'FORTUNE_COMMIT' || t === 'FORTUNECOMMIT' || t === 'GAMECOMMITTED' || t === 'GAME_COMMITTED' || t === 'COMMITTED') return ACTIVITY_ICONS.FORTUNE_COMMIT;
     if (t === 'FORTUNE_REVEAL' || t === 'FORTUNEREVEAL' || t === 'GAMEREVEALED' || t === 'GAME_REVEALED' || t === 'REVEALED') return ACTIVITY_ICONS.FORTUNE_REVEAL;
     if (t === 'FORTUNE_EXPIRED' || t === 'FORTUNEEXPIRED' || t === 'GAMEEXPIRED' || t === 'GAME_EXPIRED' || t === 'EXPIRED') return ACTIVITY_ICONS.FORTUNE_EXPIRED;
@@ -243,8 +243,8 @@ function getActivityStyle(type, details = {}) {
     if (t === 'TUTOREARNED' || t === 'TUTOR_EARNED' || t === 'TUTOR_BONUS') return ACTIVITY_ICONS.TUTOR_EARNED;
     if (t === 'REWARDRECYCLED' || t === 'REWARD_RECYCLED' || t === 'RECYCLED') return ACTIVITY_ICONS.REWARD_RECYCLED;
     if (t === 'NFTBULKFUSED' || t === 'NFT_BULK_FUSED' || t === 'BULKFUSED' || t === 'BULK_FUSED') return ACTIVITY_ICONS.NFT_BULK_FUSED;
-    if (t === 'NFTFUSION' || t === 'NFT_FUSION' || t === 'FUSED' || t === 'FUSION') return ACTIVITY_ICONS.NFT_FUSION;
-    if (t === 'NFTSPLIT' || t === 'NFT_SPLIT' || t === 'SPLIT') return ACTIVITY_ICONS.NFT_SPLIT;
+    if (t === 'NFTFUSION' || t === 'NFT_FUSION' || t === 'FUSED' || t === 'FUSION' || t === 'NFTFUSED') return ACTIVITY_ICONS.NFT_FUSION;
+    if (t === 'NFTSPLIT' || t === 'NFT_SPLIT' || t === 'SPLIT' || t === 'NFTSPLIT') return ACTIVITY_ICONS.NFT_SPLIT;
     if (t === 'COMPOUNDREWARDS' || t === 'COMPOUND_REWARDS' || t === 'REWARDSCOMPOUNDED' || t === 'REWARDS_COMPOUNDED') return ACTIVITY_ICONS.COMPOUND_REWARDS;
     if (t === 'GOVERNANCEVOTE' || t === 'GOVERNANCE_VOTE' || t === 'VOTED') return ACTIVITY_ICONS.GOVERNANCE_VOTE;
     if (t === 'GOVERNANCEPROPOSE' || t === 'GOVERNANCE_PROPOSE' || t === 'PROPOSAL_CREATED') return ACTIVITY_ICONS.GOVERNANCE_PROPOSE;
