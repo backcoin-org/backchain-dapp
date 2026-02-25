@@ -26,7 +26,7 @@ const NFT_POOL_VIRTUAL_RESERVES = 100;
 const NFT_POOL_MINTABLE_RESERVES = 10_000;
 
 // Notary baseURI (testnet)
-const NOTARY_BASE_URI_TESTNET = "https://backchain-dapp.vercel.app/api/cert-metadata/";
+const NOTARY_BASE_URI_TESTNET = "https://backcoin.org/api/cert-metadata/";
 const NOTARY_BASE_URI_MAINNET = "https://backcoin.org/api/cert-metadata/";
 
 // Governance config
