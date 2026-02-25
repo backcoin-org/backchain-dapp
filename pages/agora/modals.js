@@ -378,7 +378,7 @@ function _renderEditLinks() {
                 <option value="">Platform</option>
                 ${SOCIAL_LINK_TYPES.map(t => `<option value="${t.id}" ${link.type === t.id ? 'selected' : ''}>${t.label}</option>`).join('')}
             </select>
-            <input type="text" class="bc-input" value="${escapeHtml(link.url || '')}" placeholder="${_getLinkPlaceholder(link.type)}" maxlength="200" style="flex:1;padding:8px;" onchange="AgoraPage.updateLinkUrl(${i}, this.value)">
+            <input type="text" class="bc-input" value="${escapeHtml(link.url || '')}" placeholder="${_getLinkPlaceholder(link.type)}" maxlength="200" style="flex:1;padding:8px;" oninput="AgoraPage.updateLinkUrl(${i}, this.value)">
             <button class="bc-btn bc-btn-outline" style="padding:6px 8px;border-color:var(--bc-red);color:var(--bc-red);flex-shrink:0;" onclick="AgoraPage.removeSocialLink(${i})"><i class="fa-solid fa-xmark"></i></button>
         </div>`).join('');
 }
@@ -414,5 +414,15 @@ export function updateLinkUrl(index, value) {
 }
 
 export function getEditLinks() {
+    // Sync DOM values before returning — safety net for any missed events
+    const rows = document.querySelectorAll('.bc-edit-link-row');
+    rows.forEach((row, i) => {
+        if (_editLinks[i]) {
+            const select = row.querySelector('select');
+            const input = row.querySelector('input[type="text"]');
+            if (select) _editLinks[i].type = select.value;
+            if (input) _editLinks[i].url = input.value.trim();
+        }
+    });
     return _editLinks.filter(l => l.type && l.url);
 }

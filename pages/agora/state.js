@@ -68,7 +68,7 @@ export const MEDIA_LIMITS = {
 export const GALLERY_MAX_ITEMS = 10;
 
 export const SOCIAL_LINK_TYPES = [
-    { id: 'website',   label: 'Website',   icon: 'fa-globe',           color: '#3b82f6', placeholder: 'https://yoursite.com' },
+    { id: 'website',   label: 'Website',   icon: 'fa-solid fa-globe',   color: '#3b82f6', placeholder: 'https://yoursite.com' },
     { id: 'x',         label: 'X',         icon: 'fa-brands fa-x-twitter', color: '#ededf0', placeholder: 'https://x.com/username' },
     { id: 'instagram', label: 'Instagram', icon: 'fa-brands fa-instagram', color: '#e1306c', placeholder: 'https://instagram.com/username' },
     { id: 'youtube',   label: 'YouTube',   icon: 'fa-brands fa-youtube',   color: '#ff0000', placeholder: 'https://youtube.com/@channel' },
