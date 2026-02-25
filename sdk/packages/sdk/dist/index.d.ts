@@ -11,6 +11,7 @@ export { CharityModule } from '@backchain/charity';
 export { RentalModule } from '@backchain/rental';
 export { SwapModule } from '@backchain/swap';
 export { BuybackModule } from '@backchain/buyback';
+export { FaucetModule } from '@backchain/faucet';
 export { EventParser, FilterBuilder, eventFilter, ALL_EVENT_ABIS, ALL_EVENTS_FLAT, BKC_TOKEN_EVENTS, ECOSYSTEM_EVENTS, STAKING_EVENTS, LIQUIDITY_POOL_EVENTS, BUYBACK_EVENTS, REWARD_BOOSTER_EVENTS, NFT_POOL_EVENTS, NFT_FUSION_EVENTS, FORTUNE_EVENTS, NOTARY_EVENTS, CHARITY_EVENTS, AGORA_EVENTS, RENTAL_EVENTS, GOVERNANCE_EVENTS, AIRDROP_EVENTS, } from '@backchain/events';
 export type { BaseEvent, ParsedEvent, ContractName, EventFilter, DelegatedEvent, UnstakedEvent, RewardsClaimedEvent, NFTPurchasedEvent, NFTSoldEvent, FusedEvent, SplitEvent, GameCommittedEvent, GameRevealedEvent, CertifiedEvent, PostCreatedEvent, DonationMadeEvent, BuybackExecutedEvent, BackchainEvent, } from '@backchain/events';
 export { EventIndexer, InMemoryCheckpoint, FileCheckpoint, EventPipeline } from '@backchain/indexer';

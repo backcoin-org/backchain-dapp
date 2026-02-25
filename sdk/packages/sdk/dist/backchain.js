@@ -20,6 +20,7 @@ import { RentalModule } from '@backchain/rental';
 import { SwapModule } from '@backchain/swap';
 import { FusionModule } from '@backchain/fusion';
 import { BuybackModule } from '@backchain/buyback';
+import { FaucetModule } from '@backchain/faucet';
 export class Backchain {
     operator;
     network;
@@ -36,6 +37,7 @@ export class Backchain {
     swap;
     fusion;
     buyback;
+    faucet;
     constructor(config) {
         if (!config.operator || !ethers.isAddress(config.operator)) {
             throw new Error(`Invalid operator address: ${config.operator}. Must be a valid Ethereum address.`);
@@ -56,6 +58,7 @@ export class Backchain {
         this.swap = new SwapModule(this);
         this.fusion = new FusionModule(this);
         this.buyback = new BuybackModule(this);
+        this.faucet = new FaucetModule(this);
     }
     // ── BackchainContext Implementation ──────────────────────────────────────
     get isConnected() {
@@ -103,7 +106,7 @@ export class Backchain {
         const token = this.provider.getReadContract(this.addresses.bkcToken, BKC_TOKEN_ABI);
         return token.balanceOf(addr);
     }
-    /** Get ETH balance of an address (or connected wallet) */
+    /** Get BNB balance of an address (or connected wallet) */
     async getEthBalance(address) {
         const addr = address || this.provider.address;
         if (!addr)
@@ -139,13 +142,13 @@ export class Backchain {
             events: {},
         };
     }
-    /** Get pending operator ETH earnings */
+    /** Get pending operator BNB earnings */
     async getPendingEarnings(address) {
         const addr = address || this.operator;
         const eco = this.provider.getReadContract(this.addresses.backchainEcosystem, ECOSYSTEM_ABI);
         return eco.pendingEth(addr);
     }
-    /** Withdraw accumulated operator ETH earnings */
+    /** Withdraw accumulated operator BNB earnings */
     async withdrawEarnings() {
         const eco = this.provider.getWriteContract(this.addresses.backchainEcosystem, ECOSYSTEM_ABI);
         const tx = await eco.withdrawEth();

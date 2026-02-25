@@ -28,6 +28,7 @@ import { RentalModule } from '@backchain/rental';
 import { SwapModule } from '@backchain/swap';
 import { FusionModule } from '@backchain/fusion';
 import { BuybackModule } from '@backchain/buyback';
+import { FaucetModule } from '@backchain/faucet';
 
 export class Backchain implements BackchainContext {
     readonly operator: string;
@@ -46,6 +47,7 @@ export class Backchain implements BackchainContext {
     readonly swap: SwapModule;
     readonly fusion: FusionModule;
     readonly buyback: BuybackModule;
+    readonly faucet: FaucetModule;
 
     constructor(config: BackchainConfig) {
         if (!config.operator || !ethers.isAddress(config.operator)) {
@@ -71,6 +73,7 @@ export class Backchain implements BackchainContext {
         this.swap = new SwapModule(this);
         this.fusion = new FusionModule(this);
         this.buyback = new BuybackModule(this);
+        this.faucet = new FaucetModule(this);
     }
 
     // ── BackchainContext Implementation ──────────────────────────────────────
@@ -128,7 +131,7 @@ export class Backchain implements BackchainContext {
         return token.balanceOf(addr);
     }
 
-    /** Get ETH balance of an address (or connected wallet) */
+    /** Get BNB balance of an address (or connected wallet) */
     async getEthBalance(address?: string): Promise<bigint> {
         const addr = address || this.provider.address;
         if (!addr) throw new Error('No address provided and wallet not connected.');
@@ -165,14 +168,14 @@ export class Backchain implements BackchainContext {
         };
     }
 
-    /** Get pending operator ETH earnings */
+    /** Get pending operator BNB earnings */
     async getPendingEarnings(address?: string): Promise<bigint> {
         const addr = address || this.operator;
         const eco = this.provider.getReadContract(this.addresses.backchainEcosystem, ECOSYSTEM_ABI);
         return eco.pendingEth(addr);
     }
 
-    /** Withdraw accumulated operator ETH earnings */
+    /** Withdraw accumulated operator BNB earnings */
     async withdrawEarnings(): Promise<TxResult> {
         const eco = this.provider.getWriteContract(this.addresses.backchainEcosystem, ECOSYSTEM_ABI);
         const tx = await eco.withdrawEth();

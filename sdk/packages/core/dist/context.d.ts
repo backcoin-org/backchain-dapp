@@ -8,7 +8,7 @@ import type { BackchainConfig, ContractAddresses, NetworkId, TxResult } from './
  * createContext() factory implement this interface.
  */
 export interface BackchainContext {
-    /** Operator wallet address (earns 10-20% of ETH fees) */
+    /** Operator wallet address (earns 10-20% of BNB fees) */
     readonly operator: string;
     /** Network identifier */
     readonly network: NetworkId;
@@ -26,7 +26,7 @@ export interface BackchainContext {
     connectWithSigner(signer: ethers.Signer): Promise<string>;
     /** Disconnect wallet */
     disconnect(): void;
-    /** Calculate ETH fee for a protocol action */
+    /** Calculate BNB fee for a protocol action */
     calculateFee(actionId: string, txValue?: bigint): Promise<bigint>;
     /** Check BKC allowance for a spender */
     getBkcAllowance(spender: string, owner?: string): Promise<bigint>;

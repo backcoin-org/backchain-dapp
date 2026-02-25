@@ -34,6 +34,7 @@
     "@backchain/rental": "^0.2.0",
     "@backchain/swap": "^0.2.0",
     "@backchain/buyback": "^0.2.0",
+    "@backchain/faucet": "^0.2.0",
     "@backchain/events": "^0.3.0",
     "@backchain/indexer": "^0.3.0",
     "@backchain/api": "^0.3.0"
@@ -49,7 +50,8 @@
     "backchain",
     "bkc",
     "defi",
-    "arbitrum",
+    "opbnb",
+    "bnb-chain",
     "web3",
     "sdk",
     "nft",

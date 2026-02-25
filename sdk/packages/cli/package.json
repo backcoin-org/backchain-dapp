@@ -17,7 +17,8 @@
     "defi",
     "scaffold",
     "create-app",
-    "arbitrum",
+    "opbnb",
+    "bnb-chain",
     "web3"
   ],
   "license": "MIT",

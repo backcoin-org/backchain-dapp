@@ -51,7 +51,7 @@ export interface ContractAddresses {
 // ── Provider ────────────────────────────────────────────────────────────────
 
 export interface DualProvider {
-    /** Read-only provider (Alchemy RPC) — for background reads without wallet popups */
+    /** Read-only provider (public RPC) — for background reads without wallet popups */
     reader: ethers.JsonRpcProvider;
     /** Signer provider (MetaMask/WalletConnect) — for write transactions */
     signer: ethers.Signer | null;

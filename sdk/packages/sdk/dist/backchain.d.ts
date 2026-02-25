@@ -12,6 +12,7 @@ import { RentalModule } from '@backchain/rental';
 import { SwapModule } from '@backchain/swap';
 import { FusionModule } from '@backchain/fusion';
 import { BuybackModule } from '@backchain/buyback';
+import { FaucetModule } from '@backchain/faucet';
 export declare class Backchain implements BackchainContext {
     readonly operator: string;
     readonly network: NetworkId;
@@ -27,6 +28,7 @@ export declare class Backchain implements BackchainContext {
     readonly swap: SwapModule;
     readonly fusion: FusionModule;
     readonly buyback: BuybackModule;
+    readonly faucet: FaucetModule;
     constructor(config: BackchainConfig);
     get isConnected(): boolean;
     get address(): string | null;
@@ -38,7 +40,7 @@ export declare class Backchain implements BackchainContext {
     approveBkc(spender: string, amount: bigint): Promise<TxResult>;
     /** Get BKC balance of an address (or connected wallet) */
     getBkcBalance(address?: string): Promise<bigint>;
-    /** Get ETH balance of an address (or connected wallet) */
+    /** Get BNB balance of an address (or connected wallet) */
     getEthBalance(address?: string): Promise<bigint>;
     /** Get the tutor (referrer) of an address */
     getTutor(address?: string): Promise<string>;
@@ -46,9 +48,9 @@ export declare class Backchain implements BackchainContext {
     getTutorCount(address?: string): Promise<number>;
     /** Set tutor (referrer) — pays tutorFee */
     setTutor(tutor: string): Promise<TxResult>;
-    /** Get pending operator ETH earnings */
+    /** Get pending operator BNB earnings */
     getPendingEarnings(address?: string): Promise<bigint>;
-    /** Withdraw accumulated operator ETH earnings */
+    /** Withdraw accumulated operator BNB earnings */
     withdrawEarnings(): Promise<TxResult>;
     /** Get ecosystem stats */
     getEcosystemStats(): Promise<{

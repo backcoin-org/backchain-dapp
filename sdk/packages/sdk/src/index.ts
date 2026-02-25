@@ -84,6 +84,7 @@ export { CharityModule } from '@backchain/charity';
 export { RentalModule } from '@backchain/rental';
 export { SwapModule } from '@backchain/swap';
 export { BuybackModule } from '@backchain/buyback';
+export { FaucetModule } from '@backchain/faucet';
 
 // ── Events (re-exported) ────────────────────────────────────────────────────
 export {
