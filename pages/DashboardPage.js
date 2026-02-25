@@ -103,7 +103,7 @@ const ACTIVITY_ICONS = {
     BACKCHAT_BOOST: { icon: 'fa-rocket', color: '#f97316', bg: 'rgba(249,115,22,0.15)', label: '🚀 Profile Boosted', emoji: '🚀' },
     BACKCHAT_BADGE: { icon: 'fa-circle-check', color: '#10b981', bg: 'rgba(16,185,129,0.15)', label: '✅ Badge Activated', emoji: '✅' },
     BACKCHAT_TIP: { icon: 'fa-coins', color: '#fbbf24', bg: 'rgba(251,191,36,0.15)', label: '💰 Tipped BKC', emoji: '💰' },
-    BACKCHAT_WITHDRAW: { icon: 'fa-wallet', color: '#8b5cf6', bg: 'rgba(139,92,246,0.15)', label: '💸 ETH Withdrawn', emoji: '💸' },
+    BACKCHAT_WITHDRAW: { icon: 'fa-wallet', color: '#8b5cf6', bg: 'rgba(139,92,246,0.15)', label: '💸 BNB Withdrawn', emoji: '💸' },
     CHARITY_DONATE: { icon: 'fa-heart', color: '#ec4899', bg: 'rgba(236,72,153,0.15)', label: '💝 Donated', emoji: '💝' },
     CHARITY_CREATE: { icon: 'fa-hand-holding-heart', color: '#10b981', bg: 'rgba(16,185,129,0.15)', label: '🌱 Campaign Created', emoji: '🌱' },
     CHARITY_CANCEL: { icon: 'fa-heart-crack', color: '#ef4444', bg: 'rgba(239,68,68,0.15)', label: '💔 Campaign Cancelled', emoji: '💔' },
@@ -489,9 +489,9 @@ async function updateTutorWidget() {
         if (titleEl) titleEl.innerText = `${data.count} Student${data.count > 1 ? 's' : ''} Earning for You`;
         if (data.pendingEth > 0n) {
             const pendingStr = Number(ethers.formatEther(data.pendingEth)).toFixed(6);
-            if (descEl) descEl.innerHTML = `Tutor earnings: <strong style="color:#f59e0b">${pendingStr} ETH</strong> available — <a href="#referral" style="color:#22d3ee;text-decoration:underline">withdraw</a>`;
+            if (descEl) descEl.innerHTML = `Tutor earnings: <strong style="color:#f59e0b">${pendingStr} BNB</strong> available — <a href="#referral" style="color:#22d3ee;text-decoration:underline">withdraw</a>`;
         } else {
-            if (descEl) descEl.innerText = "You earn 10% ETH on all fees + 5% BKC on staking rewards. Keep sharing!";
+            if (descEl) descEl.innerText = "You earn 10% BNB on all fees + 5% BKC on staking rewards. Keep sharing!";
         }
     } else {
         if (titleEl) titleEl.innerText = "Be Someone's Tutor";
@@ -512,7 +512,7 @@ function copyTutorLink() {
 function shareTutorLink() {
     if (!State.userAddress) return;
     const link = `${window.location.origin}/#dashboard?ref=${State.userAddress}`;
-    const text = `Join Backchain and earn crypto!\n\nStake BKC and earn daily rewards\nBe a tutor — earn 10% ETH + 5% BKC FOREVER\n\n${link}\n\n#Backchain #DeFi #opBNB #BNBChain #Web3`;
+    const text = `Join Backchain and earn crypto!\n\nStake BKC and earn daily rewards\nBe a tutor — earn 10% BNB + 5% BKC FOREVER\n\n${link}\n\n#Backchain #DeFi #opBNB #BNBChain #Web3`;
 
     if (navigator.share) {
         navigator.share({ title: 'Backchain — Become a Tutor', text, url: link }).catch(() => {});
@@ -1213,15 +1213,15 @@ function renderDashboardLayout() {
                 </div>
                 <div class="dash-buyback-info">
                     <h3 id="dash-buyback-title">Buyback Ready</h3>
-                    <p id="dash-buyback-desc">Execute buyback to earn 5% of pending ETH as staker rewards</p>
+                    <p id="dash-buyback-desc">Execute buyback to earn 5% of pending BNB as staker rewards</p>
                     <div class="dash-buyback-amounts">
                         <span class="dash-buyback-badge" style="color:#f97316">
                             <i class="fa-brands fa-ethereum" style="font-size:10px"></i>
-                            <span id="dash-buyback-pending">0</span> ETH pending
+                            <span id="dash-buyback-pending">0</span> BNB pending
                         </span>
                         <span class="dash-buyback-badge" style="color:#4ade80">
                             <i class="fa-solid fa-gift" style="font-size:10px"></i>
-                            Earn <span id="dash-buyback-reward">0</span> ETH
+                            Earn <span id="dash-buyback-reward">0</span> BNB
                         </span>
                     </div>
                 </div>
@@ -1247,7 +1247,7 @@ function renderDashboardLayout() {
                         </span>
                         <span class="dash-referral-stat" style="color:#4ade80">
                             <i class="fa-solid fa-coins" style="font-size:10px"></i>
-                            10% ETH + 5% BKC
+                            10% BNB + 5% BKC
                         </span>
                     </div>
                     <div id="tutor-info-area" class="dash-referral-stats" style="display:none"></div>
@@ -1357,7 +1357,7 @@ function renderDashboardLayout() {
                     <div class="dash-metric-pill-label"><i class="fa-solid fa-fire" style="color:#ef4444"></i> Burned</div>
                     <div id="dash-metric-burned" class="dash-metric-pill-value">--</div>
                 </div>
-                <div class="dash-metric-pill" title="Total ETH fees collected by ecosystem">
+                <div class="dash-metric-pill" title="Total BNB fees collected by ecosystem">
                     <div class="dash-metric-pill-label"><i class="fa-brands fa-ethereum" style="color:#fb923c"></i> Fees</div>
                     <div id="dash-metric-fees" class="dash-metric-pill-value">--</div>
                 </div>
@@ -1554,8 +1554,8 @@ async function updateGlobalMetrics() {
             ? `<span style="color:#ef4444">${formatCompact(burnedNum)}</span> <span style="font-size:10px;color:var(--dash-text-3)">BKC</span>`
             : `<span style="color:var(--dash-text-3)">0 BKC</span>`);
         setEl('dash-metric-fees', ethFeesNum > 0
-            ? `${ethFeesNum < 1000 ? ethFeesNum.toFixed(3) : formatCompact(ethFeesNum)} <span style="font-size:10px;color:var(--dash-text-3)">ETH</span>`
-            : `<span style="color:var(--dash-text-3)">0.000 ETH</span>`);
+            ? `${ethFeesNum < 1000 ? ethFeesNum.toFixed(3) : formatCompact(ethFeesNum)} <span style="font-size:10px;color:var(--dash-text-3)">BNB</span>`
+            : `<span style="color:var(--dash-text-3)">0.000 BNB</span>`);
 
         setEl('dash-metric-locked', lockedNum > 0
             ? `<span style="color:#60a5fa">${formatCompact(lockedNum)}</span> <span style="font-size:10px;color:var(--dash-text-3)">BKC</span>`
@@ -1610,10 +1610,10 @@ async function loadDashBuybackData() {
         const descEl = document.getElementById('dash-buyback-desc');
         if (pendingEl) pendingEl.textContent = pendingStr;
         if (rewardEl) rewardEl.textContent = rewardStr;
-        if (titleEl) titleEl.textContent = `Buyback Ready — ${pendingStr} ETH`;
+        if (titleEl) titleEl.textContent = `Buyback Ready — ${pendingStr} BNB`;
         if (descEl) descEl.textContent = fee > 0n
-            ? `Pay ${feeStr} ETH fee, earn ${rewardStr} ETH (5%). Fee amplifies buyback.`
-            : `Execute buyback to earn 5% of pending ETH as staker rewards`;
+            ? `Pay ${feeStr} BNB fee, earn ${rewardStr} BNB (5%). Fee amplifies buyback.`
+            : `Execute buyback to earn 5% of pending BNB as staker rewards`;
     } catch (e) {
         console.error('Dashboard buyback load error:', e);
     }
@@ -1626,7 +1626,7 @@ async function handleDashBuyback(btn) {
         await BuybackTx.executeBuyback({
             button: btn,
             onSuccess: async () => {
-                showToast('Buyback executed! You earned 5% ETH reward', 'success');
+                showToast('Buyback executed! You earned 5% BNB reward', 'success');
                 loadDashBuybackData();
             },
             onError: (error) => {
@@ -1653,7 +1653,7 @@ async function updateBkcPriceMetric() {
                 el.innerHTML = `${formatUsd(price.bkcUsd)}`;
             } else if (price.bkcEth > 0) {
                 const ethStr = price.bkcEth < 0.001 ? price.bkcEth.toFixed(8).replace(/0+$/, '') : price.bkcEth.toFixed(6);
-                el.innerHTML = `${ethStr} <span style="font-size:10px;color:var(--dash-text-3)">ETH</span>`;
+                el.innerHTML = `${ethStr} <span style="font-size:10px;color:var(--dash-text-3)">BNB</span>`;
             } else {
                 el.innerHTML = `<span style="color:var(--dash-text-3)">--</span>`;
             }
@@ -2093,7 +2093,7 @@ function renderActivityItem(item, showAddress = false) {
     const isPromote = t.includes('PROMOT') || t.includes('ADS') || t.includes('ADVERTIS');
     if (isPromote) {
         const promoAmount = details.promotionFee || details.amount || item.amount;
-        if (promoAmount && BigInt(promoAmount) > 0n) extraInfo = `<span style="color:#fbbf24;font-weight:700">${parseFloat(ethers.formatEther(BigInt(promoAmount))).toFixed(4)} ETH</span>`;
+        if (promoAmount && BigInt(promoAmount) > 0n) extraInfo = `<span style="color:#fbbf24;font-weight:700">${parseFloat(ethers.formatEther(BigInt(promoAmount))).toFixed(4)} BNB</span>`;
         const tokenId = details.tokenId || item.tokenId;
         if (tokenId) extraInfo += `<span style="margin-left:4px;font-size:9px;color:var(--dash-text-3)">NFT #${tokenId}</span>`;
     }
@@ -2108,7 +2108,7 @@ function renderActivityItem(item, showAddress = false) {
         const amountNum = formatBigNumber(BigInt(rawAmount));
         amountDisplay = amountNum > 0.001 ? amountNum.toFixed(2) : '';
     }
-    const currencyLabel = isPromote ? 'ETH' : 'BKC';
+    const currencyLabel = isPromote ? 'BNB' : 'BKC';
 
     return `
         <a href="${txLink}" target="_blank" class="dash-activity-item" title="${fullDateTime}">

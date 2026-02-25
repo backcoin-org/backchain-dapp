@@ -414,7 +414,7 @@ async function executeBuySwap(btn) {
         if (amountIn === 0n) throw new Error('Enter an amount');
 
         if (TS.ethBalance < amountIn + GAS_RESERVE) {
-            throw new Error('Insufficient ETH (need amount + gas)');
+            throw new Error('Insufficient BNB (need amount + gas)');
         }
 
         const poolAddr = getPoolAddress();
@@ -497,7 +497,7 @@ async function executeSellSwap(btn) {
         setSwapBtn(btn, 'Processing...', true);
         const receipt = await tx.wait();
 
-        showToast('Swap successful! Sold BKC for ETH', 'success');
+        showToast('Swap successful! Sold BKC for BNB', 'success');
         console.log(`[Trade] Sell TX: ${receipt.hash}`);
         resetAfterSwap();
 
@@ -570,7 +570,7 @@ function updateSwapButton() {
     // Check balance
     const amountIn = ethers.parseEther(TS.inputAmount);
     if (TS.direction === 'buy' && TS.ethBalance < amountIn + GAS_RESERVE) {
-        btn.textContent = 'Insufficient ETH';
+        btn.textContent = 'Insufficient BNB';
         btn.disabled = true;
         btn.className = 'execute-trade-btn';
         return;
@@ -597,7 +597,7 @@ function updateSwapButton() {
 async function updatePriceDisplay() {
     const el = document.getElementById('trade-price');
     if (!el) return;
-    let txt = `1 ETH = ${formatPrice(TS.priceBkcPerEth)} BKC`;
+    let txt = `1 BNB = ${formatPrice(TS.priceBkcPerEth)} BKC`;
     // Add USD price
     const provider = State.publicProvider || State.provider;
     if (provider && TS.priceEthPerBkc > 0) {
@@ -634,12 +634,12 @@ function updateBalanceDisplays() {
     const toBal = document.getElementById('trade-to-bal');
     if (fromBal) {
         const bal = TS.direction === 'buy' ? TS.ethBalance : TS.bkcBalance;
-        const sym = TS.direction === 'buy' ? 'ETH' : 'BKC';
+        const sym = TS.direction === 'buy' ? 'BNB' : 'BKC';
         fromBal.textContent = `Balance: ${formatBal(bal)} ${sym}`;
     }
     if (toBal) {
         const bal = TS.direction === 'buy' ? TS.bkcBalance : TS.ethBalance;
-        const sym = TS.direction === 'buy' ? 'BKC' : 'ETH';
+        const sym = TS.direction === 'buy' ? 'BKC' : 'BNB';
         toBal.textContent = `Balance: ${formatBal(bal)} ${sym}`;
     }
     updateSwapButton();
@@ -670,8 +670,8 @@ function renderSwapCard() {
     if (!container) return;
 
     const poolAddr = getPoolAddress() || '0x0000000000000000000000000000000000000000';
-    const fromSym = TS.direction === 'buy' ? 'ETH' : 'BKC';
-    const toSym = TS.direction === 'buy' ? 'BKC' : 'ETH';
+    const fromSym = TS.direction === 'buy' ? 'BNB' : 'BKC';
+    const toSym = TS.direction === 'buy' ? 'BKC' : 'BNB';
     const fromIcon = TS.direction === 'buy'
         ? '<i class="fa-brands fa-ethereum" style="font-size:20px;color:#627eea"></i>'
         : '<img src="./assets/bkc_logo_3d.png" style="width:28px;height:28px;border-radius:50%">';
@@ -754,7 +754,7 @@ function renderSwapCard() {
             <div class="trade-info" id="trade-info">
                 <div class="trade-info-row">
                     <span>Price</span>
-                    <span id="trade-price">${TS.priceBkcPerEth ? '1 ETH = ' + formatPrice(TS.priceBkcPerEth) + ' BKC' : 'Loading...'}</span>
+                    <span id="trade-price">${TS.priceBkcPerEth ? '1 BNB = ' + formatPrice(TS.priceBkcPerEth) + ' BKC' : 'Loading...'}</span>
                 </div>
                 <div class="trade-info-row">
                     <span>Price Impact</span>
@@ -989,7 +989,7 @@ function updateChartHeader(data) {
     if (useUsd) {
         currentEl.textContent = formatUsd(currentPrice);
     } else {
-        currentEl.textContent = currentPrice.toFixed(8) + ' ETH';
+        currentEl.textContent = currentPrice.toFixed(8) + ' BNB';
     }
 
     if (data.length >= 2 && firstPrice > 0) {
@@ -1033,7 +1033,7 @@ function setupChartEvents() {
         const price = meta.useUsd ? pt.p : pt.e;
         const prefix = meta.useUsd ? '$' : '';
         const decimals = meta.useUsd ? (price < 0.01 ? 6 : 4) : 8;
-        const suffix = meta.useUsd ? '' : ' ETH';
+        const suffix = meta.useUsd ? '' : ' BNB';
         const date = new Date(pt.t);
         const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
