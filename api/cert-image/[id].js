@@ -17,7 +17,7 @@ try {
     const addresses = JSON.parse(readFileSync(join(process.cwd(), 'deployment-addresses.json'), 'utf8'));
     NOTARY_ADDRESS = addresses.notary;
 } catch {
-    NOTARY_ADDRESS = '0xFe3F90C76F1aAEED93b8063238658FF3CAD62d24';
+    NOTARY_ADDRESS = '0x24DE64b742718998eD58426C45fE20298679250F';
 }
 
 const NOTARY_ABI = [

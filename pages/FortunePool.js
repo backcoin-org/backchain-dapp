@@ -25,7 +25,7 @@ import { calculateFeeClientSide } from '../modules/core/index.js';
 // ============================================================================
 const EXPLORER_TX = "https://sepolia.etherscan.io/tx/";
 const EXPLORER_ADDRESS = "https://sepolia.etherscan.io/address/";
-const FORTUNE_POOL_ADDRESS = addresses?.fortunePool || "0xC76b8F773414D101231FE265Af0A84C32eeb7460";
+const FORTUNE_POOL_ADDRESS = addresses?.fortunePool || "0xb006BF04706762D595099FB4caE80Bd2d3Bf3854";
 // Tiger image removed — cleaner mobile layout
 const SHARE_POINTS = 1000;
 const ESTIMATED_BLOCK_TIME = 12000; // ~12s per Sepolia block
