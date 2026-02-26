@@ -17,7 +17,7 @@ import { addresses } from '../config.js';
 const EXPLORER    = "https://sepolia.etherscan.io";
 const PRICE_REFRESH_MS = 15000;
 const DEFAULT_SLIPPAGE = 1;
-const GAS_RESERVE = ethers.parseEther("0.005");
+const GAS_RESERVE = ethers.parseEther("0.01");
 const SWAP_FEE_BPS = 30;  // 0.3% — matches LiquidityPool contract
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -510,8 +510,13 @@ async function executeSellSwap(btn) {
 }
 
 function handleSwapError(err) {
+    const msg = (err.message || '').toLowerCase();
     if (err.code === 'ACTION_REJECTED' || err.code === 4001) {
         showToast('Transaction cancelled', 'info');
+    } else if (msg.includes('abort') || msg.includes('abortada')) {
+        showToast('Transaction aborted — you may not have enough BNB for gas. Try a smaller amount.', 'warning');
+    } else if (msg.includes('insufficient funds') || msg.includes('insuficiente')) {
+        showToast('Insufficient BNB for gas fees. You need more BNB in your wallet.', 'error');
     } else {
         console.error('[Trade] Swap failed:', err);
         showToast(`Swap failed: ${err.reason || err.shortMessage || err.message}`, 'error');
