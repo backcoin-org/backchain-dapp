@@ -1,13 +1,15 @@
 // pages/AirdropPage.js
-// ✅ VERSION V6.0: Flat layout redesign — 2 tabs, no sub-tabs, all sections visible
+// ✅ VERSION V6.1: Inline Agora compose + X-only sharing
 
 import { State } from '../state.js';
 import * as db from '../modules/firebase-auth-service.js';
 import { showToast, closeModal, openModal } from '../ui-feedback.js';
 import { formatAddress, renderNoData, formatBigNumber, renderLoading, renderError } from '../utils.js';
-import { NetworkManager } from '../modules/core/index.js';
+import { NetworkManager, irysUploadFile } from '../modules/core/index.js';
 import { addresses, contractAddresses, agoraABI } from '../config.js';
 import { AirdropClaimTx } from '../modules/transactions/airdrop-claim-tx.js';
+import { BackchatTx } from '../modules/transactions/index.js';
+import { getOperatorAddress } from './agora/state.js';
 
 // ==========================================================
 //  1. CONSTANTES E HELPERS
@@ -114,11 +116,78 @@ let airdropState = {
     agoraUsername: null,
     agoraPosts: [],
     sharedPostIds: new Set(), // Track posts already shared on X (persisted in localStorage)
+    // Inline compose
+    composeText: '',             // Preserve textarea across re-renders
+    composeMediaFile: null,      // File object for pending image
+    composeMediaPreview: null,   // Data URL preview
+    isCreatingPost: false,
     // On-chain claim
     claimInfo: null,     // { claimed, claimFee, lockDays, phase, isActive, availableBalance, ... }
     claimProof: null,    // { amount, proof } from merkle tree
     claimLoading: false
 };
+
+// --- Inline compose helpers ---
+async function _uploadMedia(file) {
+    const isVideo = file.type.startsWith('video/');
+    const result = await irysUploadFile(file, {
+        tags: [{ name: 'Type', value: isVideo ? 'agora-video' : 'agora-image' }, { name: 'Content-Type', value: file.type }]
+    });
+    return { cid: result.id, type: isVideo ? 'video' : 'image' };
+}
+
+async function handleInlineCreatePost() {
+    const input = document.getElementById('airdrop-compose-input');
+    const content = input?.value?.trim();
+    if (!content) { showToast('Write something to post.', 'error'); return; }
+    if (content.length > 2000) { showToast('Post too long (max 2,000 chars).', 'error'); return; }
+
+    airdropState.isCreatingPost = true;
+    updateContent();
+
+    let finalContent = content;
+    let contentType = 0; // text
+
+    // Upload media if present
+    if (airdropState.composeMediaFile) {
+        try {
+            const m = await _uploadMedia(airdropState.composeMediaFile);
+            finalContent = content + (m.type === 'video' ? '\n[vid]' : '\n[img]') + m.cid;
+            contentType = m.type === 'video' ? 2 : 1;
+        } catch (e) {
+            console.error('[Airdrop] Media upload failed:', e);
+            showToast('Upload failed: ' + e.message, 'error');
+            airdropState.isCreatingPost = false;
+            updateContent();
+            return;
+        }
+    }
+
+    const btn = document.getElementById('airdrop-post-btn');
+    await BackchatTx.createPost({
+        content: finalContent,
+        tag: 0,
+        contentType,
+        operator: getOperatorAddress(),
+        button: btn,
+        onSuccess: async () => {
+            airdropState.composeText = '';
+            airdropState.composeMediaFile = null;
+            airdropState.composeMediaPreview = null;
+            airdropState.isCreatingPost = false;
+            showToast('Post created! Now share it on X.', 'success');
+            // Reload Agora data to get the new post
+            await loadAgoraData();
+            updateContent();
+        },
+        onError: () => {
+            airdropState.isCreatingPost = false;
+            updateContent();
+        }
+    });
+    airdropState.isCreatingPost = false;
+    updateContent();
+}
 
 // Persist shared post IDs in localStorage
 function _loadSharedPosts() {
@@ -839,6 +908,56 @@ function renderYourRankSnippet() {
     `;
 }
 
+// --- INLINE COMPOSE FORM ---
+function renderComposeForm() {
+    const isPosting = airdropState.isCreatingPost;
+    const hasMedia = !!airdropState.composeMediaPreview;
+
+    return `
+        <div class="bg-zinc-900/80 border border-zinc-800 rounded-2xl overflow-hidden">
+            <div class="px-4 pt-4 pb-2">
+                <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-pen-to-square text-indigo-400"></i> Create Post
+                </h2>
+                <p class="text-zinc-500 text-[10px] mt-0.5">Write your post and it will be published on Agora</p>
+            </div>
+            <div class="px-4 pb-4">
+                <textarea id="airdrop-compose-input"
+                    placeholder="What's on your mind?  Share your thoughts about Backchain..."
+                    class="w-full bg-black/50 border border-zinc-700 rounded-xl px-3 py-2.5 text-white text-sm resize-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none transition-all placeholder:text-zinc-600"
+                    rows="3" maxlength="2000" ${isPosting ? 'disabled' : ''}>${airdropState.composeText}</textarea>
+
+                ${hasMedia ? `
+                <div class="mt-2 relative inline-block">
+                    <img src="${airdropState.composeMediaPreview}" class="h-20 rounded-lg border border-zinc-700 object-cover" alt="Preview">
+                    <button id="airdrop-remove-media" class="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full text-[10px] flex items-center justify-center hover:bg-red-400">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                ` : ''}
+
+                <div class="flex items-center justify-between mt-2.5">
+                    <div class="flex items-center gap-2">
+                        <label class="flex items-center gap-1.5 text-zinc-400 hover:text-amber-400 text-xs cursor-pointer transition-colors ${isPosting ? 'opacity-50 pointer-events-none' : ''}">
+                            <i class="fa-solid fa-image"></i>
+                            <span>Image</span>
+                            <input type="file" id="airdrop-media-input" accept="image/jpeg,image/png,image/gif,image/webp" class="hidden" ${isPosting ? 'disabled' : ''}>
+                        </label>
+                    </div>
+                    <button id="airdrop-post-btn"
+                        class="cta-mega text-black font-bold px-5 py-2 rounded-xl text-sm transition-all ${isPosting ? 'opacity-60 cursor-not-allowed' : ''}"
+                        ${isPosting ? 'disabled' : ''}>
+                        ${isPosting
+                            ? '<i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Posting...'
+                            : '<i class="fa-solid fa-paper-plane mr-1"></i> Post'
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 // --- POST SECTION (Agora-Integrated) ---
 function _getPostPreview(post) {
     const ct = post.contentType;
@@ -902,7 +1021,8 @@ function renderPostSection() {
     // --- State 2: Has profile but no recent posts ---
     if (agoraPosts.length === 0) {
         return `
-            <div class="bg-zinc-900/80 border border-zinc-800 rounded-2xl overflow-hidden">
+            ${renderComposeForm()}
+            <div class="mt-3 bg-zinc-900/80 border border-zinc-800 rounded-2xl overflow-hidden">
                 <div class="px-4 pt-4 pb-2">
                     <h2 class="text-sm font-bold text-white flex items-center gap-2">
                         <i class="fa-brands fa-x-twitter text-white"></i> Share to Earn
@@ -910,12 +1030,9 @@ function renderPostSection() {
                     <p class="text-zinc-500 text-[10px] mt-0.5">Post on Agora → Share on X → Paste tweet link → Earn points</p>
                 </div>
                 <div class="px-4 pb-3 text-center">
-                    <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 mb-3">
+                    <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
                         <p class="text-amber-400 font-bold text-sm mb-1"><i class="fa-solid fa-pen-fancy mr-1"></i> Create Your First Post</p>
-                        <p class="text-zinc-400 text-xs mb-3">Write something on Agora, then share it on X to earn airdrop points!</p>
-                        <button class="agora-nav-btn cta-mega text-black font-bold py-2 px-5 rounded-xl text-sm" data-target="agora">
-                            <i class="fa-solid fa-plus mr-1"></i> Post on Agora
-                        </button>
+                        <p class="text-zinc-400 text-xs">Write something above, then share it on X to earn airdrop points!</p>
                     </div>
                 </div>
                 ${_renderSubmitSection()}
@@ -923,19 +1040,15 @@ function renderPostSection() {
         `;
     }
 
-    // --- State 3: Has posts — show them with X share button (1 share per post) ---
+    // --- State 3: Has posts — compose + share buttons ---
     return `
-        <div class="bg-zinc-900/80 border border-zinc-800 rounded-2xl overflow-hidden">
-            <div class="px-4 pt-4 pb-2 flex items-center justify-between">
-                <div>
-                    <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                        <i class="fa-brands fa-x-twitter text-white"></i> Share to Earn
-                    </h2>
-                    <p class="text-zinc-500 text-[10px] mt-0.5">Share your Agora post on X, then paste the tweet link below</p>
-                </div>
-                <button class="agora-nav-btn text-amber-400 hover:text-amber-300 text-xs font-medium transition-colors" data-target="agora">
-                    <i class="fa-solid fa-plus mr-1"></i>New Post
-                </button>
+        ${renderComposeForm()}
+        <div class="mt-3 bg-zinc-900/80 border border-zinc-800 rounded-2xl overflow-hidden">
+            <div class="px-4 pt-4 pb-2">
+                <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                    <i class="fa-brands fa-x-twitter text-white"></i> Share to Earn
+                </h2>
+                <p class="text-zinc-500 text-[10px] mt-0.5">Share your Agora post on X, then paste the tweet link below</p>
             </div>
 
             <!-- Posts to Share on X -->
@@ -1423,6 +1536,10 @@ function updateContent() {
     const headerEl = document.getElementById('airdrop-header');
     if (!contentEl) return;
 
+    // Preserve compose textarea content across re-renders
+    const composeInput = document.getElementById('airdrop-compose-input');
+    if (composeInput) airdropState.composeText = composeInput.value;
+
     if (headerEl) {
         headerEl.innerHTML = renderHeader();
     }
@@ -1799,6 +1916,17 @@ export const AirdropPage = {
             if(e.target.closest('#claim-airdrop-btn')) handleClaimAirdrop();
             if(e.target.closest('#rank-snippet-btn')) { airdropState.activeTab = 'ranking'; updateContent(); }
 
+            // Inline compose — Post button
+            if (e.target.closest('#airdrop-post-btn')) { handleInlineCreatePost(); return; }
+
+            // Inline compose — Remove media preview
+            if (e.target.closest('#airdrop-remove-media')) {
+                airdropState.composeMediaFile = null;
+                airdropState.composeMediaPreview = null;
+                updateContent();
+                return;
+            }
+
             // "Share on X" — mark post as shared when clicked
             const shareXBtn = e.target.closest('.share-on-x-btn');
             if (shareXBtn) {
@@ -1821,6 +1949,19 @@ export const AirdropPage = {
                 if (targetPage) {
                     handlePlatformCardClick(targetPage);
                 }
+            }
+        });
+
+        // Media file input (change event, needs direct binding)
+        body?.addEventListener('change', (e) => {
+            if (e.target.id === 'airdrop-media-input') {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                if (file.size > 10 * 1024 * 1024) { showToast('Image too large (max 10 MB).', 'error'); return; }
+                airdropState.composeMediaFile = file;
+                const reader = new FileReader();
+                reader.onload = () => { airdropState.composeMediaPreview = reader.result; updateContent(); };
+                reader.readAsDataURL(file);
             }
         });
     },
