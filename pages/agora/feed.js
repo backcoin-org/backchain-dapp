@@ -227,6 +227,8 @@ function _renderTikTokCard(post, i) {
     const replyCount = post.repliesCount || BC.replyCountMap.get(post.id) || 0;
     const superETH = formatETH(post.superLikeETH || 0n);
     const isLiked = BC.likesMap.get(post.id)?.has(State.userAddress?.toLowerCase()) || false;
+    const hasMedia = !!(isVid ? mediaUrl : mediaUrl);
+    const isTextOnly = !hasMedia;
 
     let bgStyle;
     if (isVid && mediaUrl) {
@@ -234,13 +236,60 @@ function _renderTikTokCard(post, i) {
     } else if (mediaUrl) {
         bgStyle = `background-image:url('${mediaUrl}');background-size:cover;background-position:center;`;
     } else {
-        // Gradient background for text-only posts
         const hue = (post.id * 37) % 360;
-        bgStyle = `background:linear-gradient(135deg, hsl(${hue},40%,15%), hsl(${(hue+60)%360},30%,8%));`;
+        bgStyle = `background:linear-gradient(145deg, hsl(${hue},50%,22%) 0%, hsl(${(hue+40)%360},40%,12%) 50%, hsl(${(hue+80)%360},35%,8%) 100%);`;
     }
 
+    // Actions sidebar (shared by both layouts)
+    const actionsSidebar = `
+        <div class="bc-tiktok-actions">
+            <div class="bc-tiktok-action" onclick="event.stopPropagation(); AgoraPage.viewProfile('${post.author}')">
+                <div class="bc-tiktok-avatar">${renderAvatar(post.author)}</div>
+            </div>
+            <div class="bc-tiktok-action ${isLiked ? 'liked' : ''}" onclick="event.stopPropagation(); AgoraPage.like('${post.id}')">
+                <i class="${isLiked ? 'fa-solid' : 'fa-regular'} fa-heart"></i>
+                <span>${likeCount || ''}</span>
+            </div>
+            <div class="bc-tiktok-action" onclick="event.stopPropagation(); AgoraPage.viewPost('${post.id}')">
+                <i class="fa-regular fa-comment"></i>
+                <span>${replyCount || ''}</span>
+            </div>
+            <div class="bc-tiktok-action" onclick="event.stopPropagation(); AgoraPage.openSuperLike('${post.id}')">
+                <i class="fa-solid fa-star"></i>
+                <span>${(post.superLikeETH || 0n) > 0n ? superETH : ''}</span>
+            </div>
+            <div class="bc-tiktok-action" onclick="event.stopPropagation(); AgoraPage.sharePost('${post.id}')">
+                <i class="fa-solid fa-arrow-up-from-bracket"></i>
+            </div>
+        </div>`;
+
+    // Text-only: hero centered layout
+    if (isTextOnly) {
+        const isShort = post.content && post.content.length <= 200;
+        return `
+        <div class="bc-tiktok-card bc-tiktok-textonly" data-post-id="${post.id}" style="${bgStyle}">
+            <div class="bc-tiktok-text-hero">
+                <span class="bc-tiktok-quote-open">\u201C</span>
+                <div class="bc-tiktok-hero-content ${isShort ? 'bc-tiktok-hero-short' : ''}" data-caption-id="${post.id}" onclick="event.stopPropagation(); AgoraPage.toggleCaption('${post.id}')">${fullText}</div>
+                <span class="bc-tiktok-quote-close">\u201D</span>
+            </div>
+            <div class="bc-tiktok-overlay" style="background:none;">
+                <div class="bc-tiktok-bottom">
+                    <div class="bc-tiktok-info">
+                        <div class="bc-tiktok-author" onclick="event.stopPropagation(); AgoraPage.viewProfile('${post.author}')">
+                            <strong>${authorName}</strong>
+                            <span class="bc-tiktok-time">${formatTimeAgo(post.timestamp)}</span>
+                        </div>
+                    </div>
+                    ${actionsSidebar}
+                </div>
+            </div>
+        </div>`;
+    }
+
+    // Media posts: original layout
     return `
-        <div class="bc-tiktok-card" data-post-id="${post.id}" ${bgStyle.includes('background-image') ? `style="${bgStyle}"` : `style="${bgStyle}"`}>
+        <div class="bc-tiktok-card" data-post-id="${post.id}" style="${bgStyle}">
             ${isVid && mediaUrl ? `<video class="bc-tiktok-video" src="${mediaUrl}" playsinline muted loop preload="metadata" data-post-video="${post.id}"></video>` : ''}
             ${!isVid && mediaUrl ? `<div class="bc-tiktok-img-overlay"></div>` : ''}
             <div class="bc-tiktok-overlay">
@@ -252,26 +301,7 @@ function _renderTikTokCard(post, i) {
                         </div>
                         ${fullText ? `<div class="bc-tiktok-caption" data-caption-id="${post.id}" onclick="event.stopPropagation(); AgoraPage.toggleCaption('${post.id}')">${fullText}${isLong ? '<span class="bc-tiktok-more"> more</span>' : ''}</div>` : ''}
                     </div>
-                    <div class="bc-tiktok-actions">
-                        <div class="bc-tiktok-action" onclick="event.stopPropagation(); AgoraPage.viewProfile('${post.author}')">
-                            <div class="bc-tiktok-avatar">${renderAvatar(post.author)}</div>
-                        </div>
-                        <div class="bc-tiktok-action ${isLiked ? 'liked' : ''}" onclick="event.stopPropagation(); AgoraPage.like('${post.id}')">
-                            <i class="${isLiked ? 'fa-solid' : 'fa-regular'} fa-heart"></i>
-                            <span>${likeCount || ''}</span>
-                        </div>
-                        <div class="bc-tiktok-action" onclick="event.stopPropagation(); AgoraPage.viewPost('${post.id}')">
-                            <i class="fa-regular fa-comment"></i>
-                            <span>${replyCount || ''}</span>
-                        </div>
-                        <div class="bc-tiktok-action" onclick="event.stopPropagation(); AgoraPage.openSuperLike('${post.id}')">
-                            <i class="fa-solid fa-star"></i>
-                            <span>${(post.superLikeETH || 0n) > 0n ? superETH : ''}</span>
-                        </div>
-                        <div class="bc-tiktok-action" onclick="event.stopPropagation(); AgoraPage.sharePost('${post.id}')">
-                            <i class="fa-solid fa-arrow-up-from-bracket"></i>
-                        </div>
-                    </div>
+                    ${actionsSidebar}
                 </div>
             </div>
         </div>`;

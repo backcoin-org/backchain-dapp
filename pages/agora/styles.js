@@ -398,6 +398,16 @@ export function injectStyles() {
         .bc-tiktok-avatar { width:40px; height:40px; border-radius:50%; background:linear-gradient(135deg,var(--bc-accent),#fbbf24); display:flex; align-items:center; justify-content:center; font-weight:700; color:#000; font-size:14px; border:2px solid #fff; overflow:hidden; }
         .bc-tiktok-avatar img { width:100%; height:100%; object-fit:cover; }
 
+        /* TikTok text-only hero card */
+        .bc-tiktok-textonly { display:flex; flex-direction:column; }
+        .bc-tiktok-text-hero { position:absolute; inset:0; z-index:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:60px 32px 120px; text-align:center; }
+        .bc-tiktok-quote-open, .bc-tiktok-quote-close { font-family:Georgia,serif; font-size:48px; color:var(--bc-accent); opacity:0.3; line-height:1; flex-shrink:0; }
+        .bc-tiktok-quote-open { align-self:flex-start; margin-bottom:8px; }
+        .bc-tiktok-quote-close { align-self:flex-end; margin-top:8px; }
+        .bc-tiktok-hero-content { font-size:17px; line-height:1.7; color:rgba(255,255,255,0.92); max-height:55vh; overflow-y:auto; white-space:pre-wrap; word-break:break-word; text-shadow:0 1px 4px rgba(0,0,0,0.4); }
+        .bc-tiktok-hero-short { font-size:24px; font-weight:600; line-height:1.5; }
+        .bc-tiktok-textonly .bc-tiktok-bottom { background:linear-gradient(transparent, rgba(0,0,0,0.5)); padding-top:40px; }
+
         /* Double-tap like animation */
         @keyframes bc-float-heart { 0% { opacity:1; transform:scale(0) translateY(0); } 30% { opacity:1; transform:scale(1.2) translateY(-20px); } 100% { opacity:0; transform:scale(0.8) translateY(-120px); } }
         .bc-float-heart { position:absolute; font-size:60px; color:var(--bc-red); pointer-events:none; z-index:10; animation:bc-float-heart 0.8s ease-out forwards; }
