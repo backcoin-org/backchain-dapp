@@ -17,7 +17,7 @@ import { addresses } from '../config.js';
 const EXPLORER    = "https://sepolia.etherscan.io";
 const PRICE_REFRESH_MS = 15000;
 const DEFAULT_SLIPPAGE = 1;
-const GAS_RESERVE = ethers.parseEther("0.01");
+const GAS_RESERVE = ethers.parseEther("0.003");
 const SWAP_FEE_BPS = 30;  // 0.3% — matches LiquidityPool contract
 
 // ════════════════════════════════════════════════════════════════════════════
