@@ -441,7 +441,7 @@
             <h1>Backchain Ecosystem</h1>
             <p class="subtitle">Architecture, Smart Contracts &amp; Protocol Design</p>
             <div class="status-block">
-                <div><span class="status-dot"></span> <strong>Status:</strong> Fully functional on Arbitrum Sepolia testnet. All contracts deployed and interconnected.</div>
+                <div><span class="status-dot"></span> <strong>Status:</strong> Fully functional on opBNB testnet. All contracts deployed and interconnected.</div>
                 <div class="date">Published: 2025&ndash;2026</div>
             </div>
         </header>
@@ -469,7 +469,7 @@
             <div class="section-number">Section 1</div>
             <h2>Overview</h2>
             <p>
-                Backchain is an unstoppable DeFi ecosystem built on <strong>Arbitrum</strong> (Ethereum L2).
+                Backchain is an unstoppable DeFi ecosystem built on <strong>opBNB</strong> (BNB Chain L2).
                 The protocol consists of <strong>16 interconnected Solidity smart contracts</strong> compiled with
                 Solidity v0.8.28, organized in a Hub &amp; Spoke architecture designed for infinite extensibility.
             </p>
@@ -508,7 +508,7 @@
             </p>
             <ul>
                 <li>Manages <strong>per-module fee configurations</strong> &mdash; <code>operatorBps</code>, <code>treasuryBps</code>, <code>buybackBps</code>, <code>customBps</code></li>
-                <li>Collects all ETH fees via <code>collectFee(moduleId, operator)</code></li>
+                <li>Collects all BNB fees via <code>collectFee(moduleId, operator)</code></li>
                 <li><strong>Automatic fee distribution</strong> &mdash; splits to operator, tutor, buyback, treasury, and custom destinations</li>
                 <li><strong>Tutor referral system</strong> &mdash; stores tutor-student relationships on-chain</li>
                 <li><strong>Operator system</strong> &mdash; permissionless developer commissions</li>
@@ -566,7 +566,7 @@
                 <div class="contract-name">BKCToken.sol</div>
                 <div class="contract-label">ERC-20 Token</div>
                 <ul>
-                    <li><strong>Standard:</strong> ERC-20 on Arbitrum</li>
+                    <li><strong>Standard:</strong> ERC-20 on opBNB</li>
                     <li><strong>Maximum supply:</strong> 200,000,000 BKC</li>
                     <li>Activity-based minting &mdash; only <code>BuybackMiner</code> can mint new tokens</li>
                     <li>No transfer tax, no blacklists, no pause</li>
@@ -590,7 +590,7 @@
                 <div class="contract-name">LiquidityPool.sol</div>
                 <div class="contract-label">Constant-Product AMM</div>
                 <ul>
-                    <li>ETH/BKC trading pair</li>
+                    <li>BNB/BKC trading pair</li>
                     <li>Classic <code>x * y = k</code> automated market maker</li>
                     <li>Provides price discovery and immediate liquidity for the BKC token</li>
                 </ul>
@@ -604,16 +604,16 @@
                     <li>Generates <strong>pStake</strong> (Time-Weighted Stake Power)</li>
                     <li>pStake formula: <code>amount &times; (10000 + lockDays &times; 5918 / 365) / 10000</code></li>
                     <li>MasterChef-style reward distribution proportional to pStake</li>
-                    <li>Receives ETH + BKC rewards from protocol activity</li>
+                    <li>Receives BNB + BKC rewards from protocol activity</li>
                     <li>Claim rewards with burn rate reduction via NFT Boosters</li>
                 </ul>
             </div>
 
             <div class="contract-card">
                 <div class="contract-name">BuybackMiner.sol</div>
-                <div class="contract-label">ETH &rarr; BKC Conversion Engine</div>
+                <div class="contract-label">BNB &rarr; BKC Conversion Engine</div>
                 <ul>
-                    <li>Receives ETH from protocol fees</li>
+                    <li>Receives BNB from protocol fees</li>
                     <li>Mints new BKC using a <strong>scarcity curve</strong> (harder as supply approaches 200M cap)</li>
                     <li>Distribution: <strong>70%</strong> to StakingPool rewards, <strong>30%</strong> to Treasury</li>
                     <li>Proof-of-Purchase mining &mdash; using the platform <em>is</em> mining</li>
@@ -655,7 +655,7 @@
                     <li><strong>Fuse:</strong> 2 same-tier NFTs &rarr; 1 higher-tier NFT</li>
                     <li><strong>Split:</strong> 1 NFT &rarr; 2 lower-tier NFTs</li>
                     <li><strong>SplitTo:</strong> 1 NFT &rarr; 2<sup>N</sup> target-tier NFTs</li>
-                    <li>ETH fees per operation (gas-based)</li>
+                    <li>BNB fees per operation (gas-based)</li>
                     <li>Authorized via <code>RewardBooster.setFusionContract()</code> (one-time, irreversible)</li>
                 </ul>
             </div>
@@ -745,7 +745,7 @@
                 <div class="contract-name">SimpleBKCFaucet.sol</div>
                 <div class="contract-label">Testnet Token Distribution</div>
                 <ul>
-                    <li>Free BKC tokens for testing on Arbitrum Sepolia</li>
+                    <li>Free BKC tokens for testing on opBNB testnet</li>
                     <li>Server-side relayer pays gas fees</li>
                     <li>Rate-limited to prevent abuse</li>
                 </ul>
@@ -775,7 +775,7 @@
             <p>The remaining 90% is distributed according to each module's immutable configuration:</p>
             <ul>
                 <li><code>operatorBps</code> &rarr; <strong>Operator wallet</strong> (or burned if no operator)</li>
-                <li><code>buybackBps</code> &rarr; <strong>BuybackMiner</strong> (converts ETH to BKC rewards)</li>
+                <li><code>buybackBps</code> &rarr; <strong>BuybackMiner</strong> (converts BNB to BKC rewards)</li>
                 <li><code>treasuryBps</code> &rarr; <strong>Treasury</strong></li>
                 <li><code>customBps</code> &rarr; <strong>Module-specific</strong> (e.g., prize pool for FortunePool)</li>
             </ul>
@@ -783,7 +783,7 @@
             <div class="flow-diagram">
                 <div><span class="highlight">User performs action</span> (swap, stake, buy NFT, etc.)</div>
                 <div><span class="arrow">&darr;</span></div>
-                <div>ETH fee sent to <span class="highlight">BackchainEcosystem</span></div>
+                <div>BNB fee sent to <span class="highlight">BackchainEcosystem</span></div>
                 <div><span class="arrow">&darr;</span></div>
                 <div><span class="highlight">10%</span> <span class="arrow">&rarr;</span> Tutor (or burned)</div>
                 <div><span class="arrow">&darr;</span></div>
@@ -820,8 +820,8 @@
             <ul>
                 <li><strong>Link format:</strong> <code>backcoin.org/#dashboard?ref=0xADDRESS</code></li>
                 <li><strong>First-time setup:</strong> gasless (server relayer pays)</li>
-                <li><strong>Tutor earns:</strong> 10% of student's ETH fees + 5% of student's BKC claims</li>
-                <li><strong>Relationship:</strong> stored on-chain, permanent (but student can change tutor for 0.0001 ETH)</li>
+                <li><strong>Tutor earns:</strong> 10% of student's BNB fees + 5% of student's BKC claims</li>
+                <li><strong>Relationship:</strong> stored on-chain, permanent (but student can change tutor for 0.0001 BNB)</li>
                 <li><strong>No tutor:</strong> the 10% cut is burned instead</li>
             </ul>
 
@@ -834,7 +834,7 @@
                 <li><strong>Integration:</strong> set via <code>window.BACKCHAIN_OPERATOR</code> or <code>localStorage.setItem('bkc_operator', addr)</code></li>
                 <li>Every transaction includes the operator address in contract calls</li>
                 <li><strong>Operator earns:</strong> 10&ndash;20% of every fee generated from their app</li>
-                <li>ETH accumulates in <code>pendingEth[operator]</code>, withdrawable at any time</li>
+                <li>BNB accumulates in <code>pendingEth[operator]</code>, withdrawable at any time</li>
                 <li><strong>No registration, no API key, no approval needed</strong></li>
             </ul>
 
@@ -859,7 +859,7 @@
                     <tbody>
                         <tr style="border-bottom: 1px solid #27272a;">
                             <td style="padding: 10px 0; color: #71717a; width: 160px; vertical-align: top; font-size: 14px;">Blockchain</td>
-                            <td style="padding: 10px 0; color: #e4e4e7; font-size: 14px;"><strong>Arbitrum</strong> (Ethereum L2)</td>
+                            <td style="padding: 10px 0; color: #e4e4e7; font-size: 14px;"><strong>opBNB</strong> (BNB Chain L2)</td>
                         </tr>
                         <tr style="border-bottom: 1px solid #27272a;">
                             <td style="padding: 10px 0; color: #71717a; vertical-align: top; font-size: 14px;">Smart Contracts</td>
@@ -924,7 +924,7 @@
                 <li><strong>No pause/unpause</strong> functions</li>
                 <li><strong>No token blacklists</strong></li>
                 <li><strong>No proxy upgrades</strong> &mdash; immutable deployment</li>
-                <li><strong>All contracts verified</strong> on Arbiscan</li>
+                <li><strong>All contracts verified</strong> on opBNBscan</li>
             </ul>
 
             <h3>Progressive Governance</h3>
@@ -966,8 +966,8 @@
                 <a href="https://backcoin.org" target="_blank" rel="noopener">backcoin.org</a>
             </div>
             <div class="meta">
-                Network: Arbitrum Sepolia (testnet) &rarr; Arbitrum One (mainnet)<br>
-                All contracts verified on Arbiscan<br><br>
+                Network: opBNB testnet &rarr; opBNB mainnet<br>
+                All contracts verified on opBNBscan<br><br>
                 &copy; 2025&ndash;2026 Backchain Project. All rights reserved.
             </div>
         </footer>
