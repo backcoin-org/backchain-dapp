@@ -913,13 +913,18 @@ function renderComposeForm() {
     const isPosting = airdropState.isCreatingPost;
     const hasMedia = !!airdropState.composeMediaPreview;
 
+    const username = airdropState.agoraUsername;
+
     return `
         <div class="bg-zinc-900/80 border border-zinc-800 rounded-2xl overflow-hidden">
             <div class="px-4 pt-4 pb-2">
-                <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                    <i class="fa-solid fa-pen-to-square text-indigo-400"></i> Create Post
-                </h2>
-                <p class="text-zinc-500 text-[10px] mt-0.5">Write your post and it will be published on Agora</p>
+                <div class="flex items-center justify-between">
+                    <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-pen-to-square text-indigo-400"></i> Create Post
+                    </h2>
+                    ${username ? `<span class="text-xs text-indigo-400 font-medium bg-indigo-500/10 border border-indigo-500/20 rounded-lg px-2 py-0.5">@${username}</span>` : ''}
+                </div>
+                <p class="text-zinc-500 text-[10px] mt-0.5">Publish on Agora — the decentralized social network that can never be shut down</p>
             </div>
             <div class="px-4 pb-4">
                 <textarea id="airdrop-compose-input"
@@ -980,7 +985,7 @@ function _buildAgoraShareUrl(postId) {
 
 function _buildTweetIntent(postId) {
     const url = _buildAgoraShareUrl(postId);
-    const text = `I just posted on @backcoin — the unstoppable social network on blockchain.\n\nRefer friends & earn passive income forever.\n\n${url}\n\n#Backchain #BKC #Web3 #DeSoc #opBNB #Airdrop #BNBChain`;
+    const text = `I just posted on @backcoin — a decentralized social network that can never be censored or shut down.\n\nRefer friends & earn BNB commissions forever. Build your own dApp using any module.\n\n${url}\n\n#Backchain #BKC #Web3 #DeSoc #opBNB #Airdrop #BNBChain`;
     return `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
 }
 
@@ -993,25 +998,27 @@ function renderPostSection() {
             <div class="bg-gradient-to-br from-indigo-900/30 to-zinc-900/80 border border-indigo-500/30 rounded-2xl overflow-hidden">
                 <div class="px-4 pt-4 pb-2">
                     <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                        <i class="fa-brands fa-x-twitter text-white"></i> Share to Earn
+                        <i class="fa-solid fa-bullhorn text-indigo-400"></i> Join the Unstoppable Network
                     </h2>
-                    <p class="text-zinc-500 text-[10px] mt-0.5">Create posts on Agora, share on X, earn points</p>
                 </div>
                 <div class="px-4 pb-4 text-center">
                     <div class="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-5 mb-3">
-                        <div class="text-3xl mb-2"><i class="fa-solid fa-user-plus text-indigo-400"></i></div>
-                        <p class="text-white font-bold text-sm mb-1">Create Your Agora Profile</p>
-                        <p class="text-zinc-400 text-xs mb-3">Join the unstoppable social network to start earning points by sharing your posts on X.</p>
+                        <div class="text-3xl mb-2"><i class="fa-solid fa-shield-halved text-indigo-400"></i></div>
+                        <p class="text-white font-bold text-sm mb-1">Agora — Decentralized Social Network</p>
+                        <p class="text-zinc-400 text-xs mb-1">A social network on blockchain that <strong class="text-white">can never be censored or shut down</strong>.</p>
+                        <p class="text-zinc-400 text-xs mb-3">Create your profile, post content, refer friends and <strong class="text-amber-400">earn BNB commissions forever</strong> as a tutor — or build your own dApp using any Backchain module.</p>
                         <button class="agora-nav-btn cta-mega text-black font-bold py-2.5 px-6 rounded-xl text-sm" data-target="agora">
-                            <i class="fa-solid fa-arrow-right mr-1"></i> Go to Agora
+                            <i class="fa-solid fa-arrow-right mr-1"></i> Create Agora Profile
                         </button>
                     </div>
-                    <div class="flex items-center gap-3 text-zinc-500 text-[10px]">
-                        <div class="flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Post on Agora</div>
+                    <div class="flex items-center justify-center gap-3 text-zinc-500 text-[10px] flex-wrap">
+                        <div class="flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Post</div>
                         <div class="text-zinc-700">→</div>
                         <div class="flex items-center gap-1"><i class="fa-brands fa-x-twitter"></i> Share on X</div>
                         <div class="text-zinc-700">→</div>
-                        <div class="flex items-center gap-1"><i class="fa-solid fa-coins"></i> Earn points</div>
+                        <div class="flex items-center gap-1"><i class="fa-solid fa-users"></i> Refer friends</div>
+                        <div class="text-zinc-700">→</div>
+                        <div class="flex items-center gap-1"><i class="fa-solid fa-coins text-amber-400"></i> Earn BNB</div>
                     </div>
                 </div>
             </div>
@@ -1027,12 +1034,12 @@ function renderPostSection() {
                     <h2 class="text-sm font-bold text-white flex items-center gap-2">
                         <i class="fa-brands fa-x-twitter text-white"></i> Share to Earn
                     </h2>
-                    <p class="text-zinc-500 text-[10px] mt-0.5">Post on Agora → Share on X → Paste tweet link → Earn points</p>
+                    <p class="text-zinc-500 text-[10px] mt-0.5">Post → Share on X → Refer friends → Earn BNB commissions</p>
                 </div>
                 <div class="px-4 pb-3 text-center">
                     <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
                         <p class="text-amber-400 font-bold text-sm mb-1"><i class="fa-solid fa-pen-fancy mr-1"></i> Create Your First Post</p>
-                        <p class="text-zinc-400 text-xs">Write something above, then share it on X to earn airdrop points!</p>
+                        <p class="text-zinc-400 text-xs">Write your first post above, share on X, and start earning. Every friend you refer earns you <strong class="text-amber-400">BNB commissions forever</strong>.</p>
                     </div>
                 </div>
                 ${_renderSubmitSection()}
@@ -1048,7 +1055,7 @@ function renderPostSection() {
                 <h2 class="text-sm font-bold text-white flex items-center gap-2">
                     <i class="fa-brands fa-x-twitter text-white"></i> Share to Earn
                 </h2>
-                <p class="text-zinc-500 text-[10px] mt-0.5">Share your Agora post on X, then paste the tweet link below</p>
+                <p class="text-zinc-500 text-[10px] mt-0.5">Share on X, refer friends and earn BNB commissions as a tutor</p>
             </div>
 
             <!-- Posts to Share on X -->
