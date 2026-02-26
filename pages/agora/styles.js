@@ -104,6 +104,11 @@ export function injectStyles() {
         .bc-trending-tag { display:inline-flex; align-items:center; gap:4px; padding:2px 9px; background:var(--bc-accent-glow); border:1px solid rgba(245,158,11,0.2); border-radius:20px; color:var(--bc-accent); font-size:11px; font-weight:700; }
         .bc-trending-tag i { font-size:9px; }
         .bc-post-body { margin-top:10px; margin-left:56px; color:var(--bc-text); font-size:15px; line-height:1.6; white-space:pre-wrap; word-break:break-word; }
+        .bc-quote-card { position:relative; background:linear-gradient(135deg, rgba(245,158,11,0.04) 0%, rgba(139,92,246,0.04) 100%); border:1px solid var(--bc-border); border-bottom:2px solid var(--bc-accent); border-radius:var(--bc-radius-sm); padding:28px 24px 20px; margin-top:14px; }
+        .bc-quote-card .bc-quote-open { position:absolute; top:8px; left:14px; font-size:36px; line-height:1; color:var(--bc-accent); opacity:0.35; font-family:Georgia,serif; pointer-events:none; }
+        .bc-quote-card .bc-quote-close { position:absolute; bottom:6px; right:14px; font-size:36px; line-height:1; color:var(--bc-accent); opacity:0.35; font-family:Georgia,serif; pointer-events:none; }
+        .bc-quote-card .bc-quote-text { font-size:15px; line-height:1.7; color:var(--bc-text); }
+        .bc-quote-short .bc-quote-text { font-size:18px; font-weight:500; line-height:1.6; text-align:center; padding:8px 16px; }
         .bc-post-media { margin-top:14px; margin-left:56px; border-radius:var(--bc-radius); overflow:hidden; border:1px solid var(--bc-border); }
         .bc-post-media img { width:100%; max-height:420px; object-fit:cover; display:block; }
         .bc-post-media video { width:100%; max-height:480px; display:block; background:#000; }
@@ -405,6 +410,10 @@ export function injectStyles() {
             .bc-shell { max-width:100%; }
             .bc-actions { margin-left:0; margin-top:14px; }
             .bc-post-body { margin-left:0; margin-top:12px; }
+            .bc-quote-card { padding:24px 18px 16px; }
+            .bc-quote-card .bc-quote-open { font-size:28px; top:6px; left:10px; }
+            .bc-quote-card .bc-quote-close { font-size:28px; bottom:4px; right:10px; }
+            .bc-quote-short .bc-quote-text { font-size:16px; padding:4px 10px; }
             .bc-post-media { margin-left:0; }
             .bc-compose-avatar { display:none; }
         }

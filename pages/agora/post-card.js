@@ -17,11 +17,26 @@ const FEED_PREVIEW_CHARS = 280;
 // POST BODY (with truncation in feed)
 // ============================================================================
 
+function _hasMedia(post) {
+    return (post.media && post.media.length > 0) || !!post.mediaCID;
+}
+
 function _renderPostBody(post, options = {}) {
     if (!post.content) return '';
     const isDetail = options.noAnimation && !options.isRepostContent; // post-detail uses noAnimation
     const isTruncated = !isDetail && post.content.length > FEED_PREVIEW_CHARS;
     const displayText = isTruncated ? post.content.slice(0, FEED_PREVIEW_CHARS) + '...' : post.content;
+    const isTextOnly = !_hasMedia(post) && post.type !== 'repost';
+    const isShort = post.content.length <= 140;
+
+    if (isTextOnly) {
+        return `<div class="bc-post-body bc-quote-card${isShort ? ' bc-quote-short' : ''}" data-post-id="${post.id}">
+            <span class="bc-quote-open">\u201C</span>
+            <div class="bc-quote-text">${linkifyContent(escapeHtml(displayText))}${isTruncated ? `<span class="bc-read-more" onclick="event.stopPropagation(); AgoraPage.expandPost('${post.id}')">Read more</span>` : ''}</div>
+            <span class="bc-quote-close">\u201D</span>
+        </div>`;
+    }
+
     return `<div class="bc-post-body" data-post-id="${post.id}">
         ${linkifyContent(escapeHtml(displayText))}
         ${isTruncated ? `<span class="bc-read-more" onclick="event.stopPropagation(); AgoraPage.expandPost('${post.id}')">Read more</span>` : ''}
