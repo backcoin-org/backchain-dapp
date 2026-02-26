@@ -15,14 +15,34 @@ import { renderPost } from './post-card.js';
 // SOCIAL LINKS RENDERER
 // ============================================================================
 
+function _friendlyUrl(url, type) {
+    try {
+        const u = new URL(url.startsWith('http') ? url : `https://${url}`);
+        const path = u.pathname.replace(/^\/+|\/+$/g, '');
+        // For social platforms, extract the handle/username
+        if (path && ['x', 'instagram', 'tiktok', 'github', 'telegram', 'linkedin'].includes(type)) {
+            const handle = path.split('/').filter(Boolean)[0] || '';
+            if (handle) return handle.startsWith('@') ? handle : `@${handle}`;
+        }
+        if (type === 'youtube' && path) {
+            const seg = path.split('/').filter(Boolean).pop() || '';
+            return seg.startsWith('@') ? seg : seg;
+        }
+        if (type === 'discord') return path || u.hostname;
+        // Website or fallback: show clean domain
+        return u.hostname.replace(/^www\./, '');
+    } catch { return url; }
+}
+
 function renderSocialLinks(links) {
     if (!links || links.length === 0) return '';
     return links.map(link => {
         const def = SOCIAL_LINK_TYPES.find(t => t.id === link.type);
         if (!def) return '';
         const url = link.url.startsWith('http') ? link.url : `https://${link.url}`;
-        return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="bc-social-pill" style="--pill-color:${def.color};" onclick="event.stopPropagation();" title="${def.label}">
-            <i class="${def.icon}"></i><span>${def.label}</span>
+        const display = _friendlyUrl(link.url, link.type);
+        return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="bc-social-pill" style="--pill-color:${def.color};" onclick="event.stopPropagation();" title="${escapeHtml(url)}">
+            <i class="${def.icon}"></i><span>${escapeHtml(display)}</span>
         </a>`;
     }).join('');
 }
