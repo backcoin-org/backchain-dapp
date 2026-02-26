@@ -363,8 +363,8 @@ async function checkBalance() {
             if (window.updateUIState) window.updateUIState(false);
         }
 
-        // Also read ETH balance during fast poll phase
-        if (_fastPollCount < FAST_POLL_MAX && State.publicProvider) {
+        // Read native balance on every poll cycle
+        if (State.publicProvider) {
             try {
                 const ethBal = await State.publicProvider.getBalance(State.userAddress);
                 if (ethBal !== State.currentUserNativeBalance) {

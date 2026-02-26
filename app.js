@@ -87,7 +87,7 @@ const routes = {
 
 function formatAddress(addr) {
     if (!addr || addr.length < 42) return '...';
-    return `${addr.slice(0, 6)}...${addr.slice(-4)}`; 
+    return `${addr.slice(0, 4)}...${addr.slice(-3)}`;
 }
 
 function formatLargeBalance(bigNum) {
@@ -234,14 +234,21 @@ function performUIUpdate(forcePageUpdate) {
     
     if (State.isConnected && currentAddress) {
         const balanceString = formatLargeBalance(State.currentUserBalance);
+        const nativeBal = State.currentUserNativeBalance || 0n;
+        const nativeNum = parseFloat(ethers.formatEther(nativeBal));
+        const nativeDisplay = nativeNum < 0.001 ? '<0.001' : nativeNum.toFixed(3);
+        const isLowGas = nativeNum < 0.002;
         const shortAddress = formatAddress(currentAddress);
-        
+
         // Estilo "Conectado"
         const btnContent = `
-            <div class="status-dot"></div>
+            <div class="status-dot ${isLowGas ? 'low-gas' : ''}"></div>
             <span>${shortAddress}</span>
             <div class="balance-pill">
                 ${balanceString} BKC
+            </div>
+            <div class="${isLowGas ? 'low-gas-pill' : 'native-pill'}">
+                ${nativeDisplay} BNB
             </div>
         `;
 

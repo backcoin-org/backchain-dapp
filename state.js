@@ -85,6 +85,7 @@ const handler = {
         // Lista de propriedades que devem disparar atualização visual imediata
         const uiTriggers = [
             'currentUserBalance',
+            'currentUserNativeBalance',
             'isConnected',
             'userTotalPStake',
             'totalNetworkPStake'

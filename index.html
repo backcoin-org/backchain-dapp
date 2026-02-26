@@ -191,6 +191,15 @@
             box-shadow: 0 0 8px #10b981;
             animation: pulse-green 2s infinite;
         }
+        .status-dot.low-gas {
+            background-color: #ef4444;
+            box-shadow: 0 0 8px #ef4444;
+            animation: pulse-red 1s infinite;
+        }
+        @keyframes pulse-red {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
 
         .balance-pill {
             background: rgba(0, 0, 0, 0.4);
@@ -203,9 +212,31 @@
             display: flex;
             align-items: center;
         }
-        
+        .native-pill {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(113, 113, 122, 0.4);
+            padding: 4px 8px;
+            border-radius: 8px;
+            color: #a1a1aa;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+        }
+        .low-gas-pill {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            padding: 4px 8px;
+            border-radius: 8px;
+            color: #ef4444;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            animation: pulse-red 1.5s infinite;
+        }
+
         @media (max-width: 480px) {
             .balance-pill { display: none; }
+            .native-pill, .low-gas-pill { font-size: 10px; padding: 3px 6px; }
             .wallet-btn { padding: 8px 12px; font-size: 12px; }
         }
     </style>
