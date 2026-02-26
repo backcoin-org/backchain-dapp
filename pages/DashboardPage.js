@@ -129,6 +129,13 @@ const ACTIVITY_ICONS = {
     CHARITY_CLOSED: { icon: 'fa-lock', color: '#71717a', bg: 'rgba(39,39,42,0.5)', label: '🔒 Campaign Closed', emoji: '🔒' },
     AGORA_DOWNVOTE: { icon: 'fa-thumbs-down', color: '#ef4444', bg: 'rgba(239,68,68,0.15)', label: '👎 Downvoted', emoji: '👎' },
     AGORA_UNFOLLOW: { icon: 'fa-user-minus', color: '#ef4444', bg: 'rgba(239,68,68,0.15)', label: '👤 Unfollowed', emoji: '👤' },
+    AGORA_BATCH: { icon: 'fa-layer-group', color: '#a78bfa', bg: 'rgba(167,139,250,0.15)', label: '📦 Batch Actions', emoji: '📦' },
+    AGORA_EDIT: { icon: 'fa-pen-to-square', color: '#60a5fa', bg: 'rgba(59,130,246,0.15)', label: '✏️ Post Edited', emoji: '✏️' },
+    AGORA_REPORT: { icon: 'fa-flag', color: '#ef4444', bg: 'rgba(239,68,68,0.15)', label: '🚩 Post Reported', emoji: '🚩' },
+    AGORA_POST_BOOST: { icon: 'fa-rocket', color: '#f97316', bg: 'rgba(249,115,22,0.15)', label: '🚀 Post Boosted', emoji: '🚀' },
+    AGORA_BLOCK: { icon: 'fa-ban', color: '#ef4444', bg: 'rgba(239,68,68,0.15)', label: '🚫 User Blocked', emoji: '🚫' },
+    AGORA_UNBLOCK: { icon: 'fa-unlock', color: '#4ade80', bg: 'rgba(34,197,94,0.15)', label: '🔓 User Unblocked', emoji: '🔓' },
+    AGORA_PROFILE_UPDATE: { icon: 'fa-user-pen', color: '#60a5fa', bg: 'rgba(59,130,246,0.15)', label: '👤 Profile Updated', emoji: '👤' },
     NFT_BULK_FUSED: { icon: 'fa-fire-flame-curved', color: '#f97316', bg: 'rgba(249,115,22,0.15)', label: '🔥 Bulk Fused', emoji: '🔥' },
     COMPOUND_REWARDS: { icon: 'fa-arrows-spin', color: '#4ade80', bg: 'rgba(34,197,94,0.15)', label: '🔄 Rewards Compounded', emoji: '🔄' },
     BUYBACK_PAUSED: { icon: 'fa-pause', color: '#fbbf24', bg: 'rgba(251,191,36,0.15)', label: '⏸️ Buyback Paused', emoji: '⏸️' },
@@ -214,18 +221,27 @@ function getActivityStyle(type, details = {}) {
         if (isCumulative) return ACTIVITY_ICONS.FORTUNE_COMBO;
         return ACTIVITY_ICONS.FORTUNE_BET;
     }
-    if (t === 'POSTCREATED' || t === 'POST_CREATED' || t === 'POSTED' || t === 'BACKCHAT_POST' || (t.includes('POST') && !t.includes('REPOST'))) return ACTIVITY_ICONS.BACKCHAT_POST;
+    // Specific Agora events — must come BEFORE the broad t.includes('POST') check
+    if (t === 'AGORABATCHEXECUTED' || t === 'BATCHEXECUTED' || t.includes('BATCH')) return ACTIVITY_ICONS.AGORA_BATCH;
+    if (t === 'AGORAPOSTEDITED' || t === 'POSTEDITED' || t === 'POST_EDITED') return ACTIVITY_ICONS.AGORA_EDIT;
+    if (t === 'AGORAPOSTREPORTED' || t === 'POSTREPORTED' || t === 'POST_REPORTED') return ACTIVITY_ICONS.AGORA_REPORT;
+    if (t === 'AGORAPOSTBOOSTED' || t === 'POSTBOOSTED' || t === 'POST_BOOSTED') return ACTIVITY_ICONS.AGORA_POST_BOOST;
+    if (t === 'AGORAPOSTTIPPED' || t === 'POSTTIPPED' || t === 'POST_TIPPED') return ACTIVITY_ICONS.BACKCHAT_TIP;
+    if (t === 'AGORAUSERBLOCKED' || t === 'USERBLOCKED') return ACTIVITY_ICONS.AGORA_BLOCK;
+    if (t === 'AGORAUSERUNBLOCKED' || t === 'USERUNBLOCKED') return ACTIVITY_ICONS.AGORA_UNBLOCK;
+    if (t === 'AGORAPROFILEUPDATED' || t === 'PROFILEUPDATED' || t === 'PROFILE_UPDATED') return ACTIVITY_ICONS.AGORA_PROFILE_UPDATE;
     if (t === 'SUPERLIKED' || t === 'SUPER_LIKED' || t.includes('SUPERLIKE')) return ACTIVITY_ICONS.BACKCHAT_SUPERLIKE;
-    if (t === 'LIKED' || t === 'POSTLIKED' || t === 'POST_LIKED' || (t.includes('LIKE') && !t.includes('SUPER'))) return ACTIVITY_ICONS.BACKCHAT_LIKE;
+    if (t === 'LIKED' || t === 'POSTLIKED' || t === 'POST_LIKED' || t === 'AGORALIKED' || (t.includes('LIKE') && !t.includes('SUPER'))) return ACTIVITY_ICONS.BACKCHAT_LIKE;
     if (t === 'REPLYCREATED' || t === 'REPLY_CREATED' || t.includes('REPLY')) return ACTIVITY_ICONS.BACKCHAT_REPLY;
     if (t === 'REPOSTCREATED' || t === 'REPOST_CREATED' || t.includes('REPOST')) return ACTIVITY_ICONS.BACKCHAT_REPOST;
+    if (t === 'POSTCREATED' || t === 'POST_CREATED' || t === 'POSTED' || t === 'BACKCHAT_POST' || t === 'AGORAPOSTCREATED' || (t.includes('POST') && !t.includes('REPOST'))) return ACTIVITY_ICONS.BACKCHAT_POST;
     if (t === 'AGORAUNFOLLOWED' || t === 'UNFOLLOWED' || t.includes('UNFOLLOW')) return ACTIVITY_ICONS.AGORA_UNFOLLOW;
     if (t === 'AGORADOWNVOTED' || t === 'DOWNVOTED' || t.includes('DOWNVOT')) return ACTIVITY_ICONS.AGORA_DOWNVOTE;
     if (t === 'FOLLOWED' || t === 'USER_FOLLOWED' || t === 'AGORAFOLLOWED' || t.includes('FOLLOW')) return ACTIVITY_ICONS.BACKCHAT_FOLLOW;
-    if (t === 'PROFILECREATED' || t === 'PROFILE_CREATED' || t.includes('PROFILE') && t.includes('CREAT')) return ACTIVITY_ICONS.BACKCHAT_PROFILE;
+    if (t === 'PROFILECREATED' || t === 'PROFILE_CREATED' || t === 'AGORAPROFILECREATED' || (t.includes('PROFILE') && t.includes('CREAT'))) return ACTIVITY_ICONS.BACKCHAT_PROFILE;
     if (t === 'CHARITYCAMPAIGNBOOSTED' || t === 'CAMPAIGN_BOOSTED') return ACTIVITY_ICONS.CHARITY_BOOST;
-    if (t === 'PROFILEBOOSTED' || t === 'PROFILE_BOOSTED' || t === 'AGORAPROFILEBOOSTED' || t === 'BOOSTED' || (t.includes('BOOST') && !t.includes('NFT') && !t.includes('CAMPAIGN') && !t.includes('CHARITY'))) return ACTIVITY_ICONS.BACKCHAT_BOOST;
-    if (t === 'BADGEACTIVATED' || t === 'BADGE_ACTIVATED' || t.includes('BADGE')) return ACTIVITY_ICONS.BACKCHAT_BADGE;
+    if (t === 'PROFILEBOOSTED' || t === 'PROFILE_BOOSTED' || t === 'AGORAPROFILEBOOSTED' || t === 'BOOSTED' || (t.includes('BOOST') && !t.includes('NFT') && !t.includes('CAMPAIGN') && !t.includes('CHARITY') && !t.includes('POST'))) return ACTIVITY_ICONS.BACKCHAT_BOOST;
+    if (t === 'BADGEACTIVATED' || t === 'BADGE_ACTIVATED' || t === 'AGORABADGEOBTAINED' || t.includes('BADGE')) return ACTIVITY_ICONS.BACKCHAT_BADGE;
     if (t === 'TIPPROCESSED' || t === 'TIP_PROCESSED' || t === 'TIPPED' || t.includes('TIP')) return ACTIVITY_ICONS.BACKCHAT_TIP;
     if (t === 'ETHWITHDRAWN' || t === 'ETH_WITHDRAWN' || t === 'BACKCHAT_WITHDRAW') return ACTIVITY_ICONS.BACKCHAT_WITHDRAW;
     if (t === 'CHARITYDONATION' || t === 'DONATIONMADE' || t === 'CHARITY_DONATE' || t === 'DONATED' || t === 'DONATION' || t.includes('DONATION')) return ACTIVITY_ICONS.CHARITY_DONATE;

@@ -510,14 +510,15 @@
         </div>
     </div>
     <script>
-    // Auto-dismiss splash after 3.5s from page load (not from DOMContentLoaded)
+    // Fallback: auto-dismiss splash after 8s if app.js hasn't done it yet
     setTimeout(function(){
         var s=document.getElementById('welcome-splash');
         if(!s)return;
         var inner=s.querySelector('.splash-enter');
         if(inner){inner.classList.remove('splash-enter');inner.classList.add('splash-exit');}
+        s.style.opacity='0';
         setTimeout(function(){if(s.parentNode)s.parentNode.removeChild(s);},500);
-    },3500);
+    },8000);
     </script>
 </body>
 </html>

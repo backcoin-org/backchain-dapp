@@ -587,19 +587,17 @@ window.addEventListener('load', async () => {
     const initLoader = document.getElementById('initial-loader-container');
     if (initLoader) initLoader.remove();
 
-    // Welcome splash is already in index.html (renders while JS loads).
-    // Tutor param is saved silently in localStorage — no special modal.
-    // Tutor registration happens automatically when user connects wallet.
-    const existingSplash = document.getElementById('welcome-splash');
-    if (existingSplash) {
-        existingSplash.addEventListener('click', () => dismissSplash());
-        setTimeout(() => dismissSplash(), 2500);
-    }
-
     // ✅ FIX: Navigate to the page specified in URL hash, or dashboard if none
     const initialPage = getInitialPageFromHash();
     console.log("📍 Initial page from URL:", initialPage, "Hash:", window.location.hash);
     navigateTo(initialPage, true);
+
+    // Dismiss splash AFTER navigation — prevents black screen gap
+    const existingSplash = document.getElementById('welcome-splash');
+    if (existingSplash) {
+        existingSplash.addEventListener('click', () => dismissSplash());
+        dismissSplash();
+    }
 
     console.log("✅ App Ready.");
 });
