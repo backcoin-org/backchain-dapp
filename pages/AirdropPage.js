@@ -1,5 +1,5 @@
 // pages/AirdropPage.js
-// ✅ VERSION V7.0: "Share & Earn" — Single-scroll viral loop redesign
+// ✅ VERSION V6.0: Flat layout redesign — 2 tabs, no sub-tabs, all sections visible
 
 import { State } from '../state.js';
 import * as db from '../modules/firebase-auth-service.js';
@@ -17,18 +17,18 @@ const DEFAULT_HASHTAGS = "#BKC #Backcoin #Airdrop";
 const AUTO_APPROVE_HOURS = 2;
 
 const AUDIT_MESSAGES = [
-    "Your post is under security audit...",
-    "Verifying post authenticity...",
-    "Checking compliance with guidelines...",
-    "Security review in progress...",
-    "Audit team analyzing your submission..."
+    "🔍 Your post is under security audit...",
+    "🛡️ Verifying post authenticity...",
+    "📋 Checking compliance with guidelines...",
+    "🔐 Security review in progress...",
+    "⏳ Audit team analyzing your submission..."
 ];
 
 function getRandomAuditMessage() {
     return AUDIT_MESSAGES[Math.floor(Math.random() * AUDIT_MESSAGES.length)];
 }
 
-// Platform Usage Config (valores padrao - sobrescritos pelo Firebase)
+// Platform Usage Config (valores padrão - sobrescritos pelo Firebase)
 const DEFAULT_PLATFORM_USAGE_CONFIG = {
     agoraProfile:{ icon: '👤', label: 'Create Profile', points: 3000,  maxCount: 1,  cooldownHours: 0,  enabled: true },
     agoraPost:   { icon: '✍️', label: 'Post on Agora',  points: 2000,  maxCount: 20, cooldownHours: 0,  enabled: true },
@@ -62,13 +62,15 @@ const PLATFORM_ACTION_PAGES = {
 };
 
 const NFT_TIERS = [
-    { name: 'Diamond', icon: '💎', ranks: '#1 – #5',     count: 5,   color: 'cyan',   burn: '0%',  receive: '100%', gradient: 'from-cyan-500/20 to-cyan-900/10',  border: 'border-cyan-500/30',  text: 'text-cyan-300' },
-    { name: 'Gold',    icon: '🥇', ranks: '#6 – #25',    count: 20,  color: 'yellow', burn: '10%', receive: '90%',  gradient: 'from-yellow-500/20 to-yellow-900/10', border: 'border-yellow-500/30', text: 'text-yellow-400' },
-    { name: 'Silver',  icon: '🥈', ranks: '#26 – #75',   count: 50,  color: 'gray',   burn: '25%', receive: '75%',  gradient: 'from-gray-400/20 to-gray-800/10',  border: 'border-gray-400/30',  text: 'text-gray-300' },
-    { name: 'Bronze',  icon: '🥉', ranks: '#76 – #200',  count: 125, color: 'amber',  burn: '40%', receive: '60%',  gradient: 'from-amber-600/20 to-amber-900/10', border: 'border-amber-600/30', text: 'text-amber-500' },
+    { name: 'Diamond', icon: '💎', ranks: '#1 – #5',     count: 5,   color: 'cyan',   burn: '0%',  receive: '100%', gradient: 'from-cyan-500/20 to-cyan-900/10',  border: 'border-cyan-500/30',  text: 'text-cyan-300',   postsNeeded: 0 },
+    { name: 'Gold',    icon: '🥇', ranks: '#6 – #25',    count: 20,  color: 'yellow', burn: '10%', receive: '90%',  gradient: 'from-yellow-500/20 to-yellow-900/10', border: 'border-yellow-500/30', text: 'text-yellow-400', postsNeeded: 0 },
+    { name: 'Silver',  icon: '🥈', ranks: '#26 – #75',   count: 50,  color: 'gray',   burn: '25%', receive: '75%',  gradient: 'from-gray-400/20 to-gray-800/10',  border: 'border-gray-400/30',  text: 'text-gray-300',   postsNeeded: 0 },
+    { name: 'Bronze',  icon: '🥉', ranks: '#76 – #200',  count: 125, color: 'amber',  burn: '40%', receive: '60%',  gradient: 'from-amber-600/20 to-amber-900/10', border: 'border-amber-600/30', text: 'text-amber-500',  postsNeeded: 0 },
 ];
 
 const TOTAL_NFTS = 200;
+
+// Tier rank boundaries
 const TIER_BOUNDARIES = [5, 25, 75, 200];
 
 function formatTimeLeft(ms) {
@@ -104,16 +106,16 @@ let airdropState = {
     userSubmissions: [],
     platformUsage: {},
     isBanned: false,
+    activeTab: 'earn',
+    activeRanking: 'posts',
     historyExpanded: false,
-    questsExpanded: false,
-    leaderboardExpanded: false,
     // Agora integration
     agoraHasProfile: false,
     agoraUsername: null,
     agoraPosts: [],
     // On-chain claim
-    claimInfo: null,
-    claimProof: null,
+    claimInfo: null,     // { claimed, claimFee, lockDays, phase, isActive, availableBalance, ... }
+    claimProof: null,    // { amount, proof } from merkle tree
     claimLoading: false
 };
 
@@ -127,6 +129,11 @@ function injectAirdropStyles() {
     const style = document.createElement('style');
     style.id = 'airdrop-custom-styles';
     style.textContent = `
+        @keyframes float {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-15px) rotate(3deg); }
+        }
+
         @keyframes float-slow {
             0%, 100% { transform: translateY(0) scale(1); }
             50% { transform: translateY(-8px) scale(1.02); }
@@ -140,6 +147,11 @@ function injectAirdropStyles() {
         @keyframes bounce-gentle {
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-5px); }
+        }
+
+        @keyframes spin-slow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
         }
 
         @keyframes fade-up {
@@ -158,21 +170,48 @@ function injectAirdropStyles() {
             100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
         }
 
+        @keyframes slide-in {
+            from { opacity: 0; transform: translateX(-12px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
         @keyframes count-up {
             from { opacity: 0; transform: scale(0.5); }
             to { opacity: 1; transform: scale(1); }
         }
 
+        @keyframes glow-pulse {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 1; }
+        }
+
+        .airdrop-float { animation: float 4s ease-in-out infinite; }
         .airdrop-float-slow { animation: float-slow 3s ease-in-out infinite; }
         .airdrop-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
         .airdrop-bounce { animation: bounce-gentle 2s ease-in-out infinite; }
+        .airdrop-spin { animation: spin-slow 20s linear infinite; }
         .airdrop-fade-up { animation: fade-up 0.5s ease-out forwards; }
         .airdrop-pulse-ring { animation: pulse-ring 2s infinite; }
+        .airdrop-slide-in { animation: slide-in 0.4s ease-out forwards; }
+        .airdrop-glow { animation: glow-pulse 2s ease-in-out infinite; }
 
         .airdrop-shimmer {
             background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
             background-size: 200% 100%;
             animation: shimmer 2.5s infinite;
+        }
+
+        .airdrop-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .airdrop-card:hover {
+            transform: translateY(-3px);
+        }
+
+        .airdrop-tab-active {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: #000;
+            font-weight: 700;
         }
 
         .airdrop-gradient-text {
@@ -182,14 +221,14 @@ function injectAirdropStyles() {
             background-clip: text;
         }
 
-        .social-share-btn {
+        .social-btn {
             transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .social-share-btn:hover {
-            transform: translateY(-2px);
+        .social-btn:hover {
+            transform: scale(1.08);
             box-shadow: 0 4px 15px rgba(0,0,0,0.3);
         }
-        .social-share-btn:active {
+        .social-btn:active {
             transform: scale(0.95);
         }
 
@@ -217,38 +256,79 @@ function injectAirdropStyles() {
         .scroll-area::-webkit-scrollbar-track { background: transparent; }
         .scroll-area::-webkit-scrollbar-thumb { background: rgba(113, 113, 122, 0.5); border-radius: 2px; }
 
-        .stat-value { animation: count-up 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        .tier-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .tier-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(135deg, transparent 0%, rgba(255,255,255,0.03) 100%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .tier-card:hover::before { opacity: 1; }
+        .tier-card:hover { transform: translateY(-2px) scale(1.01); }
 
-        .accordion-chevron { transition: transform 0.3s ease; }
-        .accordion-chevron.expanded { transform: rotate(180deg); }
-        .accordion-body { max-height: 0; overflow: hidden; transition: max-height 0.4s ease; }
-        .accordion-body.expanded { max-height: 3000px; }
+        .stat-value {
+            animation: count-up 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
 
+        .rank-badge {
+            position: relative;
+            overflow: hidden;
+        }
+        .rank-badge::after {
+            content: '';
+            position: absolute;
+            top: -50%; left: -50%;
+            width: 200%; height: 200%;
+            background: conic-gradient(transparent, rgba(255,255,255,0.1), transparent);
+            animation: spin-slow 8s linear infinite;
+        }
+
+        /* V6.0: Accordion */
+        .accordion-chevron {
+            transition: transform 0.3s ease;
+        }
+        .accordion-chevron.expanded {
+            transform: rotate(180deg);
+        }
+        .accordion-body {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+        .accordion-body.expanded {
+            max-height: 2000px;
+        }
+
+        /* V6.0: Notification badge */
         .notif-badge {
-            position: absolute; top: -4px; right: -4px;
-            min-width: 18px; height: 18px; font-size: 10px; font-weight: 700;
-            display: flex; align-items: center; justify-content: center;
-            border-radius: 999px; background: #ef4444; color: white; padding: 0 4px;
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            min-width: 18px;
+            height: 18px;
+            font-size: 10px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            background: #ef4444;
+            color: white;
+            padding: 0 4px;
             animation: pulse-ring 2s infinite;
-        }
-
-        .airdrop-step-arrow {
-            color: rgba(245, 158, 11, 0.4);
-        }
-
-        .share-post-card {
-            transition: all 0.2s ease;
-        }
-        .share-post-card:hover {
-            border-color: rgba(245, 158, 11, 0.3);
-            background: rgba(245, 158, 11, 0.03);
         }
     `;
     document.head.appendChild(style);
 }
 
 // =======================================================
-//  3. CARREGAMENTO DE DADOS (DATA LOADING) — UNCHANGED
+//  3. CARREGAMENTO DE DADOS (DATA LOADING)
 // =======================================================
 
 async function loadAirdropData() {
@@ -316,6 +396,7 @@ async function loadAirdropData() {
 }
 
 // --- Agora On-Chain Data ---
+// V12 deploy block on Sepolia — fixed fromBlock avoids massive eth_getLogs ranges
 const EVENTS_LOOKBACK = 10_313_523;
 
 async function loadAgoraData() {
@@ -330,6 +411,7 @@ async function loadAgoraData() {
         const provider = NetworkManager.getProvider();
         const contract = new window.ethers.Contract(agora, agoraABI, provider);
 
+        // Query profile + post events in parallel (indexed by user address)
         const [profileEvents, postEvents] = await Promise.all([
             contract.queryFilter(contract.filters.ProfileCreated(State.userAddress), EVENTS_LOOKBACK).catch(() => []),
             contract.queryFilter(contract.filters.PostCreated(null, State.userAddress), EVENTS_LOOKBACK).catch(() => [])
@@ -340,6 +422,7 @@ async function loadAgoraData() {
             airdropState.agoraUsername = profileEvents[0].args.username || profileEvents[0].args[1];
         }
 
+        // Filter out replies (replyTo > 0) and reposts, keep original posts only
         const originalPosts = postEvents.filter(ev => {
             const contentHash = ev.args.contentHash || ev.args[4];
             return contentHash && contentHash.length > 0;
@@ -368,6 +451,7 @@ async function loadClaimData() {
         const info = await AirdropClaimTx.getClaimInfo(State.userAddress);
         airdropState.claimInfo = info;
 
+        // If active phase and not yet claimed, try to fetch proof
         if (info && info.isActive && !info.claimed) {
             const proof = await AirdropClaimTx.getMerkleProof(State.userAddress, info.phase);
             airdropState.claimProof = proof;
@@ -378,7 +462,7 @@ async function loadClaimData() {
 }
 
 // =======================================================
-//  4. UI RENDERING — V7.0 "Share & Earn" Redesign
+//  4. COMPONENTES DE RENDERIZACAO (UI) — V6.0 REDESIGN
 // =======================================================
 
 function getUserEstimatedRank(list) {
@@ -398,7 +482,7 @@ function getUserTierFromRank(rank) {
 
 function getNextTierInfo(rank) {
     if (!rank) return { nextTier: NFT_TIERS[3], postsNeeded: 1 };
-    if (rank <= 5) return null;
+    if (rank <= 5) return null; // Already at top
     if (rank <= 25) return { nextTier: NFT_TIERS[0], postsNeeded: rank - 5 };
     if (rank <= 75) return { nextTier: NFT_TIERS[1], postsNeeded: rank - 25 };
     if (rank <= 200) return { nextTier: NFT_TIERS[2], postsNeeded: rank - 75 };
@@ -415,30 +499,25 @@ function getActionRequiredItems() {
     );
 }
 
-function getTierInfo(rank) {
-    if (rank <= 5)   return { icon: '💎', bg: 'bg-cyan-500/20 text-cyan-300',   tierName: 'Diamond', tierTextColor: 'text-cyan-400/70' };
-    if (rank <= 25)  return { icon: '🥇', bg: 'bg-yellow-500/20 text-yellow-400', tierName: 'Gold',    tierTextColor: 'text-yellow-400/70' };
-    if (rank <= 75)  return { icon: '🥈', bg: 'bg-gray-400/20 text-gray-300',   tierName: 'Silver',  tierTextColor: 'text-gray-400/70' };
-    if (rank <= 200) return { icon: '🥉', bg: 'bg-amber-600/20 text-amber-500', tierName: 'Bronze',  tierTextColor: 'text-amber-500/70' };
-    return { icon: null, bg: 'bg-zinc-800 text-zinc-400', tierName: null, tierTextColor: '' };
-}
-
-// --- HEADER (compact stats, no tabs) ---
+// --- HEADER ---
 function renderHeader() {
     const { user } = airdropState;
     const totalPoints = user?.totalPoints || 0;
     const approvedCount = user?.approvedSubmissionsCount || 0;
     const multiplier = getMultiplierByTier(approvedCount);
+
     const postsList = airdropState.leaderboards?.top100ByPosts || [];
     const userRank = getUserEstimatedRank(postsList);
     const userTier = getUserTierFromRank(userRank);
+    const actionRequired = getActionRequiredItems().length;
 
     return `
-        <div class="px-4 pt-4 md:pt-6 pb-3">
+        <div class="px-4 pt-4 md:pt-6 pb-2">
+            <!-- Title Row -->
             <div class="flex items-center justify-between mb-3">
                 <div>
-                    <h1 class="text-lg md:text-2xl font-black text-white">Share <span class="airdrop-gradient-text">&</span> Earn</h1>
-                    <span class="text-[9px] md:text-xs text-zinc-500">${TOTAL_NFTS} NFT Boosters for top creators</span>
+                    <h1 class="text-lg md:text-2xl font-black text-white">Airdrop <span class="airdrop-gradient-text hidden md:inline">Campaign</span></h1>
+                    <span class="text-[9px] md:text-xs text-zinc-500">${TOTAL_NFTS} NFTs • 4 Tiers</span>
                 </div>
                 <a href="https://t.me/BackCoinorg" target="_blank"
                    class="flex items-center gap-1.5 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-400 px-3 py-1.5 rounded-full transition-all hover:scale-105 text-xs md:text-sm">
@@ -448,7 +527,8 @@ function renderHeader() {
             </div>
 
             ${airdropState.isConnected ? `
-            <div class="grid grid-cols-4 gap-2 md:gap-3">
+            <!-- Stats Row -->
+            <div class="grid grid-cols-4 gap-2 md:gap-3 mb-3">
                 <div class="bg-zinc-900/80 border border-zinc-800 rounded-xl p-2 md:p-3 text-center">
                     <span class="text-sm md:text-xl font-bold text-amber-400 stat-value">${totalPoints.toLocaleString()}</span>
                     <p class="text-[7px] md:text-[10px] text-zinc-500 uppercase tracking-wider">Points</p>
@@ -473,123 +553,137 @@ function renderHeader() {
                 </div>
             </div>
             ` : ''}
-        </div>
-    `;
-}
 
-// --- HERO BANNER (3-step flow) ---
-function renderHeroBanner() {
-    return `
-        <div class="bg-gradient-to-br from-amber-900/15 via-zinc-900/50 to-zinc-900/80 border border-amber-500/15 rounded-2xl p-5 relative overflow-hidden">
-            <div class="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
-            <div class="absolute bottom-0 left-0 w-20 h-20 bg-amber-500/5 rounded-full translate-y-1/2 -translate-x-1/2"></div>
-
-            <h2 class="text-base md:text-lg font-bold text-white mb-4 text-center relative z-10">
-                How to earn <span class="airdrop-gradient-text">points & NFTs</span>
-            </h2>
-
-            <div class="flex items-center justify-center gap-2 md:gap-4 relative z-10">
-                <!-- Step 1 -->
-                <div class="flex flex-col items-center text-center flex-1">
-                    <div class="w-11 h-11 md:w-14 md:h-14 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center mb-2">
-                        <i class="fa-solid fa-pen-to-square text-indigo-400 text-sm md:text-lg"></i>
-                    </div>
-                    <p class="text-white font-bold text-[10px] md:text-xs">Create Post</p>
-                    <p class="text-zinc-500 text-[8px] md:text-[10px]">on Agora</p>
-                </div>
-
-                <i class="fa-solid fa-chevron-right airdrop-step-arrow text-xs md:text-sm mt-[-16px]"></i>
-
-                <!-- Step 2 -->
-                <div class="flex flex-col items-center text-center flex-1">
-                    <div class="w-11 h-11 md:w-14 md:h-14 rounded-xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center mb-2">
-                        <i class="fa-solid fa-share-nodes text-sky-400 text-sm md:text-lg"></i>
-                    </div>
-                    <p class="text-white font-bold text-[10px] md:text-xs">Share</p>
-                    <p class="text-zinc-500 text-[8px] md:text-[10px]">on social media</p>
-                </div>
-
-                <i class="fa-solid fa-chevron-right airdrop-step-arrow text-xs md:text-sm mt-[-16px]"></i>
-
-                <!-- Step 3 -->
-                <div class="flex flex-col items-center text-center flex-1">
-                    <div class="w-11 h-11 md:w-14 md:h-14 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mb-2">
-                        <i class="fa-solid fa-coins text-amber-400 text-sm md:text-lg"></i>
-                    </div>
-                    <p class="text-white font-bold text-[10px] md:text-xs">Earn Points</p>
-                    <p class="text-zinc-500 text-[8px] md:text-[10px]">& NFT Boosters</p>
+            <!-- Navigation — 2 Tabs -->
+            <div class="flex justify-center">
+                <div class="bg-zinc-900/80 p-1 md:p-1.5 rounded-full border border-zinc-800 inline-flex gap-1 w-full md:w-auto">
+                    <button data-target="earn"
+                            class="nav-pill-btn flex-1 md:flex-none md:px-6 py-2.5 rounded-full text-xs md:text-sm font-bold transition-all flex items-center justify-center gap-1.5 relative
+                                   ${airdropState.activeTab === 'earn' ? 'airdrop-tab-active shadow-lg shadow-amber-500/20' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}">
+                        <i class="fa-solid fa-coins"></i> Earn
+                        ${actionRequired > 0 ? `<span class="notif-badge">${actionRequired}</span>` : ''}
+                    </button>
+                    <button data-target="ranking"
+                            class="nav-pill-btn flex-1 md:flex-none md:px-6 py-2.5 rounded-full text-xs md:text-sm font-bold transition-all flex items-center justify-center gap-1.5
+                                   ${airdropState.activeTab === 'ranking' ? 'airdrop-tab-active shadow-lg shadow-amber-500/20' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}">
+                        <i class="fa-solid fa-trophy"></i> Ranking
+                    </button>
                 </div>
             </div>
         </div>
     `;
 }
 
-// --- ON-CHAIN CLAIM BANNER ---
+// =======================================================
+//  EARN TAB — Single scrollable page, no sub-tabs
+// =======================================================
+
+// --- ON-CHAIN CLAIM SECTION ---
 function renderClaimSection() {
     const info = airdropState.claimInfo;
-    if (!info) return '';
+    if (!info) return ''; // Contract not configured or load failed
 
     const ethers = window.ethers;
 
+    // Phase not active — no merkle root set
     if (!info.isActive) {
         return `
-            <div class="bg-zinc-900/60 border border-emerald-500/15 rounded-xl p-3 flex items-center gap-3">
-                <div class="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-                    <i class="fa-solid fa-gift text-emerald-400 text-xs"></i>
+            <div class="bg-gradient-to-br from-emerald-900/20 to-zinc-900/80 border border-emerald-500/20 rounded-2xl p-4 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+                <div class="flex items-center gap-3 mb-2">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                        <i class="fa-solid fa-gift text-emerald-400"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-white">Token Claim</h3>
+                        <p class="text-zinc-500 text-[10px]">Phase ${info.phase || 0} completed</p>
+                    </div>
                 </div>
-                <div class="flex-1 min-w-0">
-                    <p class="text-zinc-300 text-xs font-medium">Token Claim</p>
-                    <p class="text-zinc-500 text-[10px]">No active phase — next announced on Telegram</p>
+                <div class="bg-zinc-800/50 rounded-xl p-3 text-center">
+                    <p class="text-zinc-400 text-xs">No active claim phase right now</p>
+                    <p class="text-zinc-600 text-[10px] mt-1">Next phase will be announced on Telegram</p>
                 </div>
+                ${info.totalClaimCount > 0 ? `
+                <div class="flex items-center justify-center gap-4 mt-3 text-[10px] text-zinc-500">
+                    <span>${info.totalClaimCount} claims</span>
+                    <span>${Number(ethers.formatEther(info.totalClaimed)).toLocaleString()} BKC distributed</span>
+                </div>
+                ` : ''}
             </div>
         `;
     }
 
+    // Already claimed this phase
     if (info.claimed) {
         return `
-            <div class="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-3 flex items-center gap-3">
-                <div class="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center shrink-0">
-                    <i class="fa-solid fa-check-circle text-emerald-400 text-xs"></i>
+            <div class="bg-gradient-to-br from-emerald-900/20 to-zinc-900/80 border border-emerald-500/30 rounded-2xl p-4 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+                <div class="flex items-center gap-3 mb-2">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                        <i class="fa-solid fa-check-circle text-emerald-400"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-white">Phase ${info.phase} Claimed</h3>
+                        <p class="text-emerald-400 text-[10px]">Tokens auto-staked for ${info.lockDays} days</p>
+                    </div>
                 </div>
-                <div class="flex-1">
-                    <p class="text-emerald-300 text-xs font-medium">Phase ${info.phase} Claimed</p>
-                    <p class="text-zinc-500 text-[10px]">Tokens auto-staked for ${info.lockDays} days</p>
+                <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-center">
+                    <p class="text-emerald-300 text-xs font-medium">You've already claimed your allocation!</p>
+                    <p class="text-zinc-500 text-[10px] mt-1">Tokens are earning staking rewards</p>
                 </div>
             </div>
         `;
     }
 
+    // Active phase, not claimed — check if user has proof
     const proof = airdropState.claimProof;
     const availableBKC = Number(ethers.formatEther(info.availableBalance)).toLocaleString();
 
     if (!proof) {
+        // User not on the merkle tree for this phase
         return `
-            <div class="bg-zinc-900/60 border border-emerald-500/15 rounded-xl p-3 flex items-center gap-3">
-                <div class="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0 airdrop-pulse-glow">
-                    <i class="fa-solid fa-gift text-emerald-400 text-xs"></i>
+            <div class="bg-gradient-to-br from-emerald-900/20 to-zinc-900/80 border border-emerald-500/20 rounded-2xl p-4 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+                <div class="flex items-center gap-3 mb-2">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center airdrop-pulse-glow">
+                        <i class="fa-solid fa-gift text-emerald-400"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-white">Phase ${info.phase} Active</h3>
+                        <p class="text-emerald-400 text-[10px]">${availableBKC} BKC available</p>
+                    </div>
                 </div>
-                <div class="flex-1">
-                    <p class="text-zinc-300 text-xs font-medium">Phase ${info.phase} Active — ${availableBKC} BKC</p>
-                    <p class="text-zinc-500 text-[10px]">Your wallet is not eligible. Keep earning!</p>
+                <div class="bg-zinc-800/50 rounded-xl p-3 text-center">
+                    <p class="text-zinc-400 text-xs">Your wallet is not eligible for this phase</p>
+                    <p class="text-zinc-600 text-[10px] mt-1">Keep earning points — higher ranks qualify for future phases!</p>
                 </div>
             </div>
         `;
     }
 
+    // User IS eligible — show claim button
     const claimAmountFormatted = Number(ethers.formatEther(proof.amount)).toLocaleString();
     const isSubmitting = airdropState.claimLoading;
 
     return `
-        <div class="bg-gradient-to-r from-emerald-900/20 to-zinc-900/80 border border-emerald-500/40 rounded-2xl p-4 relative overflow-hidden airdrop-pulse-glow">
+        <div class="bg-gradient-to-br from-emerald-900/30 to-zinc-900/80 border border-emerald-500/40 rounded-2xl p-4 relative overflow-hidden airdrop-pulse-glow">
+            <div class="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
             <div class="flex items-center gap-3 mb-3">
-                <div class="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
                     <i class="fa-solid fa-gift text-emerald-400 airdrop-bounce"></i>
                 </div>
-                <div class="flex-1">
+                <div>
                     <h3 class="text-sm font-bold text-white">Phase ${info.phase} — Claim Available!</h3>
-                    <p class="text-emerald-400 text-[10px]">${claimAmountFormatted} BKC • Auto-staked ${info.lockDays} days</p>
+                    <p class="text-emerald-400 text-[10px]">Your allocation is ready</p>
                 </div>
             </div>
+
+            <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 text-center mb-3">
+                <p class="text-zinc-400 text-[10px] uppercase tracking-wider mb-1">Your Allocation</p>
+                <p class="text-2xl font-black text-emerald-300">${claimAmountFormatted} <span class="text-sm text-emerald-500">BKC</span></p>
+                <p class="text-zinc-500 text-[10px] mt-1">Auto-staked for ${info.lockDays} days</p>
+            </div>
+
             <button id="claim-airdrop-btn"
                     class="w-full cta-mega text-black font-bold py-3 rounded-xl text-sm transition-all ${isSubmitting ? 'opacity-60 cursor-not-allowed' : ''}"
                     ${isSubmitting ? 'disabled' : ''}>
@@ -598,6 +692,43 @@ function renderClaimSection() {
                     : '<i class="fa-solid fa-rocket mr-2"></i> Claim & Auto-Stake'
                 }
             </button>
+
+            <p class="text-zinc-600 text-[10px] mt-2 text-center">
+                <i class="fa-solid fa-lock mr-1"></i> Tokens are locked for ${info.lockDays} days while earning staking rewards
+            </p>
+        </div>
+    `;
+}
+
+function renderEarnTab() {
+    if (!airdropState.isConnected) {
+        return `
+            <div class="text-center px-4 py-12 airdrop-fade-up">
+                <div class="w-24 h-24 mx-auto mb-6 airdrop-float">
+                    <img src="./assets/airdrop.png" alt="Connect" class="w-full h-full object-contain opacity-50">
+                </div>
+                <h3 class="text-lg font-bold text-white mb-2">Connect Your Wallet</h3>
+                <p class="text-zinc-500 text-sm max-w-xs mx-auto mb-4">Connect to start earning points and win NFT rewards.</p>
+
+                <div class="max-w-xs mx-auto bg-zinc-900/60 border border-zinc-800 rounded-xl p-3">
+                    <p class="text-zinc-500 text-[10px] uppercase tracking-wider mb-2">Win 1 of ${TOTAL_NFTS} NFT Boosters</p>
+                    <div class="flex justify-center gap-3 text-lg">
+                        ${NFT_TIERS.map(t => `<span title="${t.name}">${t.icon}</span>`).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="px-4 space-y-4 airdrop-fade-up pb-24">
+            ${renderClaimSection()}
+            ${renderActionRequiredBanner()}
+            ${renderYourRankSnippet()}
+            ${renderPostSection()}
+            ${renderPlatformSection()}
+            ${renderTasksSection()}
+            ${renderSubmissionHistory()}
         </div>
     `;
 }
@@ -628,12 +759,78 @@ function renderActionRequiredBanner() {
     `;
 }
 
-// --- SHARE SECTION (Main CTA — Agora Posts + Multi-platform Share) ---
+// --- YOUR RANK SNIPPET ---
+function renderYourRankSnippet() {
+    const postsList = airdropState.leaderboards?.top100ByPosts || [];
+    const userRank = getUserEstimatedRank(postsList);
+    const userTier = getUserTierFromRank(userRank);
+    const nextInfo = getNextTierInfo(userRank);
+
+    if (!userRank) {
+        return `
+            <div id="rank-snippet-btn" class="bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 flex items-center justify-between cursor-pointer hover:border-amber-500/30 transition-colors">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center">
+                        <i class="fa-solid fa-arrow-up text-amber-400 text-xs"></i>
+                    </div>
+                    <div>
+                        <p class="text-zinc-300 text-sm font-medium">Start posting to join the ranking!</p>
+                        <p class="text-zinc-500 text-[10px]">Top 200 earn exclusive NFT Boosters</p>
+                    </div>
+                </div>
+                <i class="fa-solid fa-chevron-right text-zinc-600 text-xs"></i>
+            </div>
+        `;
+    }
+
+    // Calculate progress to next tier
+    let progressBar = '';
+    if (nextInfo) {
+        const currentBoundary = userRank <= 25 ? 5 : userRank <= 75 ? 25 : userRank <= 200 ? 75 : 200;
+        const prevBoundary = userRank <= 25 ? 25 : userRank <= 75 ? 75 : 200;
+        const progressPct = Math.max(0, Math.min(100, ((prevBoundary - userRank) / (prevBoundary - currentBoundary)) * 100));
+        progressBar = `
+            <div class="flex-1 mx-3">
+                <div class="progress-bar-bg h-1.5 rounded-full">
+                    <div class="progress-bar-fill h-full rounded-full" style="width: ${progressPct}%"></div>
+                </div>
+                <p class="text-zinc-500 text-[9px] mt-0.5">${nextInfo.postsNeeded} more to ${nextInfo.nextTier.icon} ${nextInfo.nextTier.name}</p>
+            </div>
+        `;
+    } else {
+        progressBar = `
+            <div class="flex-1 mx-3">
+                <div class="progress-bar-bg h-1.5 rounded-full">
+                    <div class="progress-bar-fill h-full rounded-full" style="width: 100%"></div>
+                </div>
+                <p class="text-cyan-400/70 text-[9px] mt-0.5">Top tier reached!</p>
+            </div>
+        `;
+    }
+
+    return `
+        <div id="rank-snippet-btn" class="bg-zinc-900/80 border ${userTier.border} rounded-xl p-3 flex items-center cursor-pointer hover:border-amber-500/30 transition-colors relative overflow-hidden">
+            <div class="absolute inset-0 bg-gradient-to-r ${userTier.gradient} opacity-20"></div>
+            <div class="flex items-center gap-2 relative z-10 shrink-0">
+                <span class="text-lg">${userTier.icon}</span>
+                <div>
+                    <span class="${userTier.text} font-bold text-sm">#${userRank}</span>
+                    <p class="text-zinc-500 text-[9px]">${userTier.name}</p>
+                </div>
+            </div>
+            <div class="relative z-10 flex-1">${progressBar}</div>
+            <i class="fa-solid fa-chevron-right text-zinc-600 text-xs relative z-10 shrink-0"></i>
+        </div>
+    `;
+}
+
+// --- POST SECTION (Agora-Integrated) ---
 function _getPostPreview(post) {
     const ct = post.contentType;
     if (ct === 1) return { icon: 'fa-image', text: 'Image post', color: 'text-blue-400' };
     if (ct === 2) return { icon: 'fa-video', text: 'Video post', color: 'text-purple-400' };
     if (ct === 3) return { icon: 'fa-link', text: 'Link post', color: 'text-cyan-400' };
+    // Text post — show first 80 chars
     const raw = post.contentHash || '';
     const preview = raw.length > 80 ? raw.slice(0, 77) + '...' : raw;
     return { icon: 'fa-quote-left', text: preview || 'Text post', color: 'text-zinc-300' };
@@ -647,118 +844,129 @@ function _buildAgoraShareUrl(postId) {
     return `${window.location.origin}/#agora?${postParam}${refParam}`;
 }
 
-function _buildShareText(postId, previewText) {
+function _buildTweetIntent(postId, preview) {
     const url = _buildAgoraShareUrl(postId);
-    const text = previewText && previewText.length > 60 ? previewText.slice(0, 57) + '...' : (previewText || 'Check out my post on Backchain');
-    return { url, text };
+    const text = `${preview.length > 60 ? preview.slice(0, 57) + '...' : preview}\n\n${url}\n\n${DEFAULT_HASHTAGS}`;
+    return `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
 }
 
-function renderShareSection() {
+function renderPostSection() {
     const { agoraHasProfile, agoraUsername, agoraPosts } = airdropState;
 
     // --- State 1: No Agora profile ---
     if (!agoraHasProfile) {
         return `
-            <div class="bg-gradient-to-br from-indigo-900/20 to-zinc-900/80 border border-indigo-500/20 rounded-2xl p-5 text-center">
-                <div class="w-14 h-14 mx-auto mb-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center">
-                    <i class="fa-solid fa-user-plus text-indigo-400 text-xl"></i>
+            <div class="bg-gradient-to-br from-indigo-900/30 to-zinc-900/80 border border-indigo-500/30 rounded-2xl overflow-hidden">
+                <div class="px-4 pt-4 pb-2">
+                    <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-rocket text-indigo-400"></i> Share to Earn
+                    </h2>
+                    <p class="text-zinc-500 text-[10px] mt-0.5">Create posts on Agora, share on social media, earn points</p>
                 </div>
-                <h3 class="text-white font-bold text-sm mb-1">Create Your Agora Profile</h3>
-                <p class="text-zinc-400 text-xs mb-4 max-w-xs mx-auto">Join the decentralized social network to start earning points by sharing your posts.</p>
-                <button class="agora-nav-btn cta-mega text-black font-bold py-2.5 px-6 rounded-xl text-sm" data-target="agora">
-                    <i class="fa-solid fa-arrow-right mr-1"></i> Go to Agora
-                </button>
+                <div class="px-4 pb-4 text-center">
+                    <div class="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-5 mb-3">
+                        <div class="text-3xl mb-2"><i class="fa-solid fa-user-plus text-indigo-400"></i></div>
+                        <p class="text-white font-bold text-sm mb-1">Create Your Agora Profile</p>
+                        <p class="text-zinc-400 text-xs mb-3">Join the decentralized social network to start earning points by sharing your posts.</p>
+                        <button class="agora-nav-btn cta-mega text-black font-bold py-2.5 px-6 rounded-xl text-sm" data-target="agora">
+                            <i class="fa-solid fa-arrow-right mr-1"></i> Go to Agora
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-3 text-zinc-500 text-[10px]">
+                        <div class="flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Create posts</div>
+                        <div class="text-zinc-700">→</div>
+                        <div class="flex items-center gap-1"><i class="fa-brands fa-x-twitter"></i> Share on X</div>
+                        <div class="text-zinc-700">→</div>
+                        <div class="flex items-center gap-1"><i class="fa-solid fa-coins"></i> Earn points</div>
+                    </div>
+                </div>
             </div>
         `;
     }
 
-    // --- State 2: Has profile but no posts ---
+    // --- State 2: Has profile but no recent posts ---
     if (agoraPosts.length === 0) {
+        const profileLink = `${window.location.origin}/#agora?@${agoraUsername || ''}`;
         return `
-            <div class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 text-center">
-                <div class="w-14 h-14 mx-auto mb-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
-                    <i class="fa-solid fa-pen-fancy text-amber-400 text-xl"></i>
+            <div class="bg-zinc-900/80 border border-zinc-800 rounded-2xl overflow-hidden">
+                <div class="px-4 pt-4 pb-2">
+                    <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-share-nodes text-amber-400"></i> Share to Earn
+                    </h2>
+                    <p class="text-zinc-500 text-[10px] mt-0.5">Post on Agora → Share on social media → Submit link → Earn points</p>
                 </div>
-                <h3 class="text-white font-bold text-sm mb-1">Create Your First Post</h3>
-                <p class="text-zinc-400 text-xs mb-4 max-w-xs mx-auto">Write something on Agora, then share it on social media to earn airdrop points!</p>
-                <button class="agora-nav-btn cta-mega text-black font-bold py-2.5 px-6 rounded-xl text-sm" data-target="agora">
-                    <i class="fa-solid fa-plus mr-1"></i> Post on Agora
-                </button>
+                <div class="px-4 pb-3 text-center">
+                    <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 mb-3">
+                        <p class="text-amber-400 font-bold text-sm mb-1"><i class="fa-solid fa-pen-fancy mr-1"></i> Create Your First Post</p>
+                        <p class="text-zinc-400 text-xs mb-3">Write something on Agora, then share it on social media to earn airdrop points!</p>
+                        <button class="agora-nav-btn cta-mega text-black font-bold py-2 px-5 rounded-xl text-sm" data-target="agora">
+                            <i class="fa-solid fa-plus mr-1"></i> Post on Agora
+                        </button>
+                    </div>
+                </div>
+                ${_renderSubmitSection()}
             </div>
         `;
     }
 
-    // --- State 3: Has posts — show with share buttons ---
+    // --- State 3: Has posts — show them with share buttons ---
     return `
         <div class="bg-zinc-900/80 border border-zinc-800 rounded-2xl overflow-hidden">
             <div class="px-4 pt-4 pb-2 flex items-center justify-between">
                 <div>
                     <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-share-nodes text-amber-400"></i> Your Posts
+                        <i class="fa-solid fa-share-nodes text-amber-400"></i> Share to Earn
                     </h2>
-                    <p class="text-zinc-500 text-[10px] mt-0.5">Share on social media to earn points</p>
+                    <p class="text-zinc-500 text-[10px] mt-0.5">Share your Agora posts on social media to earn points</p>
                 </div>
                 <button class="agora-nav-btn text-amber-400 hover:text-amber-300 text-xs font-medium transition-colors" data-target="agora">
                     <i class="fa-solid fa-plus mr-1"></i>New Post
                 </button>
             </div>
 
-            <div class="px-4 pb-4 space-y-2.5">
+            <!-- Posts to Share -->
+            <div class="px-4 pb-3 space-y-2">
                 ${agoraPosts.map(post => {
                     const preview = _getPostPreview(post);
                     const shareUrl = _buildAgoraShareUrl(post.postId);
-                    const { text: shareText } = _buildShareText(post.postId, preview.text);
-                    const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(`${shareText}\n\n${shareUrl}\n\n${DEFAULT_HASHTAGS}`)}`;
-                    const telegramUrl = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(`${shareText} ${DEFAULT_HASHTAGS}`)}`;
-                    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(`${shareText}\n\n${shareUrl}`)}`;
+                    const tweetUrl = _buildTweetIntent(post.postId, preview.text);
 
                     return `
-                        <div class="share-post-card bg-black/40 border border-zinc-700/50 rounded-xl p-3">
-                            <div class="flex items-center gap-3 mb-2.5">
-                                <div class="flex-1 min-w-0">
-                                    <p class="text-xs ${preview.color} truncate">
-                                        <i class="fa-solid ${preview.icon} mr-1 text-[10px]"></i>${preview.text}
-                                    </p>
-                                    <p class="text-zinc-600 text-[9px] mt-0.5">#${post.postId}</p>
-                                </div>
+                        <div class="bg-black/40 border border-zinc-700/50 rounded-xl p-3 flex items-center gap-3">
+                            <div class="flex-1 min-w-0">
+                                <p class="text-xs ${preview.color} truncate">
+                                    <i class="fa-solid ${preview.icon} mr-1 text-[10px]"></i>${preview.text}
+                                </p>
+                                <p class="text-zinc-600 text-[9px] mt-0.5">#${post.postId}</p>
                             </div>
-                            <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-1.5 shrink-0">
                                 <a href="${tweetUrl}" target="_blank"
-                                   class="social-share-btn flex-1 flex items-center justify-center gap-1.5 bg-zinc-800/80 hover:bg-[#1DA1F2]/15 border border-zinc-700/50 hover:border-[#1DA1F2]/40 rounded-lg py-2 text-xs text-zinc-400 hover:text-[#1DA1F2] transition-all" title="Share on X">
-                                    <i class="fa-brands fa-x-twitter"></i>
-                                    <span class="hidden md:inline">X</span>
+                                   class="social-btn w-8 h-8 rounded-lg bg-black/60 border border-zinc-700 hover:border-blue-500/50 flex items-center justify-center" title="Share on X">
+                                    <i class="fa-brands fa-x-twitter text-white text-xs"></i>
                                 </a>
-                                <a href="${telegramUrl}" target="_blank"
-                                   class="social-share-btn flex-1 flex items-center justify-center gap-1.5 bg-zinc-800/80 hover:bg-[#0088cc]/15 border border-zinc-700/50 hover:border-[#0088cc]/40 rounded-lg py-2 text-xs text-zinc-400 hover:text-[#0088cc] transition-all" title="Share on Telegram">
-                                    <i class="fa-brands fa-telegram"></i>
-                                    <span class="hidden md:inline">Telegram</span>
-                                </a>
-                                <a href="${whatsappUrl}" target="_blank"
-                                   class="social-share-btn flex-1 flex items-center justify-center gap-1.5 bg-zinc-800/80 hover:bg-[#25D366]/15 border border-zinc-700/50 hover:border-[#25D366]/40 rounded-lg py-2 text-xs text-zinc-400 hover:text-[#25D366] transition-all" title="Share on WhatsApp">
-                                    <i class="fa-brands fa-whatsapp"></i>
-                                    <span class="hidden md:inline">WhatsApp</span>
-                                </a>
-                                <button class="social-share-btn copy-agora-link flex-1 flex items-center justify-center gap-1.5 bg-zinc-800/80 hover:bg-amber-500/15 border border-zinc-700/50 hover:border-amber-500/40 rounded-lg py-2 text-xs text-zinc-400 hover:text-amber-400 transition-all" data-url="${shareUrl}" title="Copy link">
-                                    <i class="fa-solid fa-copy"></i>
-                                    <span class="hidden md:inline">Copy</span>
+                                <button class="social-btn copy-agora-link w-8 h-8 rounded-lg bg-black/60 border border-zinc-700 hover:border-amber-500/50 flex items-center justify-center" title="Copy link" data-url="${shareUrl}">
+                                    <i class="fa-solid fa-copy text-zinc-400 text-xs"></i>
                                 </button>
                             </div>
                         </div>
                     `;
                 }).join('')}
             </div>
+
+            <!-- Divider -->
+            <div class="border-t border-zinc-800 mx-4"></div>
+
+            ${_renderSubmitSection()}
         </div>
     `;
 }
 
-// --- SUBMIT PROOF ---
-function renderSubmitProof() {
+function _renderSubmitSection() {
     return `
-        <div class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-4">
-            <h2 class="text-sm font-bold text-white flex items-center gap-2 mb-1">
-                <i class="fa-solid fa-link text-cyan-400"></i> Submit Proof
-            </h2>
-            <p class="text-zinc-500 text-[10px] mb-3">Shared a post? Paste the social media link here to earn points.</p>
+        <div class="px-4 py-3">
+            <p class="text-zinc-400 text-[10px] uppercase tracking-wider mb-2 flex items-center gap-1">
+                <i class="fa-solid fa-link text-[8px]"></i> Submit your social media post link
+            </p>
             <div class="relative">
                 <input type="url" id="content-url-input"
                        placeholder="Paste your X / TikTok / Instagram post URL..."
@@ -768,74 +976,21 @@ function renderSubmitProof() {
                     Submit
                 </button>
             </div>
-            <p class="text-zinc-600 text-[9px] mt-1.5 flex items-center gap-1">
-                <i class="fa-solid fa-shield-halved"></i> Posts are reviewed within 2 hours. Fraudulent links = permanent ban.
+            <p class="text-amber-400/60 text-[9px] mt-1.5 flex items-center gap-1">
+                <i class="fa-solid fa-exclamation-circle"></i> Share an Agora post on social media, then paste the link here • 2h audit
             </p>
         </div>
     `;
 }
 
-// --- MY RANK CARD ---
-function renderMyRank() {
-    const postsList = airdropState.leaderboards?.top100ByPosts || [];
-    const userRank = getUserEstimatedRank(postsList);
-    const userTier = getUserTierFromRank(userRank);
-    const nextInfo = getNextTierInfo(userRank);
-    const approvedCount = airdropState.user?.approvedSubmissionsCount || 0;
-
-    if (!userRank) {
-        return `
-            <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 text-center">
-                <p class="text-zinc-400 text-xs mb-1">You're not ranked yet</p>
-                <p class="text-zinc-500 text-[10px]">Submit your first post to join the leaderboard — Top 200 earn NFT Boosters!</p>
-            </div>
-        `;
-    }
-
-    return `
-        <div class="bg-zinc-900/80 border ${userTier.border} rounded-2xl p-4 relative overflow-hidden">
-            <div class="absolute inset-0 bg-gradient-to-r ${userTier.gradient} opacity-20"></div>
-            <div class="relative z-10">
-                <div class="flex items-center justify-between mb-2">
-                    <div class="flex items-center gap-3">
-                        <span class="text-2xl">${userTier.icon}</span>
-                        <div>
-                            <span class="${userTier.text} font-black text-xl">#${userRank}</span>
-                            <p class="text-zinc-400 text-[10px]">${userTier.name} Tier • ${approvedCount} posts</p>
-                        </div>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-white text-xs font-medium">${userTier.burn} burn</p>
-                        <p class="text-zinc-500 text-[10px]">${userTier.receive} rewards</p>
-                    </div>
-                </div>
-                ${nextInfo ? `
-                <div class="bg-black/30 rounded-lg p-2.5">
-                    <div class="flex items-center justify-between mb-1">
-                        <span class="text-zinc-400 text-[10px]">Next: ${nextInfo.nextTier.icon} ${nextInfo.nextTier.name}</span>
-                        <span class="text-zinc-500 text-[10px]">${nextInfo.postsNeeded} positions away</span>
-                    </div>
-                    <div class="progress-bar-bg h-1.5 rounded-full">
-                        <div class="progress-bar-fill h-full rounded-full" style="width: ${Math.max(10, 100 - (nextInfo.postsNeeded * 2))}%"></div>
-                    </div>
-                </div>
-                ` : `
-                <div class="bg-cyan-500/10 rounded-lg p-2 text-center">
-                    <span class="text-cyan-300 text-[10px] font-medium">Top tier reached!</span>
-                </div>
-                `}
-            </div>
-        </div>
-    `;
-}
-
-// --- PLATFORM QUESTS (accordion, starts closed) ---
+// --- PLATFORM USAGE SECTION ---
 function renderPlatformSection() {
     const config = airdropState.platformUsageConfig || DEFAULT_PLATFORM_USAGE_CONFIG;
     const usage = airdropState.platformUsage || {};
-    const expanded = airdropState.questsExpanded;
 
-    let totalActions = 0, completedActions = 0;
+    let totalActions = 0;
+    let completedActions = 0;
+
     Object.keys(config).forEach(key => {
         if (config[key].enabled !== false && config[key].maxCount) {
             totalActions += config[key].maxCount;
@@ -847,57 +1002,59 @@ function renderPlatformSection() {
     const platformPoints = airdropState.user?.platformUsagePoints || 0;
 
     return `
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl overflow-hidden">
-            <button id="quests-toggle-btn" class="w-full px-4 py-3 flex items-center justify-between hover:bg-zinc-800/50 transition-colors">
-                <div class="flex items-center gap-2">
-                    <i class="fa-solid fa-gamepad text-purple-400 text-xs"></i>
-                    <span class="text-zinc-300 text-sm font-medium">Platform Quests</span>
-                    <span class="text-zinc-600 text-[10px]">${completedActions}/${totalActions}</span>
+        <div>
+            <!-- Section Header + Progress -->
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-gamepad text-purple-400"></i> Platform Quests
+                </h2>
+                <span class="text-cyan-400 text-[10px] font-bold">${platformPoints.toLocaleString()} pts</span>
+            </div>
+            <div class="flex items-center gap-2 mb-3">
+                <div class="progress-bar-bg h-1.5 rounded-full flex-1">
+                    <div class="progress-bar-fill h-full rounded-full" style="width: ${progressPercent}%"></div>
                 </div>
-                <div class="flex items-center gap-3">
-                    <span class="text-cyan-400 text-[10px] font-bold">${platformPoints.toLocaleString()} pts</span>
-                    <i class="fa-solid fa-chevron-down text-zinc-500 text-xs accordion-chevron ${expanded ? 'expanded' : ''}" id="quests-chevron"></i>
-                </div>
-            </button>
+                <span class="text-amber-400 text-[10px] font-bold shrink-0">${completedActions}/${totalActions}</span>
+            </div>
 
-            <div class="accordion-body ${expanded ? 'expanded' : ''}" id="quests-body">
-                <div class="border-t border-zinc-800 px-4 pb-4 pt-3">
-                    <div class="flex items-center gap-2 mb-3">
-                        <div class="progress-bar-bg h-1.5 rounded-full flex-1">
-                            <div class="progress-bar-fill h-full rounded-full" style="width: ${progressPercent}%"></div>
-                        </div>
-                        <span class="text-amber-400 text-[10px] font-bold shrink-0">${Math.round(progressPercent)}%</span>
-                    </div>
+            <!-- Actions Grid -->
+            <div class="grid grid-cols-2 gap-2" id="platform-actions-grid">
+                ${Object.entries(config).filter(([_, action]) => action.enabled !== false).map(([key, action]) => {
+                    const userUsage = usage[key] || { count: 0, totalPoints: 0 };
+                    const isCompleted = userUsage.count >= action.maxCount;
+                    const remaining = Math.max(0, action.maxCount - userUsage.count);
+                    const progressPct = (userUsage.count / action.maxCount) * 100;
+                    const targetPage = PLATFORM_ACTION_PAGES[key] || '';
 
-                    <div class="grid grid-cols-2 gap-2" id="platform-actions-grid">
-                        ${Object.entries(config).filter(([_, action]) => action.enabled !== false).map(([key, action]) => {
-                            const userUsage = usage[key] || { count: 0, totalPoints: 0 };
-                            const isCompleted = userUsage.count >= action.maxCount;
-                            const progressPct = (userUsage.count / action.maxCount) * 100;
-                            const targetPage = PLATFORM_ACTION_PAGES[key] || '';
-
-                            return `
-                                <div class="platform-action-card bg-black/30 border border-zinc-800 rounded-xl p-2.5 ${isCompleted ? 'completed' : ''}"
-                                     data-platform-action="${key}" data-target-page="${targetPage}">
-                                    <div class="flex items-center justify-between mb-1">
-                                        <span class="text-sm">${action.icon}</span>
-                                        ${isCompleted
-                                            ? '<span class="text-green-400 text-[10px]"><i class="fa-solid fa-check-circle"></i></span>'
-                                            : `<span class="text-amber-400 text-[9px] font-bold">+${action.points}</span>`
-                                        }
-                                    </div>
-                                    <p class="text-white text-[10px] font-medium mb-1">${action.label}</p>
-                                    <div class="flex items-center gap-2">
-                                        <div class="progress-bar-bg h-1 rounded-full flex-1">
-                                            <div class="progress-bar-fill h-full rounded-full" style="width: ${progressPct}%"></div>
-                                        </div>
-                                        <span class="text-zinc-500 text-[9px]">${userUsage.count}/${action.maxCount}</span>
-                                    </div>
+                    return `
+                        <div class="platform-action-card bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 ${isCompleted ? 'completed opacity-60' : 'cursor-pointer hover:border-amber-500/50 hover:bg-zinc-800/80'} transition-all"
+                             data-platform-action="${key}"
+                             data-target-page="${targetPage}">
+                            <div class="flex items-start justify-between mb-1.5">
+                                <span class="text-lg">${action.icon}</span>
+                                ${isCompleted ?
+                                    '<span class="text-green-400 text-xs"><i class="fa-solid fa-check-circle"></i></span>' :
+                                    `<span class="text-amber-400 text-[10px] font-bold">+${action.points}</span>`
+                                }
+                            </div>
+                            <p class="text-white text-xs font-medium mb-1">${action.label}</p>
+                            <div class="flex items-center justify-between mb-1.5">
+                                <span class="text-zinc-500 text-[10px]">${userUsage.count}/${action.maxCount}</span>
+                                ${!isCompleted && remaining > 0 ?
+                                    `<span class="text-zinc-600 text-[10px]">${remaining} left</span>` : ''
+                                }
+                            </div>
+                            <div class="progress-bar-bg h-1 rounded-full">
+                                <div class="progress-bar-fill h-full rounded-full" style="width: ${progressPct}%"></div>
+                            </div>
+                            ${!isCompleted && targetPage ? `
+                                <div class="mt-2 text-center">
+                                    <span class="text-amber-400/70 text-[9px]"><i class="fa-solid fa-arrow-right mr-1"></i>Tap to go</span>
                                 </div>
-                            `;
-                        }).join('')}
-                    </div>
-                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                }).join('')}
             </div>
         </div>
     `;
@@ -909,7 +1066,13 @@ function renderTasksSection() {
     const eligibleTasks = tasks.filter(t => t.eligible);
     const completedTasks = tasks.filter(t => !t.eligible && t.timeLeftMs > 0);
 
-    if (tasks.length === 0) return '';
+    if (tasks.length === 0) {
+        return `
+            <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-3 text-center">
+                <p class="text-zinc-500 text-xs"><i class="fa-solid fa-bolt text-zinc-600 mr-1"></i>No daily bonuses available</p>
+            </div>
+        `;
+    }
 
     return `
         <div>
@@ -952,69 +1115,6 @@ function renderTasksSection() {
     `;
 }
 
-// --- LEADERBOARD (inline compact + expandable) ---
-function renderLeaderboardCompact() {
-    const postsList = airdropState.leaderboards?.top100ByPosts || [];
-    const expanded = airdropState.leaderboardExpanded;
-
-    if (postsList.length === 0) {
-        return `
-            <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 text-center">
-                <i class="fa-solid fa-trophy text-zinc-700 text-xl mb-2"></i>
-                <p class="text-zinc-500 text-xs">No leaderboard data yet — be the first!</p>
-            </div>
-        `;
-    }
-
-    const displayCount = expanded ? Math.min(postsList.length, 50) : Math.min(postsList.length, 10);
-    const displayList = postsList.slice(0, displayCount);
-
-    return `
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl overflow-hidden">
-            <div class="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
-                <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                    <i class="fa-solid fa-trophy text-yellow-500"></i> Leaderboard
-                </h2>
-                <span class="text-zinc-500 text-[10px]">${postsList.length} creators</span>
-            </div>
-
-            <!-- NFT Tiers mini -->
-            <div class="px-4 py-2 border-b border-zinc-800/50 flex items-center gap-2 overflow-x-auto">
-                ${NFT_TIERS.map(t => `
-                    <span class="shrink-0 text-[9px] ${t.text} bg-gradient-to-r ${t.gradient} border ${t.border} px-2 py-0.5 rounded-full">${t.icon} ${t.name} ${t.ranks}</span>
-                `).join('')}
-            </div>
-
-            <div class="divide-y divide-zinc-800/50 max-h-[400px] overflow-y-auto scroll-area">
-                ${displayList.map((item, i) => {
-                    const isMe = airdropState.user && item.walletAddress?.toLowerCase() === airdropState.user.walletAddress?.toLowerCase();
-                    const tierInfo = getTierInfo(i + 1);
-
-                    return `
-                        <div class="flex items-center justify-between px-4 py-2.5 ${isMe ? 'bg-amber-500/10 border-l-2 border-amber-500' : 'hover:bg-zinc-800/30'} transition-colors">
-                            <div class="flex items-center gap-3">
-                                <span class="w-7 h-7 rounded-full ${tierInfo.bg} flex items-center justify-center text-[10px] font-bold shrink-0">${tierInfo.icon || (i+1)}</span>
-                                <div>
-                                    <span class="font-mono text-xs ${isMe ? 'text-amber-400 font-bold' : 'text-zinc-400'}">${formatAddress(item.walletAddress)}${isMe ? ' (You)' : ''}</span>
-                                    ${tierInfo.tierName ? `<span class="text-[9px] ${tierInfo.tierTextColor} ml-1">${tierInfo.tierName}</span>` : ''}
-                                </div>
-                            </div>
-                            <span class="font-bold text-white text-xs">${(item.value || 0).toLocaleString()} <span class="text-zinc-500 text-[10px]">posts</span></span>
-                        </div>
-                    `;
-                }).join('')}
-            </div>
-
-            ${postsList.length > 10 ? `
-            <button id="leaderboard-toggle-btn" class="w-full py-2.5 text-center text-xs font-medium transition-colors border-t border-zinc-800 ${expanded ? 'text-zinc-500 hover:text-zinc-300' : 'text-amber-400 hover:text-amber-300'}">
-                ${expanded ? 'Show Less' : `See All ${postsList.length} Creators`}
-                <i class="fa-solid fa-chevron-${expanded ? 'up' : 'down'} ml-1 text-[10px]"></i>
-            </button>
-            ` : ''}
-        </div>
-    `;
-}
-
 // --- SUBMISSION HISTORY (collapsible accordion) ---
 function renderSubmissionHistory() {
     const { userSubmissions, user } = airdropState;
@@ -1029,6 +1129,7 @@ function renderSubmissionHistory() {
 
     return `
         <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl overflow-hidden">
+            <!-- Accordion Header -->
             <button id="history-toggle-btn" class="w-full px-4 py-3 flex items-center justify-between hover:bg-zinc-800/50 transition-colors">
                 <div class="flex items-center gap-2">
                     <i class="fa-solid fa-clock-rotate-left text-zinc-500 text-xs"></i>
@@ -1041,11 +1142,12 @@ function renderSubmissionHistory() {
                         ${pendingCount > 0 ? `<span class="text-amber-400 text-[10px]">${pendingCount} pending</span>` : ''}
                         ${rejectedCount > 0 ? `<span class="text-red-400 text-[10px]">${rejectedCount} rejected</span>` : ''}
                     </div>
-                    <i class="fa-solid fa-chevron-down text-zinc-500 text-xs accordion-chevron ${expanded ? 'expanded' : ''}" id="history-chevron"></i>
+                    <i class="fa-solid fa-chevron-down text-zinc-500 text-xs accordion-chevron ${expanded ? 'expanded' : ''}"></i>
                 </div>
             </button>
 
-            <div class="accordion-body ${expanded ? 'expanded' : ''}" id="history-body">
+            <!-- Accordion Body -->
+            <div class="accordion-body ${expanded ? 'expanded' : ''}">
                 <div class="border-t border-zinc-800">
                     ${userSubmissions.slice(0, 10).map((sub, idx) => {
                         const isLast = idx === Math.min(userSubmissions.length, 10) - 1;
@@ -1068,12 +1170,14 @@ function renderSubmissionHistory() {
                             statusText = `
                                 <div class="mt-1.5 flex items-center gap-2 text-amber-400/80">
                                     <i class="fa-solid fa-magnifying-glass text-[10px] animate-pulse"></i>
-                                    <span class="text-[10px] font-medium">${getRandomAuditMessage()}</span>
+                                    <span class="text-[10px] font-medium">Under security audit...</span>
                                 </div>
                             `;
                         }
 
                         const pts = sub.pointsAwarded ? `+${sub.pointsAwarded}` : '-';
+
+                        // Check if this submission is ready for verification
                         const now = Date.now();
                         const twoHoursMs = AUTO_APPROVE_HOURS * 60 * 60 * 1000;
                         const isReady = isPending && sub.submittedAt && (now - sub.submittedAt.getTime() >= twoHoursMs);
@@ -1105,44 +1209,198 @@ function renderSubmissionHistory() {
     `;
 }
 
-// --- MAIN CONTENT RENDER ---
-function renderMainContent() {
-    if (!airdropState.isConnected) {
+// =======================================================
+//  RANKING TAB
+// =======================================================
+
+function renderLeaderboard() {
+    const postsList = airdropState.leaderboards?.top100ByPosts || [];
+    const pointsList = airdropState.leaderboards?.top100ByPoints || [];
+    const activeRanking = airdropState.activeRanking || 'posts';
+
+    const userRank = getUserEstimatedRank(postsList);
+    const userTier = getUserTierFromRank(userRank);
+    const nextInfo = getNextTierInfo(userRank);
+    const approvedCount = airdropState.user?.approvedSubmissionsCount || 0;
+    const totalPoints = airdropState.user?.totalPoints || 0;
+
+    function renderRankingItem(item, i, type) {
+        const isMe = airdropState.user && item.walletAddress?.toLowerCase() === airdropState.user.walletAddress?.toLowerCase();
+        const tierInfo = getTierInfo(i + 1);
+        const bgClass = isMe ? (type === 'posts' ? 'bg-amber-500/10' : 'bg-green-500/10') : '';
+        const textClass = type === 'posts' ? 'text-amber-400' : 'text-green-400';
+        const valueColor = type === 'posts' ? 'text-white' : 'text-green-400';
+        const valueLabel = type === 'posts' ? 'posts' : 'pts';
+
         return `
-            <div class="text-center px-4 py-8 airdrop-fade-up">
-                <div class="w-20 h-20 mx-auto mb-5 airdrop-float-slow">
-                    <img src="./assets/airdrop.png" alt="Airdrop" class="w-full h-full object-contain opacity-60">
-                </div>
-                <h3 class="text-lg font-bold text-white mb-2">Connect Your Wallet</h3>
-                <p class="text-zinc-500 text-sm max-w-xs mx-auto mb-6">Connect to start earning points and win NFT rewards.</p>
-
-                ${renderHeroBanner()}
-
-                <div class="mt-6 bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
-                    <p class="text-zinc-500 text-[10px] uppercase tracking-wider mb-2">Win 1 of ${TOTAL_NFTS} NFT Boosters</p>
-                    <div class="flex justify-center gap-3 text-lg mb-2">
-                        ${NFT_TIERS.map(t => `<span title="${t.name}">${t.icon}</span>`).join('')}
+            <div class="flex items-center justify-between p-3 ${bgClass} ${!isMe ? 'hover:bg-zinc-800/50' : ''} transition-colors ${isMe ? 'border-l-2 border-amber-500' : ''}">
+                <div class="flex items-center gap-3">
+                    <span class="w-8 h-8 rounded-full ${tierInfo.bg} flex items-center justify-center text-xs font-bold shrink-0">${tierInfo.icon || (i+1)}</span>
+                    <div class="flex flex-col">
+                        <span class="font-mono text-xs ${isMe ? textClass + ' font-bold' : 'text-zinc-400'}">
+                            ${formatAddress(item.walletAddress)}${isMe ? ' (You)' : ''}
+                        </span>
+                        ${tierInfo.tierName ? `<span class="text-[9px] ${tierInfo.tierTextColor}">${tierInfo.tierName}</span>` : ''}
                     </div>
-                    <p class="text-zinc-600 text-[10px]">Diamond • Gold • Silver • Bronze</p>
                 </div>
+                <span class="font-bold ${valueColor} text-sm">${(item.value || 0).toLocaleString()} <span class="text-zinc-500 text-xs">${valueLabel}</span></span>
             </div>
         `;
     }
 
+    const postsTabClass = activeRanking === 'posts'
+        ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-lg shadow-amber-500/20'
+        : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700';
+    const pointsTabClass = activeRanking === 'points'
+        ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-black shadow-lg shadow-green-500/20'
+        : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700';
+
+    const postsHidden = activeRanking === 'posts' ? '' : 'hidden';
+    const pointsHidden = activeRanking === 'points' ? '' : 'hidden';
+
+    const postsContent = postsList.length === 0
+        ? '<p class="p-6 text-center text-zinc-500 text-sm">No data yet - be the first!</p>'
+        : postsList.slice(0, 50).map((item, i) => renderRankingItem(item, i, 'posts')).join('');
+
+    const pointsContent = pointsList.length === 0
+        ? '<p class="p-6 text-center text-zinc-500 text-sm">No data yet - be the first!</p>'
+        : pointsList.slice(0, 50).map((item, i) => renderRankingItem(item, i, 'points')).join('');
+
     return `
-        <div class="px-4 space-y-4 airdrop-fade-up pb-24">
-            ${renderClaimSection()}
-            ${renderActionRequiredBanner()}
-            ${renderHeroBanner()}
-            ${renderShareSection()}
-            ${renderSubmitProof()}
-            ${renderMyRank()}
-            ${renderTasksSection()}
-            ${renderPlatformSection()}
-            ${renderLeaderboardCompact()}
-            ${renderSubmissionHistory()}
+        <div class="px-4 airdrop-fade-up pb-24">
+
+            <!-- Your Position Hero Card -->
+            ${airdropState.isConnected ? `
+            <div class="bg-gradient-to-br from-zinc-900 to-zinc-900 border ${userTier ? userTier.border : 'border-zinc-800'} rounded-2xl p-5 mb-5 relative overflow-hidden">
+                ${userTier ? `<div class="absolute inset-0 bg-gradient-to-br ${userTier.gradient} opacity-20"></div>` : ''}
+
+                ${userTier ? `
+                <div class="relative z-10">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-3">
+                            <span class="text-3xl">${userTier.icon}</span>
+                            <div>
+                                <span class="${userTier.text} font-black text-2xl">#${userRank}</span>
+                                <p class="text-zinc-400 text-xs">${userTier.name} Tier</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-amber-400 font-bold text-sm">${totalPoints.toLocaleString()} pts</p>
+                            <p class="text-zinc-500 text-[10px]">${approvedCount} posts</p>
+                        </div>
+                    </div>
+                    ${nextInfo ? `
+                    <div class="bg-black/30 rounded-lg p-2.5">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-zinc-400 text-[10px]">Next: ${nextInfo.nextTier.icon} ${nextInfo.nextTier.name}</span>
+                            <span class="text-zinc-500 text-[10px]">${nextInfo.postsNeeded} positions away</span>
+                        </div>
+                        <div class="progress-bar-bg h-1.5 rounded-full">
+                            <div class="progress-bar-fill h-full rounded-full" style="width: ${Math.max(10, 100 - (nextInfo.postsNeeded * 2))}%"></div>
+                        </div>
+                    </div>
+                    ` : `
+                    <div class="bg-cyan-500/10 rounded-lg p-2.5 text-center">
+                        <span class="text-cyan-300 text-xs font-medium">You're at the top! Keep it up!</span>
+                    </div>
+                    `}
+                </div>
+                ` : `
+                <div class="text-center py-4 relative z-10">
+                    <div class="w-12 h-12 mx-auto mb-3 opacity-30">
+                        <img src="./assets/airdrop.png" alt="" class="w-full h-full object-contain">
+                    </div>
+                    <p class="text-zinc-400 text-sm font-medium">Submit your first post to join the leaderboard</p>
+                    <p class="text-zinc-600 text-xs mt-1">Top 200 earn exclusive NFT Boosters</p>
+                </div>
+                `}
+            </div>
+            ` : ''}
+
+            <!-- NFT Tier Legend -->
+            <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 mb-5">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <i class="fa-solid fa-gem text-amber-500 text-[10px]"></i> NFT Reward Tiers
+                    </h3>
+                    <span class="text-[10px] text-zinc-600">${TOTAL_NFTS} NFTs</span>
+                </div>
+                <div class="space-y-2">
+                    ${NFT_TIERS.map(tier => `
+                        <div class="tier-card flex items-center justify-between p-2.5 rounded-lg bg-gradient-to-r ${tier.gradient} border ${tier.border}">
+                            <div class="flex items-center gap-2.5">
+                                <span class="text-lg">${tier.icon}</span>
+                                <div>
+                                    <span class="${tier.text} font-bold text-xs">${tier.name}</span>
+                                    <div class="text-zinc-500 text-[10px]">${tier.count} NFTs</div>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-white font-bold text-xs">${tier.ranks}</span>
+                                <div class="flex items-center gap-1">
+                                    <span class="text-green-400/80 text-[10px]">${tier.burn} burn</span>
+                                    <span class="text-zinc-600 text-[10px]">•</span>
+                                    <span class="text-green-400 text-[10px] font-medium">${tier.receive} rewards</span>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+                <p class="text-amber-400/60 text-[10px] mt-3 flex items-center gap-1">
+                    <i class="fa-solid fa-info-circle"></i>
+                    NFT Boosters reduce token burn when claiming mining rewards
+                </p>
+            </div>
+
+            <!-- Ranking Toggle Tabs -->
+            <div class="flex gap-2 mb-4">
+                <button data-ranking="posts" class="ranking-tab-btn flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${postsTabClass}">
+                    <i class="fa-solid fa-share-nodes"></i> By Posts
+                </button>
+                <button data-ranking="points" class="ranking-tab-btn flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${pointsTabClass}">
+                    <i class="fa-solid fa-star"></i> By Points
+                </button>
+            </div>
+
+            <!-- Posts Ranking -->
+            <div id="ranking-posts" class="${postsHidden}">
+                <div class="bg-zinc-900/80 border border-zinc-800 rounded-xl overflow-hidden">
+                    <div class="p-4 border-b border-zinc-800 flex items-center justify-between">
+                        <h3 class="font-bold text-white text-sm flex items-center gap-2">
+                            <i class="fa-solid fa-crown text-yellow-500"></i> Top Content Creators
+                        </h3>
+                        <span class="text-zinc-500 text-xs">${postsList.length} creators</span>
+                    </div>
+                    <div class="divide-y divide-zinc-800/50 max-h-[400px] overflow-y-auto scroll-area">
+                        ${postsContent}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Points Ranking -->
+            <div id="ranking-points" class="${pointsHidden}">
+                <div class="bg-zinc-900/80 border border-zinc-800 rounded-xl overflow-hidden">
+                    <div class="p-4 border-b border-zinc-800 flex items-center justify-between">
+                        <h3 class="font-bold text-white text-sm flex items-center gap-2">
+                            <i class="fa-solid fa-star text-green-500"></i> Top Points Earners
+                        </h3>
+                        <span class="text-zinc-500 text-xs">${pointsList.length} earners</span>
+                    </div>
+                    <div class="divide-y divide-zinc-800/50 max-h-[400px] overflow-y-auto scroll-area">
+                        ${pointsContent}
+                    </div>
+                </div>
+            </div>
         </div>
     `;
+}
+
+function getTierInfo(rank) {
+    if (rank <= 5)   return { icon: '💎', bg: 'bg-cyan-500/20 text-cyan-300',   tierName: 'Diamond', tierTextColor: 'text-cyan-400/70' };
+    if (rank <= 25)  return { icon: '🥇', bg: 'bg-yellow-500/20 text-yellow-400', tierName: 'Gold',    tierTextColor: 'text-yellow-400/70' };
+    if (rank <= 75)  return { icon: '🥈', bg: 'bg-gray-400/20 text-gray-300',   tierName: 'Silver',  tierTextColor: 'text-gray-400/70' };
+    if (rank <= 200) return { icon: '🥉', bg: 'bg-amber-600/20 text-amber-500', tierName: 'Bronze',  tierTextColor: 'text-amber-500/70' };
+    return { icon: null, bg: 'bg-zinc-800 text-zinc-400', tierName: null, tierTextColor: '' };
 }
 
 // =======================================================
@@ -1169,28 +1427,53 @@ function updateContent() {
         return;
     }
 
-    contentEl.innerHTML = renderMainContent();
+    switch(airdropState.activeTab) {
+        case 'earn': contentEl.innerHTML = renderEarnTab(); break;
+        case 'ranking': contentEl.innerHTML = renderLeaderboard(); break;
+        default: contentEl.innerHTML = renderEarnTab();
+    }
+}
+
+function handleCopySmartLink() {
+    const refCode = airdropState.user?.referralCode || 'CODE';
+    const textToCopy = `${refCode !== 'CODE' ? `https://backcoin.org/?ref=${refCode}` : 'https://backcoin.org'} ${DEFAULT_HASHTAGS}`;
+
+    navigator.clipboard.writeText(textToCopy).then(() => {
+        showToast("Copied! Now paste it in your post.", "success");
+        const btn = document.getElementById('copy-viral-btn');
+        if (btn) {
+            const original = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> Copied!';
+            btn.classList.remove('cta-mega');
+            btn.classList.add('bg-green-600');
+            setTimeout(() => {
+                btn.innerHTML = original;
+                btn.classList.add('cta-mega');
+                btn.classList.remove('bg-green-600');
+            }, 2000);
+        }
+    }).catch(() => showToast("Failed to copy.", "error"));
+}
+
+function handleTabSwitch(e) {
+    const btn = e.target.closest('.nav-pill-btn');
+    if (btn) { airdropState.activeTab = btn.dataset.target; updateContent(); }
+}
+
+function handleRankingSwitch(e) {
+    const btn = e.target.closest('.ranking-tab-btn');
+    if (btn && btn.dataset.ranking) {
+        airdropState.activeRanking = btn.dataset.ranking;
+        updateContent();
+    }
 }
 
 function handleHistoryToggle() {
     airdropState.historyExpanded = !airdropState.historyExpanded;
-    const chevron = document.getElementById('history-chevron');
-    const body = document.getElementById('history-body');
+    const chevron = document.querySelector('.accordion-chevron');
+    const body = document.querySelector('.accordion-body');
     if (chevron) chevron.classList.toggle('expanded');
     if (body) body.classList.toggle('expanded');
-}
-
-function handleQuestsToggle() {
-    airdropState.questsExpanded = !airdropState.questsExpanded;
-    const chevron = document.getElementById('quests-chevron');
-    const body = document.getElementById('quests-body');
-    if (chevron) chevron.classList.toggle('expanded');
-    if (body) body.classList.toggle('expanded');
-}
-
-function handleLeaderboardToggle() {
-    airdropState.leaderboardExpanded = !airdropState.leaderboardExpanded;
-    updateContent();
 }
 
 function openConfirmationModal(submission) {
@@ -1336,12 +1619,16 @@ async function handleSubmitUgc(e) {
 
     try {
         await db.addSubmission(url);
+
         showToast("Submitted! Your post is now under security audit.", "info");
+
         input.value = '';
+
         await loadAirdropData();
         airdropState.historyExpanded = true;
         updateContent();
 
+        // Scroll to history section
         setTimeout(() => {
             document.getElementById('history-toggle-btn')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 300);
@@ -1385,6 +1672,7 @@ async function handleClaimAirdrop() {
             button: document.getElementById('claim-airdrop-btn'),
             onSuccess: async () => {
                 airdropState.claimLoading = false;
+                // Reload claim data to reflect claimed status
                 await loadClaimData();
                 updateContent();
             },
@@ -1402,6 +1690,7 @@ async function handleClaimAirdrop() {
 
 function checkAndShowVerificationModal() {
     const readyToVerify = getActionRequiredItems();
+
     if (readyToVerify.length > 0) {
         setTimeout(() => {
             openConfirmationModal(readyToVerify[0]);
@@ -1434,7 +1723,7 @@ export const AirdropPage = {
                         <div class="w-20 h-20 mx-auto mb-4 airdrop-float-slow">
                             <img src="./assets/airdrop.png" alt="Airdrop" class="w-full h-full object-contain drop-shadow-2xl">
                         </div>
-                        <p class="text-zinc-400 text-sm mb-4">Loading...</p>
+                        <p class="text-zinc-400 text-sm mb-4">Loading your campaign...</p>
                         <div class="flex items-center justify-center gap-2">
                             <div class="w-2 h-2 rounded-full bg-amber-500 animate-bounce" style="animation-delay: 0s;"></div>
                             <div class="w-2 h-2 rounded-full bg-amber-500 animate-bounce" style="animation-delay: 0.1s;"></div>
@@ -1454,7 +1743,7 @@ export const AirdropPage = {
         }
 
         try {
-            const minLoadingTime = new Promise(resolve => setTimeout(resolve, 1200));
+            const minLoadingTime = new Promise(resolve => setTimeout(resolve, 1500));
 
             await Promise.all([loadAirdropData(), loadAgoraData(), loadClaimData(), minLoadingTime]);
 
@@ -1485,16 +1774,19 @@ export const AirdropPage = {
 
     attachListeners() {
         const body = document.getElementById('airdrop-body');
-
+        const header = document.getElementById('airdrop-header');
+        header?.addEventListener('click', handleTabSwitch);
         body?.addEventListener('click', (e) => {
             if(e.target.closest('#submit-content-btn')) handleSubmitUgc(e);
             if(e.target.closest('.task-card')) handleTaskClick(e);
             if(e.target.closest('.action-btn')) handleSubmissionAction(e);
+            // copy-viral-btn removed — now uses per-post copy-agora-link
+            if(e.target.closest('.ranking-tab-btn')) handleRankingSwitch(e);
+            if(e.target.closest('.nav-pill-btn')) handleTabSwitch(e);
             if(e.target.closest('#history-toggle-btn')) handleHistoryToggle();
-            if(e.target.closest('#quests-toggle-btn')) handleQuestsToggle();
-            if(e.target.closest('#leaderboard-toggle-btn')) handleLeaderboardToggle();
             if(e.target.closest('#action-required-btn')) handleActionRequiredClick();
             if(e.target.closest('#claim-airdrop-btn')) handleClaimAirdrop();
+            if(e.target.closest('#rank-snippet-btn')) { airdropState.activeTab = 'ranking'; updateContent(); }
 
             // Navigate to Agora
             const agoraBtn = e.target.closest('.agora-nav-btn');
@@ -1508,7 +1800,7 @@ export const AirdropPage = {
                     navigator.clipboard.writeText(url).then(() => {
                         showToast('Link copied! Paste it on social media.', 'success');
                         const icon = copyLink.querySelector('i');
-                        if (icon) { icon.className = 'fa-solid fa-check text-green-400'; setTimeout(() => { icon.className = 'fa-solid fa-copy'; }, 2000); }
+                        if (icon) { icon.className = 'fa-solid fa-check text-green-400 text-xs'; setTimeout(() => { icon.className = 'fa-solid fa-copy text-zinc-400 text-xs'; }, 2000); }
                     }).catch(() => showToast('Failed to copy.', 'error'));
                 }
                 return;
