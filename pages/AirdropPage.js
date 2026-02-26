@@ -115,7 +115,7 @@ let airdropState = {
     agoraHasProfile: false,
     agoraUsername: null,
     agoraPosts: [],
-    sharedPostIds: new Set(), // Track posts already shared on X (persisted in localStorage)
+    sharedPlatforms: new Map(), // Map<postId, Set<'x'|'instagram'|'other'>>
     // Inline compose
     composeText: '',             // Preserve textarea across re-renders
     composeMediaFile: null,      // File object for pending image
@@ -175,7 +175,7 @@ async function handleInlineCreatePost() {
             airdropState.composeMediaFile = null;
             airdropState.composeMediaPreview = null;
             airdropState.isCreatingPost = false;
-            showToast('Post created! Now share it on X.', 'success');
+            showToast('Post created! Now share it on X, Instagram & more.', 'success');
             // Reload Agora data to get the new post
             await loadAgoraData();
             updateContent();
@@ -190,17 +190,56 @@ async function handleInlineCreatePost() {
 }
 
 // Persist shared post IDs in localStorage
-function _loadSharedPosts() {
+function _loadSharedPlatforms() {
     try {
-        const raw = localStorage.getItem('backchain_shared_posts');
-        if (raw) airdropState.sharedPostIds = new Set(JSON.parse(raw));
+        const raw = localStorage.getItem('backchain_shared_platforms');
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            const map = new Map();
+            for (const [postId, platforms] of Object.entries(parsed)) {
+                map.set(postId, new Set(platforms));
+            }
+            airdropState.sharedPlatforms = map;
+        }
+        // Migrate old format (one-time)
+        const oldRaw = localStorage.getItem('backchain_shared_posts');
+        if (oldRaw) {
+            const oldIds = JSON.parse(oldRaw);
+            for (const postId of oldIds) {
+                const key = String(postId);
+                if (!airdropState.sharedPlatforms.has(key)) {
+                    airdropState.sharedPlatforms.set(key, new Set(['x']));
+                }
+            }
+            _persistSharedPlatforms();
+            localStorage.removeItem('backchain_shared_posts');
+        }
     } catch { /* ignore */ }
 }
-function _saveSharedPost(postId) {
-    airdropState.sharedPostIds.add(String(postId));
+function _saveSharedPlatform(postId, platform) {
+    const key = String(postId);
+    if (!airdropState.sharedPlatforms.has(key)) {
+        airdropState.sharedPlatforms.set(key, new Set());
+    }
+    airdropState.sharedPlatforms.get(key).add(platform);
+    _persistSharedPlatforms();
+}
+function _persistSharedPlatforms() {
     try {
-        localStorage.setItem('backchain_shared_posts', JSON.stringify([...airdropState.sharedPostIds]));
+        const obj = {};
+        for (const [postId, platforms] of airdropState.sharedPlatforms) {
+            obj[postId] = [...platforms];
+        }
+        localStorage.setItem('backchain_shared_platforms', JSON.stringify(obj));
     } catch { /* ignore */ }
+}
+function _getShareCount(postId) {
+    const platforms = airdropState.sharedPlatforms.get(String(postId));
+    return platforms ? platforms.size : 0;
+}
+function _isSharedOn(postId, platform) {
+    const platforms = airdropState.sharedPlatforms.get(String(postId));
+    return platforms ? platforms.has(platform) : false;
 }
 
 // ==========================================================
@@ -989,6 +1028,19 @@ function _buildTweetIntent(postId) {
     return `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
 }
 
+async function _copyShareText(postId) {
+    const url = _buildAgoraShareUrl(postId);
+    const text = `I just posted on Backchain — a decentralized social network that can never be censored or shut down.\n\nRefer friends & earn BNB commissions forever.\n\n${url}\n\n#Backchain #BKC #Web3 #DeSoc #opBNB #Airdrop #BNBChain`;
+    try {
+        await navigator.clipboard.writeText(text);
+        showToast('Link & text copied! Paste it on your social network.', 'success');
+        return true;
+    } catch {
+        showToast('Failed to copy. Try again.', 'error');
+        return false;
+    }
+}
+
 function renderPostSection() {
     const { agoraHasProfile, agoraUsername, agoraPosts } = airdropState;
 
@@ -1014,7 +1066,7 @@ function renderPostSection() {
                     <div class="flex items-center justify-center gap-3 text-zinc-500 text-[10px] flex-wrap">
                         <div class="flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Post</div>
                         <div class="text-zinc-700">→</div>
-                        <div class="flex items-center gap-1"><i class="fa-brands fa-x-twitter"></i> Share on X</div>
+                        <div class="flex items-center gap-1"><i class="fa-solid fa-share-nodes"></i> Share 3x</div>
                         <div class="text-zinc-700">→</div>
                         <div class="flex items-center gap-1"><i class="fa-solid fa-users"></i> Refer friends</div>
                         <div class="text-zinc-700">→</div>
@@ -1032,9 +1084,9 @@ function renderPostSection() {
             <div class="mt-3 bg-zinc-900/80 border border-zinc-800 rounded-2xl overflow-hidden">
                 <div class="px-4 pt-4 pb-2">
                     <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                        <i class="fa-brands fa-x-twitter text-white"></i> Share to Earn
+                        <i class="fa-solid fa-share-nodes text-amber-400"></i> Share to Earn
                     </h2>
-                    <p class="text-zinc-500 text-[10px] mt-0.5">Post → Share on X → Refer friends → Earn BNB commissions</p>
+                    <p class="text-zinc-500 text-[10px] mt-0.5">Post → Share on X, Instagram & more → Earn BNB commissions</p>
                 </div>
                 <div class="px-4 pb-3 text-center">
                     <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
@@ -1047,43 +1099,75 @@ function renderPostSection() {
         `;
     }
 
-    // --- State 3: Has posts — compose + share buttons ---
+    // --- State 3: Has posts — compose + 3 share buttons per post ---
     return `
         ${renderComposeForm()}
         <div class="mt-3 bg-zinc-900/80 border border-zinc-800 rounded-2xl overflow-hidden">
             <div class="px-4 pt-4 pb-2">
                 <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                    <i class="fa-brands fa-x-twitter text-white"></i> Share to Earn
+                    <i class="fa-solid fa-share-nodes text-amber-400"></i> Share to Earn
                 </h2>
-                <p class="text-zinc-500 text-[10px] mt-0.5">Share on X, refer friends and earn BNB commissions as a tutor</p>
+                <p class="text-zinc-500 text-[10px] mt-0.5">Share on X, Instagram & more — refer friends and earn BNB commissions</p>
             </div>
 
-            <!-- Posts to Share on X -->
+            <!-- Posts with 3 share slots -->
             <div class="px-4 pb-3 space-y-2">
                 ${agoraPosts.map(post => {
                     const preview = _getPostPreview(post);
+                    const pid = String(post.postId);
                     const tweetUrl = _buildTweetIntent(post.postId);
-                    const alreadyShared = airdropState.sharedPostIds.has(String(post.postId));
+                    const sharedX = _isSharedOn(pid, 'x');
+                    const sharedIG = _isSharedOn(pid, 'instagram');
+                    const sharedOther = _isSharedOn(pid, 'other');
+                    const shareCount = _getShareCount(pid);
+                    const allShared = shareCount >= 3;
 
                     return `
-                        <div class="bg-black/40 border border-zinc-700/50 rounded-xl p-3 flex items-center gap-3">
-                            <div class="flex-1 min-w-0">
-                                <p class="text-xs ${preview.color} truncate">
-                                    <i class="fa-solid ${preview.icon} mr-1 text-[10px]"></i>${preview.text}
-                                </p>
-                                <p class="text-zinc-600 text-[9px] mt-0.5">#${post.postId}</p>
-                            </div>
-                            ${alreadyShared ? `
-                                <span class="shrink-0 flex items-center gap-1.5 text-green-400 text-[10px] font-medium bg-green-500/10 border border-green-500/20 rounded-lg px-2.5 py-1.5">
-                                    <i class="fa-solid fa-check-circle"></i> Shared
+                        <div class="bg-black/40 border ${allShared ? 'border-green-500/30' : 'border-zinc-700/50'} rounded-xl p-3">
+                            <div class="flex items-center gap-3 mb-2.5">
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-xs ${preview.color} truncate">
+                                        <i class="fa-solid ${preview.icon} mr-1 text-[10px]"></i>${preview.text}
+                                    </p>
+                                    <p class="text-zinc-600 text-[9px] mt-0.5">#${post.postId}</p>
+                                </div>
+                                <span class="shrink-0 text-[10px] font-bold ${allShared ? 'text-green-400' : 'text-zinc-500'}">
+                                    ${allShared ? '<i class="fa-solid fa-check-circle mr-1"></i>' : ''}${shareCount}/3
                                 </span>
-                            ` : `
-                                <a href="${tweetUrl}" target="_blank"
-                                   class="share-on-x-btn shrink-0 flex items-center gap-1.5 bg-black/60 hover:bg-[#1DA1F2]/15 border border-zinc-700 hover:border-[#1DA1F2]/50 rounded-lg px-3 py-1.5 text-xs text-zinc-300 hover:text-[#1DA1F2] transition-all social-btn"
-                                   data-post-id="${post.postId}" title="Share on X">
-                                    <i class="fa-brands fa-x-twitter"></i> Share on X
-                                </a>
-                            `}
+                            </div>
+                            <div class="flex items-center gap-2">
+                                ${sharedX ? `
+                                    <span class="flex-1 flex items-center justify-center gap-1.5 text-[10px] font-medium text-green-400 bg-green-500/10 border border-green-500/20 rounded-lg py-1.5 px-2">
+                                        <i class="fa-brands fa-x-twitter"></i><i class="fa-solid fa-check text-[8px]"></i>
+                                    </span>
+                                ` : `
+                                    <a href="${tweetUrl}" target="_blank"
+                                       class="share-on-x-btn flex-1 flex items-center justify-center gap-1.5 bg-black/60 hover:bg-[#1DA1F2]/15 border border-zinc-700 hover:border-[#1DA1F2]/50 rounded-lg py-1.5 px-2 text-[10px] text-zinc-300 hover:text-[#1DA1F2] transition-all social-btn"
+                                       data-post-id="${post.postId}" title="Share on X">
+                                        <i class="fa-brands fa-x-twitter"></i> X
+                                    </a>
+                                `}
+                                ${sharedIG ? `
+                                    <span class="flex-1 flex items-center justify-center gap-1.5 text-[10px] font-medium text-green-400 bg-green-500/10 border border-green-500/20 rounded-lg py-1.5 px-2">
+                                        <i class="fa-brands fa-instagram"></i><i class="fa-solid fa-check text-[8px]"></i>
+                                    </span>
+                                ` : `
+                                    <button class="share-on-ig-btn flex-1 flex items-center justify-center gap-1.5 bg-black/60 hover:bg-[#E4405F]/15 border border-zinc-700 hover:border-[#E4405F]/50 rounded-lg py-1.5 px-2 text-[10px] text-zinc-300 hover:text-[#E4405F] transition-all social-btn"
+                                            data-post-id="${post.postId}" title="Copy link for Instagram">
+                                        <i class="fa-brands fa-instagram"></i> Instagram
+                                    </button>
+                                `}
+                                ${sharedOther ? `
+                                    <span class="flex-1 flex items-center justify-center gap-1.5 text-[10px] font-medium text-green-400 bg-green-500/10 border border-green-500/20 rounded-lg py-1.5 px-2">
+                                        <i class="fa-solid fa-share-nodes"></i><i class="fa-solid fa-check text-[8px]"></i>
+                                    </span>
+                                ` : `
+                                    <button class="share-on-other-btn flex-1 flex items-center justify-center gap-1.5 bg-black/60 hover:bg-amber-500/15 border border-zinc-700 hover:border-amber-500/50 rounded-lg py-1.5 px-2 text-[10px] text-zinc-300 hover:text-amber-400 transition-all social-btn"
+                                            data-post-id="${post.postId}" title="Copy link for any platform">
+                                        <i class="fa-solid fa-share-nodes"></i> Other
+                                    </button>
+                                `}
+                            </div>
                         </div>
                     `;
                 }).join('')}
@@ -1101,11 +1185,11 @@ function _renderSubmitSection() {
     return `
         <div class="px-4 py-3">
             <p class="text-zinc-400 text-[10px] uppercase tracking-wider mb-2 flex items-center gap-1">
-                <i class="fa-brands fa-x-twitter text-[8px]"></i> Paste your tweet link
+                <i class="fa-solid fa-link text-[8px]"></i> Paste your social media link
             </p>
             <div class="relative">
                 <input type="url" id="content-url-input"
-                       placeholder="https://x.com/yourusername/status/..."
+                       placeholder="https://x.com/... or https://instagram.com/p/... or any link"
                        class="w-full bg-black/50 border border-zinc-600 rounded-xl pl-3 pr-20 py-2.5 text-white text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none transition-all placeholder:text-zinc-600">
                 <button id="submit-content-btn"
                         class="absolute right-1.5 top-1.5 bottom-1.5 bg-green-600 hover:bg-green-500 text-white font-bold px-3 rounded-lg transition-all text-sm">
@@ -1113,7 +1197,7 @@ function _renderSubmitSection() {
                 </button>
             </div>
             <p class="text-zinc-600 text-[9px] mt-1.5 flex items-center gap-1">
-                <i class="fa-solid fa-shield-halved"></i> After sharing on X, paste the tweet URL here • 2h audit • Must tag @backcoin
+                <i class="fa-solid fa-shield-halved"></i> Paste the link here (X, Instagram, TikTok, YouTube, etc.) &bull; 2h audit
             </p>
         </div>
     `;
@@ -1850,7 +1934,7 @@ export const AirdropPage = {
         if (!container) return;
 
         injectAirdropStyles();
-        _loadSharedPosts();
+        _loadSharedPlatforms();
 
         if (container.innerHTML.trim() === '' || isNewPage) {
             container.innerHTML = `
@@ -1934,16 +2018,39 @@ export const AirdropPage = {
                 return;
             }
 
-            // "Share on X" — mark post as shared when clicked
+            // "Share on X" — mark post as shared on X
             const shareXBtn = e.target.closest('.share-on-x-btn');
             if (shareXBtn) {
                 const postId = shareXBtn.dataset.postId;
                 if (postId) {
-                    _saveSharedPost(postId);
-                    // Update UI after a short delay (user goes to X tab)
+                    _saveSharedPlatform(postId, 'x');
                     setTimeout(() => updateContent(), 500);
                 }
                 // Don't prevent default — let the <a> open X intent
+            }
+
+            // "Share on Instagram" — copy to clipboard, mark as shared
+            const shareIGBtn = e.target.closest('.share-on-ig-btn');
+            if (shareIGBtn) {
+                const postId = shareIGBtn.dataset.postId;
+                if (postId) {
+                    _copyShareText(postId).then(ok => {
+                        if (ok) { _saveSharedPlatform(postId, 'instagram'); updateContent(); }
+                    });
+                }
+                return;
+            }
+
+            // "Share on Other" — copy to clipboard, mark as shared
+            const shareOtherBtn = e.target.closest('.share-on-other-btn');
+            if (shareOtherBtn) {
+                const postId = shareOtherBtn.dataset.postId;
+                if (postId) {
+                    _copyShareText(postId).then(ok => {
+                        if (ok) { _saveSharedPlatform(postId, 'other'); updateContent(); }
+                    });
+                }
+                return;
             }
 
             // Navigate to Agora
