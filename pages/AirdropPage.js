@@ -113,11 +113,26 @@ let airdropState = {
     agoraHasProfile: false,
     agoraUsername: null,
     agoraPosts: [],
+    sharedPostIds: new Set(), // Track posts already shared on X (persisted in localStorage)
     // On-chain claim
     claimInfo: null,     // { claimed, claimFee, lockDays, phase, isActive, availableBalance, ... }
     claimProof: null,    // { amount, proof } from merkle tree
     claimLoading: false
 };
+
+// Persist shared post IDs in localStorage
+function _loadSharedPosts() {
+    try {
+        const raw = localStorage.getItem('backchain_shared_posts');
+        if (raw) airdropState.sharedPostIds = new Set(JSON.parse(raw));
+    } catch { /* ignore */ }
+}
+function _saveSharedPost(postId) {
+    airdropState.sharedPostIds.add(String(postId));
+    try {
+        localStorage.setItem('backchain_shared_posts', JSON.stringify([...airdropState.sharedPostIds]));
+    } catch { /* ignore */ }
+}
 
 // ==========================================================
 //  2. STYLES INJECTION
@@ -844,9 +859,9 @@ function _buildAgoraShareUrl(postId) {
     return `${window.location.origin}/#agora?${postParam}${refParam}`;
 }
 
-function _buildTweetIntent(postId, preview) {
+function _buildTweetIntent(postId) {
     const url = _buildAgoraShareUrl(postId);
-    const text = `${preview.length > 60 ? preview.slice(0, 57) + '...' : preview}\n\n${url}\n\n${DEFAULT_HASHTAGS}`;
+    const text = `I just posted on @backcoin — the unstoppable social network on blockchain.\n\nRefer friends & earn passive income forever.\n\n${url}\n\n#Backchain #BKC #Web3 #DeSoc #opBNB #Airdrop #BNBChain`;
     return `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
 }
 
@@ -859,21 +874,21 @@ function renderPostSection() {
             <div class="bg-gradient-to-br from-indigo-900/30 to-zinc-900/80 border border-indigo-500/30 rounded-2xl overflow-hidden">
                 <div class="px-4 pt-4 pb-2">
                     <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-rocket text-indigo-400"></i> Share to Earn
+                        <i class="fa-brands fa-x-twitter text-white"></i> Share to Earn
                     </h2>
-                    <p class="text-zinc-500 text-[10px] mt-0.5">Create posts on Agora, share on social media, earn points</p>
+                    <p class="text-zinc-500 text-[10px] mt-0.5">Create posts on Agora, share on X, earn points</p>
                 </div>
                 <div class="px-4 pb-4 text-center">
                     <div class="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-5 mb-3">
                         <div class="text-3xl mb-2"><i class="fa-solid fa-user-plus text-indigo-400"></i></div>
                         <p class="text-white font-bold text-sm mb-1">Create Your Agora Profile</p>
-                        <p class="text-zinc-400 text-xs mb-3">Join the decentralized social network to start earning points by sharing your posts.</p>
+                        <p class="text-zinc-400 text-xs mb-3">Join the unstoppable social network to start earning points by sharing your posts on X.</p>
                         <button class="agora-nav-btn cta-mega text-black font-bold py-2.5 px-6 rounded-xl text-sm" data-target="agora">
                             <i class="fa-solid fa-arrow-right mr-1"></i> Go to Agora
                         </button>
                     </div>
                     <div class="flex items-center gap-3 text-zinc-500 text-[10px]">
-                        <div class="flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Create posts</div>
+                        <div class="flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Post on Agora</div>
                         <div class="text-zinc-700">→</div>
                         <div class="flex items-center gap-1"><i class="fa-brands fa-x-twitter"></i> Share on X</div>
                         <div class="text-zinc-700">→</div>
@@ -886,19 +901,18 @@ function renderPostSection() {
 
     // --- State 2: Has profile but no recent posts ---
     if (agoraPosts.length === 0) {
-        const profileLink = `${window.location.origin}/#agora?@${agoraUsername || ''}`;
         return `
             <div class="bg-zinc-900/80 border border-zinc-800 rounded-2xl overflow-hidden">
                 <div class="px-4 pt-4 pb-2">
                     <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-share-nodes text-amber-400"></i> Share to Earn
+                        <i class="fa-brands fa-x-twitter text-white"></i> Share to Earn
                     </h2>
-                    <p class="text-zinc-500 text-[10px] mt-0.5">Post on Agora → Share on social media → Submit link → Earn points</p>
+                    <p class="text-zinc-500 text-[10px] mt-0.5">Post on Agora → Share on X → Paste tweet link → Earn points</p>
                 </div>
                 <div class="px-4 pb-3 text-center">
                     <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 mb-3">
                         <p class="text-amber-400 font-bold text-sm mb-1"><i class="fa-solid fa-pen-fancy mr-1"></i> Create Your First Post</p>
-                        <p class="text-zinc-400 text-xs mb-3">Write something on Agora, then share it on social media to earn airdrop points!</p>
+                        <p class="text-zinc-400 text-xs mb-3">Write something on Agora, then share it on X to earn airdrop points!</p>
                         <button class="agora-nav-btn cta-mega text-black font-bold py-2 px-5 rounded-xl text-sm" data-target="agora">
                             <i class="fa-solid fa-plus mr-1"></i> Post on Agora
                         </button>
@@ -909,27 +923,27 @@ function renderPostSection() {
         `;
     }
 
-    // --- State 3: Has posts — show them with share buttons ---
+    // --- State 3: Has posts — show them with X share button (1 share per post) ---
     return `
         <div class="bg-zinc-900/80 border border-zinc-800 rounded-2xl overflow-hidden">
             <div class="px-4 pt-4 pb-2 flex items-center justify-between">
                 <div>
                     <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-share-nodes text-amber-400"></i> Share to Earn
+                        <i class="fa-brands fa-x-twitter text-white"></i> Share to Earn
                     </h2>
-                    <p class="text-zinc-500 text-[10px] mt-0.5">Share your Agora posts on social media to earn points</p>
+                    <p class="text-zinc-500 text-[10px] mt-0.5">Share your Agora post on X, then paste the tweet link below</p>
                 </div>
                 <button class="agora-nav-btn text-amber-400 hover:text-amber-300 text-xs font-medium transition-colors" data-target="agora">
                     <i class="fa-solid fa-plus mr-1"></i>New Post
                 </button>
             </div>
 
-            <!-- Posts to Share -->
+            <!-- Posts to Share on X -->
             <div class="px-4 pb-3 space-y-2">
                 ${agoraPosts.map(post => {
                     const preview = _getPostPreview(post);
-                    const shareUrl = _buildAgoraShareUrl(post.postId);
-                    const tweetUrl = _buildTweetIntent(post.postId, preview.text);
+                    const tweetUrl = _buildTweetIntent(post.postId);
+                    const alreadyShared = airdropState.sharedPostIds.has(String(post.postId));
 
                     return `
                         <div class="bg-black/40 border border-zinc-700/50 rounded-xl p-3 flex items-center gap-3">
@@ -939,15 +953,17 @@ function renderPostSection() {
                                 </p>
                                 <p class="text-zinc-600 text-[9px] mt-0.5">#${post.postId}</p>
                             </div>
-                            <div class="flex items-center gap-1.5 shrink-0">
+                            ${alreadyShared ? `
+                                <span class="shrink-0 flex items-center gap-1.5 text-green-400 text-[10px] font-medium bg-green-500/10 border border-green-500/20 rounded-lg px-2.5 py-1.5">
+                                    <i class="fa-solid fa-check-circle"></i> Shared
+                                </span>
+                            ` : `
                                 <a href="${tweetUrl}" target="_blank"
-                                   class="social-btn w-8 h-8 rounded-lg bg-black/60 border border-zinc-700 hover:border-blue-500/50 flex items-center justify-center" title="Share on X">
-                                    <i class="fa-brands fa-x-twitter text-white text-xs"></i>
+                                   class="share-on-x-btn shrink-0 flex items-center gap-1.5 bg-black/60 hover:bg-[#1DA1F2]/15 border border-zinc-700 hover:border-[#1DA1F2]/50 rounded-lg px-3 py-1.5 text-xs text-zinc-300 hover:text-[#1DA1F2] transition-all social-btn"
+                                   data-post-id="${post.postId}" title="Share on X">
+                                    <i class="fa-brands fa-x-twitter"></i> Share on X
                                 </a>
-                                <button class="social-btn copy-agora-link w-8 h-8 rounded-lg bg-black/60 border border-zinc-700 hover:border-amber-500/50 flex items-center justify-center" title="Copy link" data-url="${shareUrl}">
-                                    <i class="fa-solid fa-copy text-zinc-400 text-xs"></i>
-                                </button>
-                            </div>
+                            `}
                         </div>
                     `;
                 }).join('')}
@@ -965,25 +981,25 @@ function _renderSubmitSection() {
     return `
         <div class="px-4 py-3">
             <p class="text-zinc-400 text-[10px] uppercase tracking-wider mb-2 flex items-center gap-1">
-                <i class="fa-solid fa-link text-[8px]"></i> Submit your social media post link
+                <i class="fa-brands fa-x-twitter text-[8px]"></i> Paste your tweet link
             </p>
             <div class="relative">
                 <input type="url" id="content-url-input"
-                       placeholder="Paste your X / TikTok / Instagram post URL..."
+                       placeholder="https://x.com/yourusername/status/..."
                        class="w-full bg-black/50 border border-zinc-600 rounded-xl pl-3 pr-20 py-2.5 text-white text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none transition-all placeholder:text-zinc-600">
                 <button id="submit-content-btn"
                         class="absolute right-1.5 top-1.5 bottom-1.5 bg-green-600 hover:bg-green-500 text-white font-bold px-3 rounded-lg transition-all text-sm">
                     Submit
                 </button>
             </div>
-            <p class="text-amber-400/60 text-[9px] mt-1.5 flex items-center gap-1">
-                <i class="fa-solid fa-exclamation-circle"></i> Share an Agora post on social media, then paste the link here • 2h audit
+            <p class="text-zinc-600 text-[9px] mt-1.5 flex items-center gap-1">
+                <i class="fa-solid fa-shield-halved"></i> After sharing on X, paste the tweet URL here • 2h audit • Must tag @backcoin
             </p>
         </div>
     `;
 }
 
-// --- PLATFORM USAGE SECTION ---
+// --- PLATFORM USAGE SECTION (compact list) ---
 function renderPlatformSection() {
     const config = airdropState.platformUsageConfig || DEFAULT_PLATFORM_USAGE_CONFIG;
     const usage = airdropState.platformUsage || {};
@@ -1002,56 +1018,51 @@ function renderPlatformSection() {
     const platformPoints = airdropState.user?.platformUsagePoints || 0;
 
     return `
-        <div>
-            <!-- Section Header + Progress -->
-            <div class="flex items-center justify-between mb-2">
-                <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                    <i class="fa-solid fa-gamepad text-purple-400"></i> Platform Quests
-                </h2>
-                <span class="text-cyan-400 text-[10px] font-bold">${platformPoints.toLocaleString()} pts</span>
+        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl overflow-hidden">
+            <!-- Header with overall progress -->
+            <div class="px-4 py-3 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-gamepad text-purple-400 text-xs"></i>
+                    <span class="text-zinc-300 text-sm font-medium">Platform Quests</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="text-cyan-400 text-[10px] font-bold">${platformPoints.toLocaleString()} pts</span>
+                    <span class="text-zinc-600 text-[10px]">${completedActions}/${totalActions}</span>
+                </div>
             </div>
-            <div class="flex items-center gap-2 mb-3">
-                <div class="progress-bar-bg h-1.5 rounded-full flex-1">
+            <div class="px-4 pb-2">
+                <div class="progress-bar-bg h-1 rounded-full">
                     <div class="progress-bar-fill h-full rounded-full" style="width: ${progressPercent}%"></div>
                 </div>
-                <span class="text-amber-400 text-[10px] font-bold shrink-0">${completedActions}/${totalActions}</span>
             </div>
 
-            <!-- Actions Grid -->
-            <div class="grid grid-cols-2 gap-2" id="platform-actions-grid">
+            <!-- Compact action rows -->
+            <div class="divide-y divide-zinc-800/50" id="platform-actions-grid">
                 ${Object.entries(config).filter(([_, action]) => action.enabled !== false).map(([key, action]) => {
                     const userUsage = usage[key] || { count: 0, totalPoints: 0 };
                     const isCompleted = userUsage.count >= action.maxCount;
-                    const remaining = Math.max(0, action.maxCount - userUsage.count);
                     const progressPct = (userUsage.count / action.maxCount) * 100;
                     const targetPage = PLATFORM_ACTION_PAGES[key] || '';
 
                     return `
-                        <div class="platform-action-card bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 ${isCompleted ? 'completed opacity-60' : 'cursor-pointer hover:border-amber-500/50 hover:bg-zinc-800/80'} transition-all"
-                             data-platform-action="${key}"
-                             data-target-page="${targetPage}">
-                            <div class="flex items-start justify-between mb-1.5">
-                                <span class="text-lg">${action.icon}</span>
-                                ${isCompleted ?
-                                    '<span class="text-green-400 text-xs"><i class="fa-solid fa-check-circle"></i></span>' :
-                                    `<span class="text-amber-400 text-[10px] font-bold">+${action.points}</span>`
-                                }
-                            </div>
-                            <p class="text-white text-xs font-medium mb-1">${action.label}</p>
-                            <div class="flex items-center justify-between mb-1.5">
-                                <span class="text-zinc-500 text-[10px]">${userUsage.count}/${action.maxCount}</span>
-                                ${!isCompleted && remaining > 0 ?
-                                    `<span class="text-zinc-600 text-[10px]">${remaining} left</span>` : ''
-                                }
-                            </div>
-                            <div class="progress-bar-bg h-1 rounded-full">
-                                <div class="progress-bar-fill h-full rounded-full" style="width: ${progressPct}%"></div>
-                            </div>
-                            ${!isCompleted && targetPage ? `
-                                <div class="mt-2 text-center">
-                                    <span class="text-amber-400/70 text-[9px]"><i class="fa-solid fa-arrow-right mr-1"></i>Tap to go</span>
+                        <div class="platform-action-card flex items-center gap-3 px-4 py-2 ${isCompleted ? 'completed' : ''}"
+                             data-platform-action="${key}" data-target-page="${targetPage}">
+                            <span class="text-sm shrink-0">${action.icon}</span>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center justify-between mb-0.5">
+                                    <span class="text-white text-xs font-medium">${action.label}</span>
+                                    ${isCompleted
+                                        ? '<span class="text-green-400 text-[10px]"><i class="fa-solid fa-check-circle"></i></span>'
+                                        : `<span class="text-amber-400 text-[9px] font-bold">+${action.points}</span>`
+                                    }
                                 </div>
-                            ` : ''}
+                                <div class="flex items-center gap-2">
+                                    <div class="progress-bar-bg h-1 rounded-full flex-1">
+                                        <div class="progress-bar-fill h-full rounded-full" style="width: ${progressPct}%"></div>
+                                    </div>
+                                    <span class="text-zinc-500 text-[9px] shrink-0">${userUsage.count}/${action.maxCount}</span>
+                                </div>
+                            </div>
                         </div>
                     `;
                 }).join('')}
@@ -1715,6 +1726,7 @@ export const AirdropPage = {
         if (!container) return;
 
         injectAirdropStyles();
+        _loadSharedPosts();
 
         if (container.innerHTML.trim() === '' || isNewPage) {
             container.innerHTML = `
@@ -1780,7 +1792,6 @@ export const AirdropPage = {
             if(e.target.closest('#submit-content-btn')) handleSubmitUgc(e);
             if(e.target.closest('.task-card')) handleTaskClick(e);
             if(e.target.closest('.action-btn')) handleSubmissionAction(e);
-            // copy-viral-btn removed — now uses per-post copy-agora-link
             if(e.target.closest('.ranking-tab-btn')) handleRankingSwitch(e);
             if(e.target.closest('.nav-pill-btn')) handleTabSwitch(e);
             if(e.target.closest('#history-toggle-btn')) handleHistoryToggle();
@@ -1788,23 +1799,21 @@ export const AirdropPage = {
             if(e.target.closest('#claim-airdrop-btn')) handleClaimAirdrop();
             if(e.target.closest('#rank-snippet-btn')) { airdropState.activeTab = 'ranking'; updateContent(); }
 
+            // "Share on X" — mark post as shared when clicked
+            const shareXBtn = e.target.closest('.share-on-x-btn');
+            if (shareXBtn) {
+                const postId = shareXBtn.dataset.postId;
+                if (postId) {
+                    _saveSharedPost(postId);
+                    // Update UI after a short delay (user goes to X tab)
+                    setTimeout(() => updateContent(), 500);
+                }
+                // Don't prevent default — let the <a> open X intent
+            }
+
             // Navigate to Agora
             const agoraBtn = e.target.closest('.agora-nav-btn');
             if (agoraBtn) { handlePlatformCardClick(agoraBtn.dataset.target || 'agora'); return; }
-
-            // Copy Agora post share link
-            const copyLink = e.target.closest('.copy-agora-link');
-            if (copyLink) {
-                const url = copyLink.dataset.url;
-                if (url) {
-                    navigator.clipboard.writeText(url).then(() => {
-                        showToast('Link copied! Paste it on social media.', 'success');
-                        const icon = copyLink.querySelector('i');
-                        if (icon) { icon.className = 'fa-solid fa-check text-green-400 text-xs'; setTimeout(() => { icon.className = 'fa-solid fa-copy text-zinc-400 text-xs'; }, 2000); }
-                    }).catch(() => showToast('Failed to copy.', 'error'));
-                }
-                return;
-            }
 
             const platformCard = e.target.closest('.platform-action-card');
             if (platformCard && !platformCard.classList.contains('completed')) {
