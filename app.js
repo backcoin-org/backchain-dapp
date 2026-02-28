@@ -578,6 +578,9 @@ window.addEventListener('load', async () => {
     // Initialize i18n (language detection + static element translation)
     initI18n();
 
+    // Show language selection modal on first visit (before app loads)
+    await showWelcomeModal();
+
     try {
         const addressesLoaded = await loadAddresses();
         if (!addressesLoaded) throw new Error("Failed to load contract addresses");

@@ -8,7 +8,7 @@
     (function(){
         var stored=localStorage.getItem('backchain_lang');
         var nav=(navigator.language||'en').slice(0,2).toLowerCase();
-        var sup=['en','pt','es'];
+        var sup=['en','pt','es','ru','zh','ko'];
         var lang=(stored&&sup.indexOf(stored)>=0)?stored:(sup.indexOf(nav)>=0?nav:'en');
         document.documentElement.setAttribute('data-lang',lang);
         document.documentElement.lang=lang;
@@ -16,9 +16,12 @@
     </script>
     <style>
     /* i18n: show/hide language-specific spans instantly (no JS needed) */
-    [data-lang="en"] [data-lang-show="pt"], [data-lang="en"] [data-lang-show="es"],
-    [data-lang="pt"] [data-lang-show="en"], [data-lang="pt"] [data-lang-show="es"],
-    [data-lang="es"] [data-lang-show="en"], [data-lang="es"] [data-lang-show="pt"] { display: none !important; }
+    [data-lang="en"] [data-lang-show]:not([data-lang-show="en"]),
+    [data-lang="pt"] [data-lang-show]:not([data-lang-show="pt"]),
+    [data-lang="es"] [data-lang-show]:not([data-lang-show="es"]),
+    [data-lang="ru"] [data-lang-show]:not([data-lang-show="ru"]),
+    [data-lang="zh"] [data-lang-show]:not([data-lang-show="zh"]),
+    [data-lang="ko"] [data-lang-show]:not([data-lang-show="ko"]) { display: none !important; }
     </style>
 
     <title>Backcoin.org | Dashboard</title>
@@ -358,15 +361,24 @@
                 
                 <div class="flex items-center ml-auto gap-2 sm:gap-3">
                     <!-- Language Picker -->
-                    <div class="flex items-center gap-1">
-                        <button onclick="window.setLang&&window.setLang('en')" data-lang-btn="en" class="h-6 w-6 rounded-full overflow-hidden opacity-40 hover:opacity-100 transition-opacity cursor-pointer" title="English">
+                    <div class="flex items-center gap-0.5">
+                        <button onclick="window.setLang&&window.setLang('en')" data-lang-btn="en" class="h-5 w-5 rounded-full overflow-hidden opacity-40 hover:opacity-100 transition-opacity cursor-pointer" title="English">
                             <img src="./assets/en.png" class="w-full h-full object-cover" alt="EN">
                         </button>
-                        <button onclick="window.setLang&&window.setLang('pt')" data-lang-btn="pt" class="h-6 w-6 rounded-full overflow-hidden opacity-40 hover:opacity-100 transition-opacity cursor-pointer" title="Portugues">
+                        <button onclick="window.setLang&&window.setLang('pt')" data-lang-btn="pt" class="h-5 w-5 rounded-full overflow-hidden opacity-40 hover:opacity-100 transition-opacity cursor-pointer" title="Português">
                             <img src="./assets/pt.png" class="w-full h-full object-cover" alt="PT">
                         </button>
-                        <button onclick="window.setLang&&window.setLang('es')" data-lang-btn="es" class="h-6 w-6 rounded-full overflow-hidden opacity-40 hover:opacity-100 transition-opacity cursor-pointer" title="Español">
+                        <button onclick="window.setLang&&window.setLang('es')" data-lang-btn="es" class="h-5 w-5 rounded-full overflow-hidden opacity-40 hover:opacity-100 transition-opacity cursor-pointer" title="Español">
                             <img src="./assets/es.png" class="w-full h-full object-cover" alt="ES">
+                        </button>
+                        <button onclick="window.setLang&&window.setLang('ru')" data-lang-btn="ru" class="h-5 w-5 rounded-full overflow-hidden opacity-40 hover:opacity-100 transition-opacity cursor-pointer" title="Русский">
+                            <img src="./assets/ru.png" class="w-full h-full object-cover" alt="RU">
+                        </button>
+                        <button onclick="window.setLang&&window.setLang('zh')" data-lang-btn="zh" class="h-5 w-5 rounded-full overflow-hidden opacity-40 hover:opacity-100 transition-opacity cursor-pointer" title="中文">
+                            <img src="./assets/zh.png" class="w-full h-full object-cover" alt="ZH">
+                        </button>
+                        <button onclick="window.setLang&&window.setLang('ko')" data-lang-btn="ko" class="h-5 w-5 rounded-full overflow-hidden opacity-40 hover:opacity-100 transition-opacity cursor-pointer" title="한국어">
+                            <img src="./assets/ko.png" class="w-full h-full object-cover" alt="KO">
                         </button>
                     </div>
                     <div id="desktop-connection-controls" class="hidden lg:flex items-center gap-3">
@@ -553,6 +565,9 @@
                 <span data-lang-show="en">Optimized for opBNB</span>
                 <span data-lang-show="pt">Otimizado para opBNB</span>
                 <span data-lang-show="es">Optimizado para opBNB</span>
+                <span data-lang-show="ru">Оптимизировано для opBNB</span>
+                <span data-lang-show="zh">针对 opBNB 优化</span>
+                <span data-lang-show="ko">opBNB에 최적화</span>
             </p>
 
             <!-- Testnet Badge -->
@@ -569,16 +584,19 @@
                     <span data-lang-show="en">Mainnet Launch</span>
                     <span data-lang-show="pt">Mainnet em</span>
                     <span data-lang-show="es">Lanzamiento Mainnet</span>
+                    <span data-lang-show="ru">Запуск Mainnet</span>
+                    <span data-lang-show="zh">主网上线</span>
+                    <span data-lang-show="ko">메인넷 출시</span>
                 </p>
                 <div id="splash-countdown" class="flex justify-center gap-2">
                     <div class="splash-countdown-box text-center">
                         <div class="splash-countdown-num" id="splash-cd-days">--</div>
-                        <div class="splash-countdown-label"><span data-lang-show="en">days</span><span data-lang-show="pt">dias</span><span data-lang-show="es">días</span></div>
+                        <div class="splash-countdown-label"><span data-lang-show="en">days</span><span data-lang-show="pt">dias</span><span data-lang-show="es">días</span><span data-lang-show="ru">дн</span><span data-lang-show="zh">天</span><span data-lang-show="ko">일</span></div>
                     </div>
                     <div class="text-amber-500/40 font-bold self-start mt-0.5">:</div>
                     <div class="splash-countdown-box text-center">
                         <div class="splash-countdown-num" id="splash-cd-hours">--</div>
-                        <div class="splash-countdown-label"><span data-lang-show="en">hrs</span><span data-lang-show="pt">hrs</span><span data-lang-show="es">hrs</span></div>
+                        <div class="splash-countdown-label"><span data-lang-show="en">hrs</span><span data-lang-show="pt">hrs</span><span data-lang-show="es">hrs</span><span data-lang-show="ru">ч</span><span data-lang-show="zh">时</span><span data-lang-show="ko">시</span></div>
                     </div>
                     <div class="text-amber-500/40 font-bold self-start mt-0.5">:</div>
                     <div class="splash-countdown-box text-center">
@@ -605,6 +623,9 @@
                 <span data-lang-show="en">Unstoppable DeFi &bull; No Admin Keys &bull; No Blacklists</span>
                 <span data-lang-show="pt">DeFi Impar&aacute;vel &bull; Sem Chaves Admin &bull; Sem Censura</span>
                 <span data-lang-show="es">DeFi Imparable &bull; Sin Claves Admin &bull; Sin Censura</span>
+                <span data-lang-show="ru">Неостановимый DeFi &bull; Без Админ-ключей &bull; Без Чёрных списков</span>
+                <span data-lang-show="zh">不可阻挡的 DeFi &bull; 无管理员密钥 &bull; 无黑名单</span>
+                <span data-lang-show="ko">멈출 수 없는 DeFi &bull; 관리자 키 없음 &bull; 블랙리스트 없음</span>
             </p>
             <div class="mt-6 flex justify-center items-center gap-5">
                 <img src="./assets/icon_opbnb.svg" class="h-5 w-auto opacity-40 grayscale" title="opBNB">

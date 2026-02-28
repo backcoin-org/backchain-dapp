@@ -6,7 +6,7 @@
 import { DOMElements } from './dom-elements.js';
 // Se State não for usado aqui, pode remover a importação, mas mantive para compatibilidade
 import { State } from './state.js';
-import { t } from './modules/i18n/index.js';
+import { t, setLang } from './modules/i18n/index.js';
 
 // Timer Management
 let activeTimerElements = []; 
@@ -397,8 +397,68 @@ export function dismissSplash(id = 'welcome-splash') {
 }
 
 export function showWelcomeModal() {
-    // Welcome splash is now rendered as static HTML in index.html
-    // This function is kept for backward compatibility but is a no-op
-    // (splash dismiss is wired up in app.js)
-    hasShownWelcomeModal = true;
+    // Show language selection modal on first visit (no backchain_lang in localStorage)
+    // Returns a Promise that resolves when user picks a language
+    if (localStorage.getItem('backchain_lang')) {
+        hasShownWelcomeModal = true;
+        return Promise.resolve();
+    }
+
+    return new Promise(resolve => {
+        const langs = [
+            { code: 'en', flag: './assets/en.png', name: 'English', native: 'English' },
+            { code: 'pt', flag: './assets/pt.png', name: 'Portuguese', native: 'Português' },
+            { code: 'es', flag: './assets/es.png', name: 'Spanish', native: 'Español' },
+            { code: 'ru', flag: './assets/ru.png', name: 'Russian', native: 'Русский' },
+            { code: 'zh', flag: './assets/zh.png', name: 'Chinese', native: '中文' },
+            { code: 'ko', flag: './assets/ko.png', name: 'Korean', native: '한국어' },
+        ];
+
+        const overlay = document.createElement('div');
+        overlay.id = 'lang-select-modal';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:10001;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.92);backdrop-filter:blur(12px);opacity:0;transition:opacity .3s ease';
+
+        overlay.innerHTML = `
+            <div style="text-align:center;max-width:400px;padding:32px 24px;animation:fade-in-up .4s ease both">
+                <img src="./assets/bkc_logo_3d.png" alt="" style="height:56px;width:56px;margin:0 auto 20px;border-radius:50%;box-shadow:0 0 20px rgba(245,158,11,0.2)">
+                <h2 style="color:#fff;font-size:20px;font-weight:800;margin-bottom:4px;letter-spacing:.5px">Backchain</h2>
+                <p style="color:#a1a1aa;font-size:12px;margin-bottom:28px;letter-spacing:.15em;text-transform:uppercase">Select your language</p>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:8px">
+                    ${langs.map(l => `
+                        <button data-pick-lang="${l.code}" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 8px;background:rgba(39,39,42,0.6);border:1px solid rgba(63,63,70,0.5);border-radius:12px;cursor:pointer;transition:all .2s ease;outline:none" onmouseenter="this.style.borderColor='rgba(245,158,11,0.5)';this.style.background='rgba(245,158,11,0.08)'" onmouseleave="this.style.borderColor='rgba(63,63,70,0.5)';this.style.background='rgba(39,39,42,0.6)'">
+                            <img src="${l.flag}" alt="${l.code}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,0.3)">
+                            <span style="color:#fff;font-size:14px;font-weight:600">${l.native}</span>
+                            <span style="color:#71717a;font-size:10px;text-transform:uppercase;letter-spacing:.1em">${l.code.toUpperCase()}</span>
+                        </button>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+        requestAnimationFrame(() => { overlay.style.opacity = '1'; });
+
+        overlay.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-pick-lang]');
+            if (!btn) return;
+            const lang = btn.dataset.pickLang;
+
+            // Visual feedback — highlight selected
+            btn.style.borderColor = 'rgba(245,158,11,0.8)';
+            btn.style.background = 'rgba(245,158,11,0.15)';
+            btn.style.transform = 'scale(1.05)';
+
+            // Apply language
+            setLang(lang);
+            // setLang won't save if lang === current, so force save
+            localStorage.setItem('backchain_lang', lang);
+            hasShownWelcomeModal = true;
+
+            // Animate out
+            setTimeout(() => {
+                overlay.style.opacity = '0';
+                setTimeout(() => { overlay.remove(); resolve(); }, 300);
+            }, 250);
+        });
+    });
 }

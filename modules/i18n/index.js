@@ -9,10 +9,13 @@
 import enDict from './en.js';
 import ptDict from './pt.js';
 import esDict from './es.js';
+import ruDict from './ru.js';
+import zhDict from './zh.js';
+import koDict from './ko.js';
 
 const STORAGE_KEY = 'backchain_lang';
-const SUPPORTED = ['en', 'pt', 'es'];
-const DICTS = { en: enDict, pt: ptDict, es: esDict };
+const SUPPORTED = ['en', 'pt', 'es', 'ru', 'zh', 'ko'];
+const DICTS = { en: enDict, pt: ptDict, es: esDict, ru: ruDict, zh: zhDict, ko: koDict };
 
 let _lang = 'en';
 let _dict = enDict;
