@@ -78,6 +78,15 @@ export {
     OPERATOR_ZERO
 } from './operator.js';
 
+// i18n (Internationalization)
+export {
+    t,
+    getLang,
+    setLang,
+    initI18n,
+    translateStaticElements
+} from '../i18n/index.js';
+
 // Decentralized Storage (Lighthouse/Filecoin — permanent, ~$0.005/GB)
 export {
     uploadFile as irysUploadFile,

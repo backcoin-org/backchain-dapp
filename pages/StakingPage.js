@@ -30,6 +30,7 @@ import {
 } from '../modules/data.js';
 import { showToast } from '../ui-feedback.js';
 import { StakingTx, BuybackTx } from '../modules/transactions/index.js';
+import { t } from '../modules/core/index.js';
 
 // ============================================================================
 // CONSTANTS
@@ -81,7 +82,7 @@ let buybackFee = 0n;
 // HELPERS
 // ============================================================================
 function formatTimeRemaining(seconds) {
-    if (seconds <= 0) return 'Ready';
+    if (seconds <= 0) return t('common.ready');
     const days = Math.floor(seconds / 86400);
     const hours = Math.floor((seconds % 86400) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -545,8 +546,8 @@ function render() {
                 <div class="stk-header-left">
                     <div class="stk-header-icon"><i class="fa-solid fa-layer-group"></i></div>
                     <div>
-                        <div class="stk-header-title">Stake & Earn</div>
-                        <div class="stk-header-sub">Delegate BKC, earn rewards. NFT + Tutor = keep more</div>
+                        <div class="stk-header-title">${t('staking.title')}</div>
+                        <div class="stk-header-sub">${t('staking.subtitle')}</div>
                     </div>
                 </div>
                 <button id="stk-refresh-btn" class="stk-refresh-btn"><i class="fa-solid fa-rotate"></i></button>
@@ -556,38 +557,38 @@ function render() {
             <div class="stk-hero">
                 <div class="stk-hero-inner">
                     <div class="stk-hero-left">
-                        <div class="stk-hero-label">You Will Receive</div>
+                        <div class="stk-hero-label">${t('staking.youWillReceive')}</div>
                         <div id="stk-reward-value" class="stk-reward-value">-- <span class="stk-reward-suffix">BKC</span></div>
 
                         <div id="stk-breakdown" class="stk-breakdown" style="display:none">
                             <div class="stk-breakdown-row">
-                                <span class="stk-breakdown-label"><i class="fa-solid fa-layer-group" style="color:var(--stk-purple)"></i> Staking</span>
+                                <span class="stk-breakdown-label"><i class="fa-solid fa-layer-group" style="color:var(--stk-purple)"></i> ${t('staking.breakdown.staking')}</span>
                                 <span id="stk-break-staking" class="stk-breakdown-val" style="color:var(--stk-text)">0</span>
                             </div>
                             <div class="stk-breakdown-row">
-                                <span class="stk-breakdown-label"><i class="fa-solid fa-coins" style="color:var(--stk-accent)"></i> Mining</span>
+                                <span class="stk-breakdown-label"><i class="fa-solid fa-coins" style="color:var(--stk-accent)"></i> ${t('staking.breakdown.mining')}</span>
                                 <span id="stk-break-mining" class="stk-breakdown-val" style="color:var(--stk-text)">0</span>
                             </div>
                             <div class="stk-breakdown-row">
-                                <span class="stk-breakdown-label"><i class="fa-solid fa-recycle" style="color:#22d3ee"></i> Recycled</span>
+                                <span class="stk-breakdown-label"><i class="fa-solid fa-recycle" style="color:#22d3ee"></i> ${t('staking.breakdown.recycled')}</span>
                                 <span id="stk-break-recycled" class="stk-breakdown-val" style="color:#22d3ee">0</span>
                             </div>
                             <div id="stk-break-tutor-row" class="stk-breakdown-row">
-                                <span class="stk-breakdown-label"><i class="fa-solid fa-graduation-cap" style="color:var(--stk-accent)"></i> <span id="stk-break-tutor-label">Tutor</span></span>
+                                <span class="stk-breakdown-label"><i class="fa-solid fa-graduation-cap" style="color:var(--stk-accent)"></i> <span id="stk-break-tutor-label">${t('staking.breakdown.tutor')}</span></span>
                                 <span id="stk-break-tutor" class="stk-breakdown-val" style="color:var(--stk-accent)">0</span>
                             </div>
                             <div class="stk-breakdown-row">
-                                <span class="stk-breakdown-label"><i class="fa-solid fa-fire" style="color:var(--stk-red)"></i> Burned</span>
+                                <span class="stk-breakdown-label"><i class="fa-solid fa-fire" style="color:var(--stk-red)"></i> ${t('staking.breakdown.burned')}</span>
                                 <span id="stk-break-burned" class="stk-breakdown-val" style="color:var(--stk-red)">0</span>
                             </div>
                         </div>
 
                         <div style="display:flex;gap:8px;flex-wrap:wrap">
                             <button id="stk-claim-btn" class="stk-claim-btn" style="flex:1" disabled>
-                                <i class="fa-solid fa-hand-holding-dollar"></i> <span>Claim Rewards</span>
+                                <i class="fa-solid fa-hand-holding-dollar"></i> <span>${t('staking.claimRewards')}</span>
                             </button>
                             <button id="stk-compound-btn" class="stk-claim-btn" style="flex:1;background:linear-gradient(135deg,#7c3aed,#6d28d9);box-shadow:0 4px 20px rgba(124,58,237,0.3)" disabled>
-                                <i class="fa-solid fa-arrows-spin"></i> <span>Compound</span>
+                                <i class="fa-solid fa-arrows-spin"></i> <span>${t('staking.compound')}</span>
                             </button>
                         </div>
                         <div id="stk-eth-fee" class="stk-eth-fee"></div>
@@ -597,7 +598,7 @@ function render() {
                         <div id="stk-boost-panel">
                             <div style="text-align:center">
                                 <img src="./assets/bkc_logo_3d.png" style="width:32px;height:32px;opacity:0.3;animation:stk-float 2s infinite" alt="">
-                                <p style="font-size:11px;color:var(--stk-text-3);margin-top:8px">Loading boost...</p>
+                                <p style="font-size:11px;color:var(--stk-text-3);margin-top:8px">${t('staking.loadingBoost')}</p>
                             </div>
                         </div>
                     </div>
@@ -608,34 +609,34 @@ function render() {
             <div id="stk-buyback-card" class="stk-buyback" style="display:none">
                 <div class="stk-buyback-header">
                     <div class="stk-buyback-title">
-                        <i class="fa-solid fa-hammer"></i> Buyback Available
+                        <i class="fa-solid fa-hammer"></i> ${t('staking.buybackAvailable')}
                     </div>
-                    <span id="stk-buyback-badge" class="stk-buyback-badge">5% Reward</span>
+                    <span id="stk-buyback-badge" class="stk-buyback-badge">${t('staking.buybackReward')}</span>
                 </div>
                 <div class="stk-buyback-grid">
                     <div class="stk-buyback-metric">
-                        <div class="stk-buyback-metric-label">Pending BNB</div>
+                        <div class="stk-buyback-metric-label">${t('staking.pendingBnb')}</div>
                         <div id="stk-buyback-pending" class="stk-buyback-metric-value" style="color:#f97316">--</div>
                     </div>
                     <div class="stk-buyback-metric">
-                        <div class="stk-buyback-metric-label">Your Reward (5%)</div>
+                        <div class="stk-buyback-metric-label">${t('staking.yourReward')}</div>
                         <div id="stk-buyback-reward" class="stk-buyback-metric-value" style="color:var(--stk-green)">--</div>
                     </div>
                     <div class="stk-buyback-metric">
-                        <div class="stk-buyback-metric-label">BKC to Stakers</div>
+                        <div class="stk-buyback-metric-label">${t('staking.bkcToStakers')}</div>
                         <div id="stk-buyback-stakers" class="stk-buyback-metric-value" style="color:var(--stk-cyan)">--</div>
                     </div>
                     <div class="stk-buyback-metric">
-                        <div class="stk-buyback-metric-label">Mining Rate</div>
+                        <div class="stk-buyback-metric-label">${t('staking.miningRate')}</div>
                         <div id="stk-buyback-rate" class="stk-buyback-metric-value" style="color:var(--stk-purple)">--</div>
                     </div>
                 </div>
                 <div class="stk-buyback-footer">
                     <div class="stk-buyback-info" id="stk-buyback-info">
-                        Execute buyback to earn 5% of pending BNB. Remaining converts to BKC staker rewards.
+                        ${t('staking.buybackInfo')}
                     </div>
                     <button id="stk-buyback-btn" class="stk-buyback-btn" disabled>
-                        <i class="fa-solid fa-hammer"></i> Execute Buyback
+                        <i class="fa-solid fa-hammer"></i> ${t('staking.executeBuyback')}
                     </button>
                 </div>
             </div>
@@ -643,34 +644,34 @@ function render() {
             <!-- STATS ROW -->
             <div class="stk-stats">
                 <div class="stk-stat">
-                    <div class="stk-stat-label"><i class="fa-solid fa-globe" style="color:var(--stk-purple)"></i> Network pStake</div>
+                    <div class="stk-stat-label"><i class="fa-solid fa-globe" style="color:var(--stk-purple)"></i> ${t('staking.networkPStake')}</div>
                     <div id="stk-stat-network" class="stk-stat-value">--</div>
                 </div>
                 <div class="stk-stat">
-                    <div class="stk-stat-label"><i class="fa-solid fa-bolt" style="color:var(--stk-cyan)"></i> Your Power</div>
+                    <div class="stk-stat-label"><i class="fa-solid fa-bolt" style="color:var(--stk-cyan)"></i> ${t('staking.yourPower')}</div>
                     <div id="stk-stat-power" class="stk-stat-value">--</div>
                 </div>
                 <div class="stk-stat">
-                    <div class="stk-stat-label"><i class="fa-solid fa-gift" style="color:var(--stk-green)"></i> Pending</div>
+                    <div class="stk-stat-label"><i class="fa-solid fa-gift" style="color:var(--stk-green)"></i> ${t('staking.pendingRewards')}</div>
                     <div id="stk-stat-rewards" class="stk-stat-value">--</div>
                 </div>
                 <div class="stk-stat">
-                    <div class="stk-stat-label"><i class="fa-solid fa-lock" style="color:var(--stk-accent)"></i> Active Locks</div>
+                    <div class="stk-stat-label"><i class="fa-solid fa-lock" style="color:var(--stk-accent)"></i> ${t('staking.activeLocks')}</div>
                     <div id="stk-stat-locks" class="stk-stat-value">--</div>
                 </div>
             </div>
 
             <!-- STAKE FORM -->
             <div class="stk-card" style="animation-delay:0.1s">
-                <div class="stk-card-title"><i class="fa-solid fa-arrow-right-to-bracket"></i> Delegate BKC</div>
+                <div class="stk-card-title"><i class="fa-solid fa-arrow-right-to-bracket"></i> ${t('staking.delegateBkc')}</div>
 
                 <div class="stk-input-wrap">
                     <input type="number" id="stk-amount-input" class="stk-amount-input" placeholder="0.00" step="any" min="0">
-                    <button id="stk-max-btn" class="stk-max-btn">MAX</button>
+                    <button id="stk-max-btn" class="stk-max-btn">${t('common.max')}</button>
                 </div>
 
                 <div class="stk-balance-row">
-                    <span>Available</span>
+                    <span>${t('staking.available')}</span>
                     <span id="stk-balance-display">-- BKC</span>
                 </div>
 
@@ -695,48 +696,48 @@ function render() {
 
                 <div style="background:var(--stk-surface-2);border-radius:8px;padding:10px 12px;margin-bottom:4px">
                     <div class="stk-preview-row">
-                        <span class="stk-preview-label">pStake Power</span>
+                        <span class="stk-preview-label">${t('staking.pstakePower')}</span>
                         <span id="stk-preview-pstake" class="stk-preview-val" style="color:var(--stk-purple)">0</span>
                     </div>
                     <div class="stk-preview-row">
-                        <span class="stk-preview-label">Net Amount</span>
+                        <span class="stk-preview-label">${t('staking.netAmount')}</span>
                         <span id="stk-preview-net" class="stk-preview-val">0.00 BKC</span>
                     </div>
                     <div class="stk-preview-row">
-                        <span class="stk-preview-label">Fee</span>
+                        <span class="stk-preview-label">${t('staking.feePercent')}</span>
                         <span id="stk-fee-info" class="stk-preview-val" style="color:var(--stk-text-3);font-size:11px">0.5%</span>
                     </div>
                 </div>
 
                 <button id="stk-delegate-btn" class="stk-delegate-btn" disabled>
-                    <i class="fa-solid fa-lock" style="margin-right:6px"></i> Delegate BKC
+                    <i class="fa-solid fa-lock" style="margin-right:6px"></i> ${t('staking.delegateBkc')}
                 </button>
             </div>
 
             <!-- ACTIVE DELEGATIONS -->
             <div class="stk-card" style="animation-delay:0.15s">
                 <div class="stk-card-title">
-                    <i class="fa-solid fa-list-check"></i> Active Delegations
+                    <i class="fa-solid fa-list-check"></i> ${t('staking.activeDelegations')}
                     <span id="stk-deleg-count" style="font-size:10px;color:var(--stk-text-3);margin-left:auto">0</span>
                 </div>
                 <div id="stk-deleg-list" class="stk-deleg-list">
-                    <div class="stk-empty"><i class="fa-solid fa-inbox"></i><p>No active delegations</p></div>
+                    <div class="stk-empty"><i class="fa-solid fa-inbox"></i><p>${t('staking.noActiveDelegations')}</p></div>
                 </div>
             </div>
 
             <!-- HISTORY -->
             <div class="stk-card" style="animation-delay:0.2s">
-                <div class="stk-card-title"><i class="fa-solid fa-clock-rotate-left"></i> History</div>
+                <div class="stk-card-title"><i class="fa-solid fa-clock-rotate-left"></i> ${t('staking.historyTitle')}</div>
                 <div class="stk-tabs">
-                    <button class="stk-tab active" data-filter="ALL">All</button>
-                    <button class="stk-tab" data-filter="STAKE">Stakes</button>
-                    <button class="stk-tab" data-filter="UNSTAKE">Unstakes</button>
-                    <button class="stk-tab" data-filter="CLAIM">Claims</button>
+                    <button class="stk-tab active" data-filter="ALL">${t('staking.historyAll')}</button>
+                    <button class="stk-tab" data-filter="STAKE">${t('staking.historyStakes')}</button>
+                    <button class="stk-tab" data-filter="UNSTAKE">${t('staking.historyUnstakes')}</button>
+                    <button class="stk-tab" data-filter="CLAIM">${t('staking.historyClaims')}</button>
                 </div>
                 <div id="stk-history-list" class="stk-history-list">
                     <div class="stk-loading">
                         <img src="./assets/bkc_logo_3d.png" class="stk-loading-icon" alt="">
-                        <span style="font-size:11px;color:var(--stk-text-3)">Loading history...</span>
+                        <span style="font-size:11px;color:var(--stk-text-3)">${t('staking.loadingHistory')}</span>
                     </div>
                 </div>
             </div>
@@ -917,17 +918,17 @@ function updateBuybackCard() {
     // Info line with fee + last buyback
     const feeStr = buybackFee > 0n ? Number(ethers.formatEther(buybackFee)).toFixed(4) : '0';
     let infoText = buybackFee > 0n
-        ? `Fee: ${feeStr} BNB (added to buyback). Earn 5% of total.`
-        : 'Execute buyback to earn 5% of pending BNB.';
+        ? t('staking.buybackFeeInfo', { fee: feeStr })
+        : t('staking.buybackInfo');
     if (buybackLastInfo && Number(buybackLastInfo.timeSinceLast) > 0) {
         const secsAgo = Number(buybackLastInfo.timeSinceLast);
         const timeAgo = secsAgo < 3600 ? `${Math.floor(secsAgo / 60)}m ago`
             : secsAgo < 86400 ? `${Math.floor(secsAgo / 3600)}h ago`
             : `${Math.floor(secsAgo / 86400)}d ago`;
-        infoText += ` | Last: ${timeAgo}`;
+        infoText += ` | ${t('staking.buybackLast', { time: timeAgo })}`;
     }
     if (buybackStats && Number(buybackStats.totalBuybacks) > 0) {
-        infoText += ` | Total: ${Number(buybackStats.totalBuybacks)} buybacks`;
+        infoText += ` | ${t('staking.buybackTotal', { count: Number(buybackStats.totalBuybacks) })}`;
     }
     infoEl.textContent = infoText;
 }
@@ -955,13 +956,13 @@ function updateHeroRewards() {
     if (claimBtn) {
         claimBtn.disabled = !hasRewards;
         const btnSpan = claimBtn.querySelector('span');
-        if (btnSpan) btnSpan.textContent = hasRewards ? 'Claim Rewards' : 'No Rewards Yet';
+        if (btnSpan) btnSpan.textContent = hasRewards ? t('staking.claimRewards') : t('staking.noRewardsYet');
     }
     const compoundBtn = document.getElementById('stk-compound-btn');
     if (compoundBtn) {
         compoundBtn.disabled = !hasRewards;
         const cSpan = compoundBtn.querySelector('span');
-        if (cSpan) cSpan.textContent = hasRewards ? 'Compound' : 'Compound';
+        if (cSpan) cSpan.textContent = t('staking.compound');
     }
 
     if (breakdownEl && hasRewards) {
@@ -975,7 +976,7 @@ function updateHeroRewards() {
         document.getElementById('stk-break-mining').textContent = `${minNum} BKC`;
         const recycledEl = document.getElementById('stk-break-recycled');
         if (recycledEl) {
-            recycledEl.textContent = recycleAmount > 0n ? `-${recycleNum} BKC` : 'None';
+            recycledEl.textContent = recycleAmount > 0n ? `-${recycleNum} BKC` : t('staking.breakdown.none');
             recycledEl.style.color = recycleAmount > 0n ? '#22d3ee' : 'var(--stk-green)';
         }
         // Tutor cut row
@@ -986,7 +987,7 @@ function updateHeroRewards() {
             // V11: no tutor cut on staking claims, no burn
             tutorRow.style.display = 'none';
         }
-        document.getElementById('stk-break-burned').textContent = burnAmount > 0n ? `-${burnNum} BKC` : 'None';
+        document.getElementById('stk-break-burned').textContent = burnAmount > 0n ? `-${burnNum} BKC` : t('staking.breakdown.none');
         document.getElementById('stk-break-burned').style.color = burnAmount > 0n ? 'var(--stk-red)' : 'var(--stk-green)';
     } else if (breakdownEl) {
         breakdownEl.style.display = 'none';
@@ -995,7 +996,7 @@ function updateHeroRewards() {
     if (ethFeeEl) {
         if (hasRewards && claimEthFee > 0n) {
             const feeEth = parseFloat(ethers.formatEther(claimEthFee)).toFixed(6);
-            ethFeeEl.innerHTML = `<i class="fa-brands fa-ethereum" style="margin-right:3px"></i>Claim fee: ${feeEth} BNB`;
+            ethFeeEl.innerHTML = `<i class="fa-brands fa-ethereum" style="margin-right:3px"></i>${t('staking.claimFee', { fee: feeEth })}`;
         } else {
             ethFeeEl.textContent = '';
         }
@@ -1011,11 +1012,11 @@ function updateNftBoostPanel() {
 
     // Build tier comparison rows
     const tiers = [RECYCLE_TIERS.NONE, RECYCLE_TIERS.BRONZE, RECYCLE_TIERS.SILVER, RECYCLE_TIERS.GOLD, RECYCLE_TIERS.DIAMOND];
-    const tierRows = tiers.map(t => {
-        const isCurrent = t.name === tier.name;
+    const tierRows = tiers.map(tr => {
+        const isCurrent = tr.name === tier.name;
         return `<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;${isCurrent ? 'font-weight:700' : 'opacity:0.6'}">
-            <span style="font-size:10px;color:${t.color}">${t.icon} ${t.name}${isCurrent ? ' ←' : ''}</span>
-            <span style="font-size:10px;color:${t.keepRate === 100 ? 'var(--stk-green)' : 'var(--stk-text-2)'}">Keep ${t.keepRate}%</span>
+            <span style="font-size:10px;color:${tr.color}">${tr.icon} ${tr.name}${isCurrent ? ' ←' : ''}</span>
+            <span style="font-size:10px;color:${tr.keepRate === 100 ? 'var(--stk-green)' : 'var(--stk-text-2)'}">${t('staking.boost.keep', { rate: tr.keepRate })}</span>
         </div>`;
     }).join('');
 
@@ -1025,16 +1026,16 @@ function updateNftBoostPanel() {
         ? `<div style="display:flex;align-items:center;gap:6px;margin-top:10px;padding:6px 8px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);border-radius:6px">
             <i class="fa-solid fa-graduation-cap" style="color:var(--stk-accent);font-size:10px"></i>
             <span style="font-size:10px;color:var(--stk-accent);font-weight:600">Tutor: ${tutorShort}</span>
-            <span style="font-size:9px;color:var(--stk-text-3);margin-left:auto">-10% recycle</span>
+            <span style="font-size:9px;color:var(--stk-text-3);margin-left:auto">${t('staking.boost.tutorReduces')}</span>
         </div>`
         : `<div style="margin-top:10px;padding:6px 8px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.15);border-radius:6px">
             <div style="display:flex;align-items:center;gap:6px">
                 <i class="fa-solid fa-graduation-cap" style="color:var(--stk-red);font-size:10px"></i>
-                <span style="font-size:10px;color:var(--stk-red);font-weight:600">No tutor — +10% extra recycled</span>
+                <span style="font-size:10px;color:var(--stk-red);font-weight:600">${t('staking.boost.noTutorWarning')}</span>
             </div>
-            <p style="font-size:9px;color:var(--stk-text-3);margin:3px 0 0">Set a tutor to reduce recycling by 10%</p>
+            <p style="font-size:9px;color:var(--stk-text-3);margin:3px 0 0">${t('staking.boost.setTutorHint')}</p>
             <a href="#referral" class="go-to-tutor" style="display:inline-flex;align-items:center;gap:4px;margin-top:4px;font-size:10px;font-weight:700;color:var(--stk-accent);text-decoration:none;cursor:pointer">
-                <i class="fa-solid fa-arrow-right" style="font-size:8px"></i> Set a Tutor
+                <i class="fa-solid fa-arrow-right" style="font-size:8px"></i> ${t('staking.boost.setATutor')}
             </a>
         </div>`;
 
@@ -1045,7 +1046,7 @@ function updateNftBoostPanel() {
                     <span style="font-size:16px">${tier.icon}</span>
                     <span>${tier.name}</span>
                     <span style="opacity:0.5">|</span>
-                    <span>Keep ${tier.keepRate}%</span>
+                    <span>${t('staking.boost.keep', { rate: tier.keepRate })}</span>
                 </div>
                 ${hasNft ? `<span style="font-size:9px;color:var(--stk-green);font-weight:700"><i class="fa-solid fa-check" style="margin-right:3px"></i>ACTIVE</span>` : ''}
             </div>
@@ -1055,25 +1056,25 @@ function updateNftBoostPanel() {
                 <div class="stk-keep-fill" style="width:${tier.keepRate}%"></div>
             </div>
             <div style="display:flex;justify-content:space-between;font-size:10px">
-                <span style="color:rgba(6,182,212,0.7)"><i class="fa-solid fa-recycle" style="margin-right:3px"></i>Recycle ${tier.recycleRate}%</span>
-                <span style="color:rgba(74,222,128,0.7)"><i class="fa-solid fa-check" style="margin-right:3px"></i>Keep ${tier.keepRate}%</span>
+                <span style="color:rgba(6,182,212,0.7)"><i class="fa-solid fa-recycle" style="margin-right:3px"></i>${t('staking.boost.recycle', { rate: tier.recycleRate })}</span>
+                <span style="color:rgba(74,222,128,0.7)"><i class="fa-solid fa-check" style="margin-right:3px"></i>${t('staking.boost.keep', { rate: tier.keepRate })}</span>
             </div>
 
             <!-- Tier Comparison -->
             <div style="margin-top:10px;padding:8px;background:var(--stk-surface-3);border-radius:6px">
                 <div style="font-size:9px;color:var(--stk-text-3);text-transform:uppercase;letter-spacing:0.05em;font-weight:700;margin-bottom:4px">
-                    <i class="fa-solid fa-gem" style="margin-right:3px"></i>NFT Tier Benefits
+                    <i class="fa-solid fa-gem" style="margin-right:3px"></i>${t('staking.boost.nftTierBenefits')}
                 </div>
                 ${tierRows}
             </div>
 
             ${!hasNft ? `
-                <button class="stk-boost-cta go-to-store"><i class="fa-solid fa-gem" style="font-size:10px"></i> Get an NFT</button>
+                <button class="stk-boost-cta go-to-store"><i class="fa-solid fa-gem" style="font-size:10px"></i> ${t('staking.boost.getAnNft')}</button>
             ` : userNftBoost < 5000 ? `
                 <p style="font-size:10px;color:var(--stk-text-3);margin-top:8px">
                     <i class="fa-solid fa-arrow-up" style="color:var(--stk-cyan);margin-right:3px"></i>
-                    Upgrade to ${RECYCLE_TIERS.DIAMOND.icon} Diamond to keep 100%
-                    <span class="go-to-store" style="color:var(--stk-accent);cursor:pointer;margin-left:4px">Upgrade</span>
+                    ${t('staking.boost.upgradeToDiamond')}
+                    <span class="go-to-store" style="color:var(--stk-accent);cursor:pointer;margin-left:4px">${t('staking.boost.upgrade')}</span>
                 </p>
             ` : ''}
 
@@ -1128,13 +1129,13 @@ function resetUI() {
     if (breakdownEl) breakdownEl.style.display = 'none';
 
     const delegList = document.getElementById('stk-deleg-list');
-    if (delegList) delegList.innerHTML = '<div class="stk-empty"><i class="fa-solid fa-wallet"></i><p>Connect wallet to view</p></div>';
+    if (delegList) delegList.innerHTML = `<div class="stk-empty"><i class="fa-solid fa-wallet"></i><p>${t('staking.connectWalletToView')}</p></div>`;
 
     const histList = document.getElementById('stk-history-list');
-    if (histList) histList.innerHTML = '<div class="stk-empty"><i class="fa-solid fa-wallet"></i><p>Connect wallet to view</p></div>';
+    if (histList) histList.innerHTML = `<div class="stk-empty"><i class="fa-solid fa-wallet"></i><p>${t('staking.connectWalletToView')}</p></div>`;
 
     const panel = document.getElementById('stk-boost-panel');
-    if (panel) panel.innerHTML = '<div class="stk-empty"><i class="fa-solid fa-wallet"></i><p>Connect wallet</p></div>';
+    if (panel) panel.innerHTML = `<div class="stk-empty"><i class="fa-solid fa-wallet"></i><p>${t('common.connectWallet')}</p></div>`;
 }
 
 // ============================================================================
@@ -1149,7 +1150,7 @@ function renderDelegations() {
     if (countEl) countEl.textContent = delegations.length;
 
     if (delegations.length === 0) {
-        container.innerHTML = '<div class="stk-empty"><i class="fa-solid fa-inbox"></i><p>No active delegations</p></div>';
+        container.innerHTML = `<div class="stk-empty"><i class="fa-solid fa-inbox"></i><p>${t('staking.noActiveDelegations')}</p></div>`;
         return;
     }
 
@@ -1196,8 +1197,8 @@ function renderDelegationItem(d, originalIndex) {
                         <i class="fa-solid fa-bolt" style="font-size:10px"></i>
                     </button>
                 ` : `
-                    <span style="font-size:10px;color:var(--stk-green);font-weight:700"><i class="fa-solid fa-check" style="margin-right:3px"></i>Ready</span>
-                    <button class="stk-unstake-btn stk-unstake-ready" data-index="${d.index !== undefined ? d.index : originalIndex}">Unstake</button>
+                    <span style="font-size:10px;color:var(--stk-green);font-weight:700"><i class="fa-solid fa-check" style="margin-right:3px"></i>${t('common.ready')}</span>
+                    <button class="stk-unstake-btn stk-unstake-ready" data-index="${d.index !== undefined ? d.index : originalIndex}">${t('staking.unstake')}</button>
                 `}
             </div>
         </div>
@@ -1253,7 +1254,7 @@ function renderStakingHistory() {
     }
 
     if (filtered.length === 0) {
-        container.innerHTML = `<div class="stk-empty"><i class="fa-solid fa-inbox"></i><p>No ${currentHistoryFilter === 'ALL' ? '' : currentHistoryFilter.toLowerCase() + ' '}history yet</p></div>`;
+        container.innerHTML = `<div class="stk-empty"><i class="fa-solid fa-inbox"></i><p>${t('staking.noHistoryYet')}</p></div>`;
         return;
     }
 
@@ -1265,15 +1266,15 @@ function renderStakingHistory() {
         let icon, iconBg, iconColor, label, extraInfo = '';
 
         if (t.includes('FORCE')) {
-            icon = 'fa-bolt'; iconBg = 'rgba(239,68,68,0.12)'; iconColor = '#ef4444'; label = 'Force Unstaked';
+            icon = 'fa-bolt'; iconBg = 'rgba(239,68,68,0.12)'; iconColor = '#ef4444'; label = t('staking.forceUnstaked');
             if (details.feePaid && BigInt(details.feePaid) > 0n) extraInfo = `<span style="color:#ef4444">-${formatBigNumber(BigInt(details.feePaid)).toFixed(2)}</span>`;
         } else if ((t.includes('DELEGAT') || t.includes('STAKE')) && !t.includes('UNSTAKE')) {
-            icon = 'fa-lock'; iconBg = 'rgba(74,222,128,0.12)'; iconColor = '#4ade80'; label = 'Delegated';
+            icon = 'fa-lock'; iconBg = 'rgba(74,222,128,0.12)'; iconColor = '#4ade80'; label = t('staking.delegated');
             if (details.pStakeGenerated) extraInfo = `<span style="color:var(--stk-purple)">+${formatBigNumber(BigInt(details.pStakeGenerated)).toFixed(0)} pS</span>`;
         } else if (t.includes('UNSTAKE') || t.includes('UNDELEGAT')) {
-            icon = 'fa-unlock'; iconBg = 'rgba(249,115,22,0.12)'; iconColor = '#f97316'; label = 'Unstaked';
+            icon = 'fa-unlock'; iconBg = 'rgba(249,115,22,0.12)'; iconColor = '#f97316'; label = t('staking.unstaked');
         } else if (t.includes('CLAIM') || t.includes('REWARD')) {
-            icon = 'fa-coins'; iconBg = 'rgba(251,191,36,0.12)'; iconColor = '#fbbf24'; label = 'Claimed';
+            icon = 'fa-coins'; iconBg = 'rgba(251,191,36,0.12)'; iconColor = '#fbbf24'; label = t('staking.claimed');
             if (details.amountReceived && BigInt(details.amountReceived) > 0n) extraInfo = `<span style="color:var(--stk-green)">+${formatBigNumber(BigInt(details.amountReceived)).toFixed(2)}</span>`;
             if (details.recycledAmount && BigInt(details.recycledAmount) > 0n) extraInfo += ` <span style="font-size:9px;color:rgba(6,182,212,0.6)">♻-${formatBigNumber(BigInt(details.recycledAmount)).toFixed(2)}</span>`;
             else if (details.burnedAmount && BigInt(details.burnedAmount) > 0n) extraInfo += ` <span style="font-size:9px;color:rgba(239,68,68,0.6)">🔥-${formatBigNumber(BigInt(details.burnedAmount)).toFixed(2)}</span>`;
@@ -1358,18 +1359,18 @@ async function handleStake() {
     if (!amountInput || !stakeBtn) return;
 
     const val = amountInput.value;
-    if (!val || parseFloat(val) <= 0) return showToast('Enter an amount', 'warning');
+    if (!val || parseFloat(val) <= 0) return showToast(t('staking.enterAmount'), 'warning');
 
     const balance = State.currentUserBalance || 0n;
     let amountWei;
     try {
         amountWei = ethers.parseUnits(val, 18);
-        if (amountWei > balance) return showToast('Insufficient BKC balance', 'error');
-    } catch { return showToast('Invalid amount', 'error'); }
+        if (amountWei > balance) return showToast(t('staking.toast.insufficientBkc'), 'error');
+    } catch { return showToast(t('staking.toast.invalidAmount'), 'error'); }
 
     try {
         const ethBalance = await State.publicProvider.getBalance(State.userAddress);
-        if (ethBalance < ethers.parseEther("0.001")) return showToast('Insufficient BNB for gas', 'error');
+        if (ethBalance < ethers.parseEther("0.001")) return showToast(t('staking.toast.insufficientGas'), 'error');
     } catch {}
 
     isProcessing = true;
@@ -1381,14 +1382,14 @@ async function handleStake() {
             button: stakeBtn,
             onSuccess: async () => {
                 amountInput.value = '';
-                showToast('Delegation successful!', 'success');
+                showToast(t('staking.toast.delegationSuccess'), 'success');
                 isLoading = false; lastFetch = 0;
                 await loadData(true);
             },
-            onError: (error) => { if (!error.cancelled) showToast('Delegation failed: ' + (error.reason || error.message || 'Unknown error'), 'error'); }
+            onError: (error) => { if (!error.cancelled) showToast(t('staking.toast.delegationFailed', { error: error.reason || error.message || t('common.unknownError') }), 'error'); }
         });
     } catch (e) {
-        showToast('Delegation failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
+        showToast(t('staking.toast.delegationFailed', { error: e.reason || e.message || t('common.unknownError') }), 'error');
     } finally {
         isProcessing = false;
         updatePreview();
@@ -1400,7 +1401,7 @@ async function handleUnstake(index, isForce) {
 
     if (isForce) {
         // Load force unstake preview for detailed info
-        let previewMsg = `Force unstake has a penalty based on your NFT tier.\n`;
+        let previewMsg = `${t('staking.forceUnstakeWarning')}\n`;
         try {
             const stakingContract = State.stakingPoolContractPublic || State.stakingPoolContract;
             if (stakingContract && State.userAddress) {
@@ -1440,14 +1441,14 @@ async function handleUnstake(index, isForce) {
             delegationIndex: BigInt(index),
             button: btn,
             onSuccess: async () => {
-                showToast(isForce ? 'Force unstaked (penalty applied)' : 'Unstaked successfully!', isForce ? 'warning' : 'success');
+                showToast(isForce ? t('staking.toast.forceUnstakeSuccess') : t('staking.toast.unstakeSuccess'), isForce ? 'warning' : 'success');
                 isLoading = false; lastFetch = 0;
                 await loadData(true);
             },
-            onError: (error) => { if (!error.cancelled) showToast('Unstake failed: ' + (error.reason || error.message || 'Unknown error'), 'error'); }
+            onError: (error) => { if (!error.cancelled) showToast(t('staking.toast.unstakeFailed', { error: error.reason || error.message || t('common.unknownError') }), 'error'); }
         });
     } catch (e) {
-        showToast('Unstake failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
+        showToast(t('staking.toast.unstakeFailed', { error: e.reason || e.message || t('common.unknownError') }), 'error');
     } finally {
         isProcessing = false;
     }
@@ -1462,15 +1463,15 @@ async function handleClaim() {
         await StakingTx.claimRewards({
             button: btn,
             onSuccess: async () => {
-                showToast('Rewards claimed!', 'success');
+                showToast(t('staking.toast.claimSuccess'), 'success');
                 isLoading = false; lastFetch = 0;
                 stakingHistory = [];
                 await loadData(true);
             },
-            onError: (error) => { if (!error.cancelled) showToast('Claim failed: ' + (error.reason || error.message || 'Unknown error'), 'error'); }
+            onError: (error) => { if (!error.cancelled) showToast(t('staking.toast.claimFailed', { error: error.reason || error.message || t('common.unknownError') }), 'error'); }
         });
     } catch (e) {
-        showToast('Claim failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
+        showToast(t('staking.toast.claimFailed', { error: e.reason || e.message || t('common.unknownError') }), 'error');
     } finally {
         isProcessing = false;
     }
@@ -1486,15 +1487,15 @@ async function handleCompound() {
             lockDays: lockDays,
             button: btn,
             onSuccess: async () => {
-                showToast('Rewards compounded into new delegation!', 'success');
+                showToast(t('staking.toast.compoundSuccess'), 'success');
                 isLoading = false; lastFetch = 0;
                 stakingHistory = [];
                 await loadData(true);
             },
-            onError: (error) => { if (!error.cancelled) showToast('Compound failed: ' + (error.reason || error.message || 'Unknown error'), 'error'); }
+            onError: (error) => { if (!error.cancelled) showToast(t('staking.toast.compoundFailed', { error: error.reason || error.message || t('common.unknownError') }), 'error'); }
         });
     } catch (e) {
-        showToast('Compound failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
+        showToast(t('staking.toast.compoundFailed', { error: e.reason || e.message || t('common.unknownError') }), 'error');
     } finally {
         isProcessing = false;
     }
@@ -1511,14 +1512,14 @@ async function handleBuyback() {
             onSuccess: async (receipt) => {
                 const reward = buybackPreview?.estimatedCallerReward || 0n;
                 const rewardStr = Number(ethers.formatEther(reward)).toFixed(6);
-                showToast(`Buyback executed! You earned ${rewardStr} BNB`, 'success');
+                showToast(t('staking.toast.buybackSuccess'), 'success');
                 isLoading = false; lastFetch = 0;
                 await loadData(true);
             },
-            onError: (error) => { if (!error.cancelled) showToast('Buyback failed: ' + (error.reason || error.message || 'Unknown error'), 'error'); }
+            onError: (error) => { if (!error.cancelled) showToast(t('staking.toast.buybackFailed', { error: error.reason || error.message || t('common.unknownError') }), 'error'); }
         });
     } catch (e) {
-        showToast('Buyback failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
+        showToast(t('staking.toast.buybackFailed', { error: e.reason || e.message || t('common.unknownError') }), 'error');
     } finally {
         isProcessing = false;
     }

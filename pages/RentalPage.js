@@ -24,6 +24,7 @@ import { formatBigNumber } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
 import { boosterTiers, getKeepRateFromBoost } from '../config.js';
 import { RentalTx } from '../modules/transactions/index.js';
+import { t } from '../modules/core/index.js';
 
 // ============================================================================
 // CONSTANTS
@@ -83,7 +84,7 @@ function formatEthPrice(wei) {
 
 function formatTimeRemaining(endTime) {
     const remaining = endTime - Math.floor(Date.now() / 1000);
-    if (remaining <= 0) return { text: 'Expired', expired: true, seconds: 0 };
+    if (remaining <= 0) return { text: t('rental.expired'), expired: true, seconds: 0 };
     const h = Math.floor(remaining / 3600);
     const m = Math.floor((remaining % 3600) / 60);
     const s = remaining % 60;
@@ -427,20 +428,20 @@ function render() {
                         <i class="fa-solid fa-rocket text-2xl text-emerald-400"></i>
                     </div>
                     <div>
-                        <h1 class="text-2xl font-bold text-white">Boost Market</h1>
-                        <p class="text-sm text-zinc-500">Rent NFT Boosters. Keep more rewards.</p>
+                        <h1 class="text-2xl font-bold text-white">${t('rental.title')}</h1>
+                        <p class="text-sm text-zinc-500">${t('rental.subtitle')}</p>
                     </div>
                 </div>
                 <div id="bm-header-actions">
                     ${!State.isConnected ? `
                         <button onclick="window.openConnectModal && window.openConnectModal()"
                             class="bm-btn-primary px-6 py-2.5 text-sm">
-                            <i class="fa-solid fa-wallet mr-2"></i>Connect
+                            <i class="fa-solid fa-wallet mr-2"></i>${t('common.connect')}
                         </button>
                     ` : `
                         <div class="flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20">
                             <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <span class="text-emerald-400 text-sm font-medium">Connected</span>
+                            <span class="text-emerald-400 text-sm font-medium">${t('rental.connected')}</span>
                         </div>
                     `}
                 </div>
@@ -450,28 +451,28 @@ function render() {
             <div class="bm-card p-5 mb-6" style="border-color: rgba(34,197,94,0.15);">
                 <div class="flex items-center gap-2 mb-4">
                     <i class="fa-solid fa-circle-info text-emerald-400 text-sm"></i>
-                    <h3 class="text-sm font-bold text-white">How It Works</h3>
+                    <h3 class="text-sm font-bold text-white">${t('rental.howItWorks.title')}</h3>
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 bm-how-grid">
                     <div class="bm-step">
                         <div class="bm-step-num bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">1</div>
                         <div>
-                            <p class="text-sm font-bold text-white">List</p>
-                            <p class="text-xs text-zinc-500">Owners list NFTs with daily BNB price</p>
+                            <p class="text-sm font-bold text-white">${t('rental.listForRent')}</p>
+                            <p class="text-xs text-zinc-500">${t('rental.howItWorks.step1')}</p>
                         </div>
                     </div>
                     <div class="bm-step">
                         <div class="bm-step-num bg-blue-500/15 text-blue-400 border border-blue-500/25">2</div>
                         <div>
-                            <p class="text-sm font-bold text-white">Rent</p>
-                            <p class="text-xs text-zinc-500">Tenants rent to reduce burn rate on staking claims</p>
+                            <p class="text-sm font-bold text-white">${t('rental.rentNft')}</p>
+                            <p class="text-xs text-zinc-500">${t('rental.howItWorks.step2')}</p>
                         </div>
                     </div>
                     <div class="bm-step">
                         <div class="bm-step-num bg-amber-500/15 text-amber-400 border border-amber-500/25">3</div>
                         <div>
-                            <p class="text-sm font-bold text-white">Earn</p>
-                            <p class="text-xs text-zinc-500">Owners withdraw accumulated BNB earnings anytime</p>
+                            <p class="text-sm font-bold text-white">${t('rental.withdrawEarnings')}</p>
+                            <p class="text-xs text-zinc-500">${t('rental.howItWorks.step3')}</p>
                         </div>
                     </div>
                 </div>
@@ -481,33 +482,33 @@ function render() {
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6 bm-stats-grid">
                 <div class="bm-card p-4 text-center">
                     <p class="text-2xl font-bold text-emerald-400 font-mono">${listings.length}</p>
-                    <p class="text-[10px] text-zinc-500 uppercase mt-1">Listed</p>
+                    <p class="text-[10px] text-zinc-500 uppercase mt-1">${t('rental.listed')}</p>
                 </div>
                 <div class="bm-card p-4 text-center">
                     <p class="text-2xl font-bold text-blue-400 font-mono">${listings.filter(l => l.isRented || l.currentlyRented).length}</p>
-                    <p class="text-[10px] text-zinc-500 uppercase mt-1">Rented</p>
+                    <p class="text-[10px] text-zinc-500 uppercase mt-1">${t('rental.rented')}</p>
                 </div>
                 <div class="bm-card p-4 text-center">
                     <p class="text-2xl font-bold text-amber-400 font-mono">${stats ? stats.totalRentals : '—'}</p>
-                    <p class="text-[10px] text-zinc-500 uppercase mt-1">Total Rentals</p>
+                    <p class="text-[10px] text-zinc-500 uppercase mt-1">${t('nav.boostMarket')}</p>
                 </div>
                 <div class="bm-card p-4 text-center">
                     <p class="text-2xl font-bold text-purple-400 font-mono"><i class="fa-brands fa-ethereum text-lg mr-1"></i>${stats ? formatEthPrice(stats.totalVolume) : '—'}</p>
-                    <p class="text-[10px] text-zinc-500 uppercase mt-1">Volume (BNB)</p>
+                    <p class="text-[10px] text-zinc-500 uppercase mt-1">${t('trade.totalVolume')}</p>
                 </div>
             </div>
 
             <!-- Tabs -->
             <div class="flex flex-wrap items-center gap-2 mb-6 pb-4 border-b border-zinc-800/50">
                 <button class="bm-tab ${RS.activeTab === 'marketplace' ? 'active' : ''}" data-tab="marketplace">
-                    <i class="fa-solid fa-store mr-2"></i>Marketplace
+                    <i class="fa-solid fa-store mr-2"></i>${t('rental.marketplace')}
                 </button>
                 <button class="bm-tab ${RS.activeTab === 'my-listings' ? 'active' : ''}" data-tab="my-listings">
-                    <i class="fa-solid fa-tags mr-2"></i>My Listings
+                    <i class="fa-solid fa-tags mr-2"></i>${t('rental.myListings')}
                     <span class="tab-count">${myListings.length}</span>
                 </button>
                 <button class="bm-tab ${RS.activeTab === 'my-rentals' ? 'active' : ''}" data-tab="my-rentals">
-                    <i class="fa-solid fa-clock-rotate-left mr-2"></i>My Rentals
+                    <i class="fa-solid fa-clock-rotate-left mr-2"></i>${t('rental.myRentals')}
                     <span class="tab-count">${activeRentals.length}</span>
                 </button>
             </div>
@@ -575,7 +576,7 @@ function renderMarketplace() {
             <!-- Filters & Sort -->
             <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
                 <div class="flex flex-wrap gap-2">
-                    <button class="bm-filter ${RS.filterTier === 'ALL' ? 'active' : ''}" data-filter="ALL">All Tiers</button>
+                    <button class="bm-filter ${RS.filterTier === 'ALL' ? 'active' : ''}" data-filter="ALL">${t('rental.allTiers')}</button>
                     ${Object.keys(TIER_CONFIG).map(tier => `
                         <button class="bm-filter ${RS.filterTier === tier ? 'active' : ''}" data-filter="${tier}">
                             ${TIER_CONFIG[tier].emoji} ${tier}
@@ -584,21 +585,21 @@ function renderMarketplace() {
                 </div>
                 <div class="flex items-center gap-3">
                     <select id="bm-sort" class="bg-zinc-800/80 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-white outline-none cursor-pointer">
-                        <option value="boosted" ${RS.sortBy === 'boosted' ? 'selected' : ''}>Promoted First</option>
-                        <option value="boost-high" ${RS.sortBy === 'boost-high' ? 'selected' : ''}>Best Boost First</option>
-                        <option value="price-low" ${RS.sortBy === 'price-low' ? 'selected' : ''}>Price: Low to High</option>
-                        <option value="price-high" ${RS.sortBy === 'price-high' ? 'selected' : ''}>Price: High to Low</option>
+                        <option value="boosted" ${RS.sortBy === 'boosted' ? 'selected' : ''}>${t('rental.sortByBoosted')}</option>
+                        <option value="boost-high" ${RS.sortBy === 'boost-high' ? 'selected' : ''}>${t('rental.sortByExpiry')}</option>
+                        <option value="price-low" ${RS.sortBy === 'price-low' ? 'selected' : ''}>${t('rental.sortByPrice')}</option>
+                        <option value="price-high" ${RS.sortBy === 'price-high' ? 'selected' : ''}>${t('rental.sortByExpiry')}</option>
                     </select>
                     ${State.isConnected ? `
                         <button id="bm-open-list" class="bm-btn-primary px-5 py-2.5 text-sm">
-                            <i class="fa-solid fa-plus mr-2"></i>List NFT
+                            <i class="fa-solid fa-plus mr-2"></i>${t('rental.listForRent')}
                         </button>
                     ` : ''}
                 </div>
             </div>
 
             <!-- NFT Grid -->
-            ${available.length === 0 ? renderEmpty('No NFTs Available', 'Be the first to list your NFT booster!') : `
+            ${available.length === 0 ? renderEmpty(t('rental.available'), t('rental.listForRent')) : `
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 bm-nft-grid">
                     ${available.map((l, i) => renderNFTCard(l, i, false)).join('')}
                 </div>
@@ -630,7 +631,7 @@ function renderNFTCard(listing, idx, showOwnerActions = false) {
                 <div class="flex items-center gap-2">
                     ${isBoosted ? `<span class="bm-boost-badge"><i class="fa-solid fa-fire"></i> ${boostDaysLeft}d</span>` : ''}
                     <span class="text-sm font-bold font-mono" style="color:${config.color}">
-                        Keep ${keepRate}%
+                        ${t('store.keepRate').replace('{rate}', keepRate)}
                     </span>
                 </div>
             </div>
@@ -639,20 +640,20 @@ function renderNFTCard(listing, idx, showOwnerActions = false) {
             <div class="relative aspect-square flex items-center justify-center p-6">
                 <div class="absolute inset-0 rounded-2xl opacity-50"
                      style="background: radial-gradient(circle at center, ${config.color}15 0%, transparent 70%);"></div>
-                <img src="${config.image}" alt="${tier.name} Booster"
+                <img src="${config.image}" alt="${tier.name} ${t('rental.booster')}"
                      class="w-4/5 h-4/5 object-contain bm-float rounded-xl"
                      onerror="this.outerHTML='<div class=\\'text-7xl bm-float\\'>${config.emoji}</div>'">
 
                 ${isOwner ? `
                     <div class="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-bold">
-                        <i class="fa-solid fa-user mr-1"></i>YOURS
+                        <i class="fa-solid fa-user mr-1"></i>${t('rental.yours')}
                     </div>
                 ` : ''}
 
                 ${isRented && !isOwner ? `
                     <div class="bm-rented-overlay">
                         <i class="fa-solid fa-lock text-3xl text-zinc-400 mb-2"></i>
-                        <span class="text-xs text-zinc-300 font-semibold">Currently Rented</span>
+                        <span class="text-xs text-zinc-300 font-semibold">${t('rental.rented')}</span>
                     </div>
                 ` : ''}
             </div>
@@ -660,12 +661,12 @@ function renderNFTCard(listing, idx, showOwnerActions = false) {
             <!-- Info -->
             <div class="p-4 pt-0">
                 <div class="flex items-baseline justify-between mb-2">
-                    <h3 class="text-base font-bold text-white">${tier.name} Booster</h3>
+                    <h3 class="text-base font-bold text-white">${tier.name} ${t('rental.booster')}</h3>
                     <span class="text-xs font-mono" style="color:${config.color}">#${tokenId}</span>
                 </div>
 
                 <p class="text-xs ${keepRate === 100 ? 'text-emerald-400' : 'text-zinc-500'} mb-4">
-                    ${keepRate === 100 ? 'Keep 100% of your staking rewards!' : `Save ${keepRate - 50}% on claim burns`}
+                    ${keepRate === 100 ? t('rental.keepAllRewards') : t('rental.saveBurns').replace('{rate}', keepRate - 50)}
                 </p>
 
                 <div class="h-px bg-gradient-to-r from-transparent via-zinc-700 to-transparent mb-4"></div>
@@ -673,7 +674,7 @@ function renderNFTCard(listing, idx, showOwnerActions = false) {
                 <!-- Price & Actions -->
                 <div class="flex items-end justify-between">
                     <div>
-                        <span class="text-[10px] text-zinc-500 uppercase block mb-1">Price/Day</span>
+                        <span class="text-[10px] text-zinc-500 uppercase block mb-1">${t('rental.pricePerDay')}</span>
                         <div class="flex items-baseline gap-1.5">
                             <i class="fa-brands fa-ethereum text-blue-400 text-sm"></i>
                             <span class="text-xl font-bold text-white">${price}</span>
@@ -683,10 +684,10 @@ function renderNFTCard(listing, idx, showOwnerActions = false) {
 
                     <div class="flex gap-2">
                         ${isOwner ? `
-                            <button class="bm-boost-btn bm-btn-amber px-3 py-2 text-xs" data-id="${tokenId}" title="Boost listing">
-                                <i class="fa-solid fa-fire mr-1"></i>${isBoosted ? 'Extend' : 'Boost'}
+                            <button class="bm-boost-btn bm-btn-amber px-3 py-2 text-xs" data-id="${tokenId}" title="${t('rental.boostListing')}">
+                                <i class="fa-solid fa-fire mr-1"></i>${isBoosted ? t('rental.boost.extend') : t('rental.boost.boost')}
                             </button>
-                            <button class="bm-share-btn bm-btn-secondary px-3 py-2 text-xs" data-id="${tokenId}" title="Share listing">
+                            <button class="bm-share-btn bm-btn-secondary px-3 py-2 text-xs" data-id="${tokenId}" title="${t('common.share')}">
                                 <i class="fa-solid fa-share-nodes"></i>
                             </button>
                             <button class="bm-withdraw-btn bm-btn-danger px-3 py-2 text-xs" data-id="${tokenId}" ${isRented ? 'disabled' : ''}>
@@ -694,7 +695,7 @@ function renderNFTCard(listing, idx, showOwnerActions = false) {
                             </button>
                         ` : `
                             <button class="bm-rent-btn bm-btn-primary px-5 py-2.5 text-sm" data-id="${tokenId}" ${isRented ? 'disabled' : ''}>
-                                <i class="fa-solid fa-bolt mr-1"></i>Rent 1 Day
+                                <i class="fa-solid fa-bolt mr-1"></i>${t('rental.rentNow')}
                             </button>
                         `}
                     </div>
@@ -709,7 +710,7 @@ function renderNFTCard(listing, idx, showOwnerActions = false) {
 // ============================================================================
 
 function renderMyListings() {
-    if (!State.isConnected) return renderConnectPrompt('View your listings');
+    if (!State.isConnected) return renderConnectPrompt(t('rental.viewListings'));
 
     const listings = State.rentalListings || [];
     const mine = listings.filter(l => addressesMatch(l.owner, State.userAddress));
@@ -727,7 +728,7 @@ function renderMyListings() {
                             <i class="fa-solid fa-sack-dollar text-emerald-400 text-2xl"></i>
                         </div>
                         <div>
-                            <p class="text-sm text-zinc-400">Total Lifetime Earnings</p>
+                            <p class="text-sm text-zinc-400">${t('rental.totalLifetimeEarnings')}</p>
                             <p class="text-3xl font-bold text-white">
                                 <i class="fa-brands fa-ethereum text-blue-400 text-2xl mr-1"></i>${formatEthPrice(totalEarnings)} <span class="text-lg text-zinc-500">BNB</span>
                             </p>
@@ -739,29 +740,29 @@ function renderMyListings() {
                             <p class="text-xl font-bold text-amber-400 font-mono" id="bm-pending-amount">
                                 ${RS.pendingEarningsAmount > 0n ? formatEthPrice(RS.pendingEarningsAmount) : '0'}
                             </p>
-                            <p class="text-[10px] text-zinc-500 uppercase">Pending BNB</p>
+                            <p class="text-[10px] text-zinc-500 uppercase">${t('rental.pendingBnb')}</p>
                         </div>
                         <button id="bm-withdraw-earnings" class="bm-btn-amber px-5 py-3 text-sm"
                                 ${RS.pendingEarningsAmount === 0n ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ''}>
-                            <i class="fa-solid fa-coins mr-2"></i>Withdraw Earnings
+                            <i class="fa-solid fa-coins mr-2"></i>${t('rental.withdrawEarnings')}
                         </button>
                         <div class="bm-card p-4 text-center min-w-[80px]">
                             <p class="text-xl font-bold text-white">${mine.length}</p>
-                            <p class="text-[10px] text-zinc-500 uppercase">Listed</p>
+                            <p class="text-[10px] text-zinc-500 uppercase">${t('rental.listed')}</p>
                         </div>
                         <div class="bm-card p-4 text-center min-w-[80px]">
                             <p class="text-xl font-bold text-white">${canList.length}</p>
-                            <p class="text-[10px] text-zinc-500 uppercase">Available</p>
+                            <p class="text-[10px] text-zinc-500 uppercase">${t('rental.available')}</p>
                         </div>
                         <button id="bm-open-list" class="bm-btn-primary px-6 py-3" ${canList.length === 0 ? 'disabled' : ''}>
-                            <i class="fa-solid fa-plus mr-2"></i>List
+                            <i class="fa-solid fa-plus mr-2"></i>${t('rental.listBtn')}
                         </button>
                     </div>
                 </div>
             </div>
 
             <!-- My Listed NFTs -->
-            ${mine.length === 0 ? renderEmpty('No Listings Yet', 'List your first NFT to start earning BNB!') : `
+            ${mine.length === 0 ? renderEmpty(t('rental.noListingsTitle'), t('rental.noListingsMsg')) : `
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 bm-nft-grid">
                     ${mine.map((l, i) => renderNFTCard(l, i, true)).join('')}
                 </div>
@@ -775,7 +776,7 @@ function renderMyListings() {
 // ============================================================================
 
 function renderMyRentals() {
-    if (!State.isConnected) return renderConnectPrompt('View your active rentals');
+    if (!State.isConnected) return renderConnectPrompt(t('rental.viewRentals'));
 
     const now = Math.floor(Date.now() / 1000);
     const rentals = (State.myRentals || []).filter(r => addressesMatch(r.tenant, State.userAddress) && Number(r.endTime) > now);
@@ -789,16 +790,16 @@ function renderMyRentals() {
                         <i class="fa-solid fa-shield-halved text-emerald-400"></i>
                     </div>
                     <div>
-                        <h3 class="text-sm font-bold text-white mb-1">Boost Tiers</h3>
+                        <h3 class="text-sm font-bold text-white mb-1">${t('rental.boostTiers')}</h3>
                         <p class="text-xs text-zinc-400">
-                            Diamond = Keep 100% | Gold = 90% | Silver = 80% | Bronze = 70% — Without NFT: 50% recycled.
+                            ${t('rental.boostTiersDesc')}
                         </p>
                     </div>
                 </div>
             </div>
 
             <!-- Active Rentals -->
-            ${rentals.length === 0 ? renderEmpty('No Active Rentals', 'Rent an NFT booster to keep more staking rewards!') : `
+            ${rentals.length === 0 ? renderEmpty(t('rental.noRentalsTitle'), t('rental.noRentalsMsg')) : `
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                     ${rentals.map((r, i) => renderRentalCard(r, i)).join('')}
                 </div>
@@ -835,7 +836,7 @@ function renderRentalCard(rental, idx) {
                          onerror="this.outerHTML='<span class=\\'text-4xl\\'>${config.emoji}</span>'">
                 </div>
                 <div>
-                    <h3 class="text-lg font-bold text-white">${tier.name} Booster</h3>
+                    <h3 class="text-lg font-bold text-white">${tier.name} ${t('rental.booster')}</h3>
                     <p class="text-xs text-zinc-500">Token #${normalizeTokenId(rental.tokenId)}</p>
                 </div>
             </div>
@@ -843,7 +844,7 @@ function renderRentalCard(rental, idx) {
             <div class="p-3 rounded-xl ${keepRate === 100 ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-zinc-800/50'}">
                 <p class="text-sm ${keepRate === 100 ? 'text-emerald-400' : 'text-zinc-300'}">
                     <i class="fa-solid fa-shield-halved mr-2"></i>
-                    ${keepRate === 100 ? 'Keep 100% of rewards!' : `Keep ${keepRate}% of rewards on claims`}
+                    ${keepRate === 100 ? t('rental.keepRewards100') : t('rental.keepRewardsRate').replace('{rate}', keepRate)}
                 </p>
             </div>
         </div>
@@ -864,7 +865,7 @@ function renderListModal() {
             <div class="bm-modal-content">
                 <div class="flex items-center justify-between p-5 border-b border-zinc-800">
                     <h3 class="text-lg font-bold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-tag text-emerald-400"></i>List NFT for Rent
+                        <i class="fa-solid fa-tag text-emerald-400"></i>${t('rental.listNftForRent')}
                     </h3>
                     <button class="bm-close-list text-zinc-500 hover:text-white text-xl">
                         <i class="fa-solid fa-xmark"></i>
@@ -872,27 +873,27 @@ function renderListModal() {
                 </div>
                 <div class="p-5 space-y-5">
                     <div>
-                        <label class="text-xs font-bold text-zinc-400 uppercase block mb-2">Select NFT</label>
+                        <label class="text-xs font-bold text-zinc-400 uppercase block mb-2">${t('rental.selectNft')}</label>
                         <select id="bm-list-select" class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white outline-none">
-                            <option value="">-- Select an NFT --</option>
+                            <option value="">${t('rental.selectNftPlaceholder')}</option>
                             ${available.map(b => {
                                 const tier = getTierInfo(b.boostBips);
                                 const config = getTierConfig(tier.name);
-                                return `<option value="${b.tokenId}">${config.emoji} ${tier.name} Booster #${b.tokenId}</option>`;
+                                return `<option value="${b.tokenId}">${config.emoji} ${tier.name} ${t('rental.booster')} #${b.tokenId}</option>`;
                             }).join('')}
                         </select>
                     </div>
                     <div>
-                        <label class="text-xs font-bold text-zinc-400 uppercase block mb-2">Price per Day (BNB)</label>
+                        <label class="text-xs font-bold text-zinc-400 uppercase block mb-2">${t('rental.pricePerDay')}</label>
                         <input type="number" id="bm-list-price" min="0.0001" step="0.0001" placeholder="0.005"
                             class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white outline-none text-lg font-mono">
-                        <p class="text-[10px] text-zinc-600 mt-2">Fixed 1-day rental. NFT auto re-lists after each rental.</p>
+                        <p class="text-[10px] text-zinc-600 mt-2">${t('rental.fixedDayNote')}</p>
                     </div>
                 </div>
                 <div class="flex gap-3 p-5 pt-0">
-                    <button class="bm-close-list bm-btn-secondary flex-1 py-3">Cancel</button>
+                    <button class="bm-close-list bm-btn-secondary flex-1 py-3">${t('common.cancel')}</button>
                     <button id="bm-confirm-list" class="bm-btn-primary flex-1 py-3">
-                        <i class="fa-solid fa-check mr-2"></i>List NFT
+                        <i class="fa-solid fa-check mr-2"></i>${t('rental.listNft')}
                     </button>
                 </div>
             </div>
@@ -906,7 +907,7 @@ function renderRentModal() {
             <div class="bm-modal-content">
                 <div class="flex items-center justify-between p-5 border-b border-zinc-800">
                     <h3 class="text-lg font-bold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-bolt text-emerald-400"></i>Rent Booster
+                        <i class="fa-solid fa-bolt text-emerald-400"></i>${t('rental.rentBooster')}
                     </h3>
                     <button class="bm-close-rent text-zinc-500 hover:text-white text-xl">
                         <i class="fa-solid fa-xmark"></i>
@@ -926,7 +927,7 @@ function renderBoostModal() {
             <div class="bm-modal-content">
                 <div class="flex items-center justify-between p-5 border-b border-zinc-800">
                     <h3 class="text-lg font-bold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-fire text-amber-400"></i>Boost Listing
+                        <i class="fa-solid fa-fire text-amber-400"></i>${t('rental.boostListing')}
                     </h3>
                     <button class="bm-close-boost text-zinc-500 hover:text-white text-xl">
                         <i class="fa-solid fa-xmark"></i>
@@ -958,45 +959,45 @@ function openBoostModal(tokenId) {
             <img src="${config.image}" alt="${tier.name}" class="w-14 h-14 object-contain rounded-lg"
                  onerror="this.outerHTML='<div class=\\'text-4xl\\'>${config.emoji}</div>'">
             <div>
-                <h3 class="text-base font-bold text-white">${tier.name} Booster #${tokenId}</h3>
+                <h3 class="text-base font-bold text-white">${tier.name} ${t('rental.booster')} #${tokenId}</h3>
                 ${isBoosted
-                    ? `<p class="text-xs text-amber-400"><i class="fa-solid fa-fire mr-1"></i>Boosted — ${boostDaysLeft} days remaining</p>`
-                    : `<p class="text-xs text-zinc-500">Not boosted</p>`
+                    ? `<p class="text-xs text-amber-400"><i class="fa-solid fa-fire mr-1"></i>${t('rental.boostedDaysRemaining').replace('{days}', boostDaysLeft)}</p>`
+                    : `<p class="text-xs text-zinc-500">${t('rental.notBoosted')}</p>`
                 }
             </div>
         </div>
 
         <div class="mb-5">
             <p class="text-sm text-zinc-400 mb-4">
-                Boosted listings appear first in the marketplace. Choose how many days to boost.
-                ${isBoosted ? 'New days will extend from current expiry.' : ''}
+                ${t('rental.boostExplanation')}
+                ${isBoosted ? t('rental.boostExtendNote') : ''}
             </p>
-            <label class="text-xs font-bold text-zinc-400 uppercase block mb-2">Boost Duration (days)</label>
+            <label class="text-xs font-bold text-zinc-400 uppercase block mb-2">${t('rental.boostDuration')}</label>
             <input type="range" id="bm-boost-days" min="1" max="90" value="30"
                 class="w-full accent-amber-500 cursor-pointer">
             <div class="flex justify-between text-xs text-zinc-500 mt-1">
-                <span>1 day</span>
-                <span id="bm-boost-days-label" class="text-amber-400 font-bold">30 days</span>
-                <span>90 days</span>
+                <span>1 ${t('common.day')}</span>
+                <span id="bm-boost-days-label" class="text-amber-400 font-bold">30 ${t('common.days')}</span>
+                <span>90 ${t('common.days')}</span>
             </div>
         </div>
 
         <div id="bm-boost-cost" class="bm-boost-panel mb-5">
             <div class="flex justify-between text-sm mb-2">
-                <span class="text-zinc-500">Cost per day</span>
-                <span class="text-zinc-300 font-mono" id="bm-boost-cost-day">Calculating...</span>
+                <span class="text-zinc-500">${t('rental.costPerDay')}</span>
+                <span class="text-zinc-300 font-mono" id="bm-boost-cost-day">${t('rental.calculating')}</span>
             </div>
             <div class="h-px bg-amber-500/20 my-2"></div>
             <div class="flex justify-between text-sm">
-                <span class="text-amber-400 font-bold">Total Cost</span>
+                <span class="text-amber-400 font-bold">${t('rental.totalCost')}</span>
                 <span class="text-lg font-bold text-amber-400 font-mono" id="bm-boost-cost-total">—</span>
             </div>
         </div>
 
         <div class="flex gap-3">
-            <button class="bm-close-boost bm-btn-secondary flex-1 py-3">Cancel</button>
+            <button class="bm-close-boost bm-btn-secondary flex-1 py-3">${t('common.cancel')}</button>
             <button id="bm-confirm-boost" class="bm-btn-amber flex-1 py-3" data-id="${tokenId}">
-                <i class="fa-solid fa-fire mr-2"></i>${isBoosted ? 'Extend Boost' : 'Boost Now'}
+                <i class="fa-solid fa-fire mr-2"></i>${isBoosted ? t('rental.boost.extendBoost') : t('rental.boost.now')}
             </button>
         </div>
     `;
@@ -1006,15 +1007,15 @@ function openBoostModal(tokenId) {
 
     const updateBoostCost = async () => {
         const days = parseInt(slider.value) || 1;
-        daysLabel.textContent = `${days} day${days > 1 ? 's' : ''}`;
+        daysLabel.textContent = `${days} ${days > 1 ? t('common.days') : t('common.day')}`;
 
         try {
             const cost = await RentalTx.getBoostCost(days);
             document.getElementById('bm-boost-cost-day').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${cost.feePerDayFormatted} BNB`;
             document.getElementById('bm-boost-cost-total').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${cost.totalFeeFormatted} BNB`;
         } catch {
-            document.getElementById('bm-boost-cost-day').textContent = 'Error';
-            document.getElementById('bm-boost-cost-total').textContent = 'Error';
+            document.getElementById('bm-boost-cost-day').textContent = t('common.error');
+            document.getElementById('bm-boost-cost-total').textContent = t('common.error');
         }
     };
 
@@ -1047,20 +1048,20 @@ async function handleBoost() {
             onSuccess: async () => {
                 RS.isTransactionPending = false;
                 closeBoostModal();
-                showToast(`Listing boosted for ${days} days!`, 'success');
+                showToast(t('rental.toast.boostSuccess').replace('{days}', days), 'success');
                 await refreshData();
             },
             onError: (e) => {
                 RS.isTransactionPending = false;
                 if (!e.cancelled && e.type !== 'user_rejected') {
-                    showToast('Boost failed: ' + (e.message || 'Error'), 'error');
+                    showToast(t('rental.toast.boostFailed').replace('{error}', e.message || t('common.error')), 'error');
                 }
             }
         });
     } catch (err) {
         RS.isTransactionPending = false;
         if (!err.cancelled && err.type !== 'user_rejected') {
-            showToast('Boost failed: ' + (err.message || 'Error'), 'error');
+            showToast(t('rental.toast.boostFailed').replace('{error}', err.message || t('common.error')), 'error');
         }
     }
 }
@@ -1087,10 +1088,10 @@ function renderConnectPrompt(action) {
             <div class="w-20 h-20 rounded-2xl bg-zinc-800/50 flex items-center justify-center mb-4">
                 <i class="fa-solid fa-wallet text-3xl text-zinc-500"></i>
             </div>
-            <h3 class="text-lg font-bold text-white mb-2">Connect Wallet</h3>
+            <h3 class="text-lg font-bold text-white mb-2">${t('common.connectWallet')}</h3>
             <p class="text-sm text-zinc-500 mb-4">${action}</p>
             <button onclick="window.openConnectModal && window.openConnectModal()" class="bm-btn-primary px-8 py-3">
-                <i class="fa-solid fa-wallet mr-2"></i>Connect Wallet
+                <i class="fa-solid fa-wallet mr-2"></i>${t('common.connectWallet')}
             </button>
         </div>
     `;
@@ -1256,28 +1257,28 @@ function openRentModal(tokenId) {
             <img src="${config.image}" alt="${tier.name}" class="w-16 h-16 object-contain rounded-lg"
                  onerror="this.outerHTML='<div class=\\'text-5xl\\'>${config.emoji}</div>'">
             <div>
-                <h3 class="text-lg font-bold text-white">${tier.name} Booster #${tokenId}</h3>
-                <p class="text-sm" style="color:${config.color}">Keep ${keepRate}% of rewards</p>
+                <h3 class="text-lg font-bold text-white">${tier.name} ${t('rental.booster')} #${tokenId}</h3>
+                <p class="text-sm" style="color:${config.color}">${t('rental.keepRewardsOf').replace('{rate}', keepRate)}</p>
             </div>
         </div>
 
         <div class="space-y-4 mb-5">
             <div class="flex justify-between text-sm">
-                <span class="text-zinc-500">Duration</span>
-                <span class="text-white font-bold">1 Day (24 hours)</span>
+                <span class="text-zinc-500">${t('rental.duration')}</span>
+                <span class="text-white font-bold">${t('rental.oneDayDuration')}</span>
             </div>
             <div id="bm-rent-cost" class="p-4 rounded-xl bg-zinc-800/50 space-y-2">
                 <div class="flex justify-between text-sm">
-                    <span class="text-zinc-500">Rental Cost</span>
-                    <span class="text-white font-mono" id="bm-cost-rental"><i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>Calculating...</span>
+                    <span class="text-zinc-500">${t('rental.rentalCost')}</span>
+                    <span class="text-white font-mono" id="bm-cost-rental"><i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${t('rental.calculating')}</span>
                 </div>
                 <div class="flex justify-between text-sm">
-                    <span class="text-zinc-500">Ecosystem Fee (20%)</span>
+                    <span class="text-zinc-500">${t('rental.ecosystemFeePercent')}</span>
                     <span class="text-zinc-400 font-mono" id="bm-cost-fee">—</span>
                 </div>
                 <div class="h-px bg-zinc-700 my-1"></div>
                 <div class="flex justify-between text-sm">
-                    <span class="text-zinc-400 font-bold">Total</span>
+                    <span class="text-zinc-400 font-bold">${t('common.total')}</span>
                     <span class="text-xl font-bold text-emerald-400 font-mono" id="bm-cost-total">—</span>
                 </div>
             </div>
@@ -1287,9 +1288,9 @@ function openRentModal(tokenId) {
         </div>
 
         <div class="flex gap-3">
-            <button class="bm-close-rent bm-btn-secondary flex-1 py-3">Cancel</button>
+            <button class="bm-close-rent bm-btn-secondary flex-1 py-3">${t('common.cancel')}</button>
             <button id="bm-confirm-rent" class="bm-btn-primary flex-1 py-3">
-                <i class="fa-solid fa-bolt mr-2"></i>Rent 1 Day
+                <i class="fa-solid fa-bolt mr-2"></i>${t('rental.rent1Day')}
             </button>
         </div>
     `;
@@ -1312,7 +1313,7 @@ function openRentModal(tokenId) {
             const simple = BigInt(listing.pricePerDay || 0);
             totalCost = simple;
             document.getElementById('bm-cost-rental').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${formatEthPrice(simple)} BNB`;
-            document.getElementById('bm-cost-fee').textContent = '~fee';
+            document.getElementById('bm-cost-fee').textContent = '~' + t('common.fee');
             document.getElementById('bm-cost-total').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>~${formatEthPrice(simple)} BNB`;
         }
 
@@ -1326,19 +1327,19 @@ function openRentModal(tokenId) {
                     const deficit = formatEthPrice(needed - ethBalance);
                     rentBtn.disabled = true;
                     rentBtn.className = 'flex-1 py-3 rounded-xl font-bold text-sm border border-red-500/30 bg-red-500/10 text-red-400 cursor-not-allowed';
-                    rentBtn.innerHTML = `<i class="fa-brands fa-ethereum mr-1"></i>Need ${formatEthPrice(needed)} BNB`;
+                    rentBtn.innerHTML = `<i class="fa-brands fa-ethereum mr-1"></i>${t('rental.needBnb').replace('{amount}', formatEthPrice(needed))}`;
                     balanceWarn.classList.remove('hidden');
-                    balanceWarnText.textContent = `Your balance: ${formatEthPrice(ethBalance)} BNB — need ${deficit} more BNB`;
+                    balanceWarnText.textContent = t('rental.balanceWarning').replace('{balance}', formatEthPrice(ethBalance)).replace('{deficit}', deficit);
                 } else {
                     rentBtn.disabled = false;
                     rentBtn.className = 'bm-btn-primary flex-1 py-3';
-                    rentBtn.innerHTML = '<i class="fa-solid fa-bolt mr-2"></i>Rent 1 Day';
+                    rentBtn.innerHTML = '<i class="fa-solid fa-bolt mr-2"></i>' + t('rental.rent1Day');
                     balanceWarn.classList.add('hidden');
                 }
             } catch {
                 rentBtn.disabled = false;
                 rentBtn.className = 'bm-btn-primary flex-1 py-3';
-                rentBtn.innerHTML = '<i class="fa-solid fa-bolt mr-2"></i>Rent 1 Day';
+                rentBtn.innerHTML = '<i class="fa-solid fa-bolt mr-2"></i>' + t('rental.rent1Day');
                 balanceWarn.classList.add('hidden');
             }
         }
@@ -1374,20 +1375,20 @@ async function handleRent() {
             onSuccess: async () => {
                 RS.isTransactionPending = false;
                 closeRentModal();
-                showToast('NFT Rented Successfully!', 'success');
+                showToast(t('rental.toast.rentSuccess'), 'success');
                 await refreshData();
             },
             onError: (e) => {
                 RS.isTransactionPending = false;
                 if (!e.cancelled && e.type !== 'user_rejected') {
-                    showToast('Failed: ' + (e.message || 'Error'), 'error');
+                    showToast(t('rental.toast.rentFailed').replace('{error}', e.message || t('common.error')), 'error');
                 }
             }
         });
     } catch (err) {
         RS.isTransactionPending = false;
         if (!err.cancelled && err.type !== 'user_rejected') {
-            showToast('Failed: ' + (err.message || 'Error'), 'error');
+            showToast(t('rental.toast.rentFailed').replace('{error}', err.message || t('common.error')), 'error');
         }
     }
 }
@@ -1398,8 +1399,8 @@ async function handleList() {
     const tokenId = document.getElementById('bm-list-select').value;
     const price = document.getElementById('bm-list-price').value;
 
-    if (!tokenId) { showToast('Select an NFT', 'error'); return; }
-    if (!price || parseFloat(price) <= 0) { showToast('Enter valid price', 'error'); return; }
+    if (!tokenId) { showToast(t('rental.selectNft'), 'error'); return; }
+    if (!price || parseFloat(price) <= 0) { showToast(t('rental.enterPrice'), 'error'); return; }
 
     const btn = document.getElementById('bm-confirm-list');
     RS.isTransactionPending = true;
@@ -1412,20 +1413,20 @@ async function handleList() {
             onSuccess: async () => {
                 RS.isTransactionPending = false;
                 closeListModal();
-                showToast('NFT Listed Successfully!', 'success');
+                showToast(t('rental.toast.listSuccess'), 'success');
                 await refreshData();
             },
             onError: (e) => {
                 RS.isTransactionPending = false;
                 if (!e.cancelled && e.type !== 'user_rejected') {
-                    showToast('Failed: ' + (e.message || 'Error'), 'error');
+                    showToast(t('rental.toast.listFailed').replace('{error}', e.message || t('common.error')), 'error');
                 }
             }
         });
     } catch (err) {
         RS.isTransactionPending = false;
         if (!err.cancelled && err.type !== 'user_rejected') {
-            showToast('Failed: ' + (err.message || 'Error'), 'error');
+            showToast(t('rental.toast.listFailed').replace('{error}', err.message || t('common.error')), 'error');
         }
     }
 }
@@ -1434,7 +1435,7 @@ async function handleWithdrawNft(btn) {
     if (RS.isTransactionPending) return;
 
     const tokenId = btn.dataset.id;
-    if (!confirm('Withdraw this NFT from the marketplace?')) return;
+    if (!confirm(t('rental.confirmWithdrawNft'))) return;
 
     RS.isTransactionPending = true;
 
@@ -1444,20 +1445,20 @@ async function handleWithdrawNft(btn) {
             button: btn,
             onSuccess: async () => {
                 RS.isTransactionPending = false;
-                showToast('NFT Withdrawn Successfully!', 'success');
+                showToast(t('rental.toast.withdrawNftSuccess'), 'success');
                 await refreshData();
             },
             onError: (e) => {
                 RS.isTransactionPending = false;
                 if (!e.cancelled && e.type !== 'user_rejected') {
-                    showToast('Failed: ' + (e.message || 'Error'), 'error');
+                    showToast(t('rental.toast.delistFailed').replace('{error}', e.message || t('common.error')), 'error');
                 }
             }
         });
     } catch (err) {
         RS.isTransactionPending = false;
         if (!err.cancelled && err.type !== 'user_rejected') {
-            showToast('Failed: ' + (err.message || 'Error'), 'error');
+            showToast(t('rental.toast.delistFailed').replace('{error}', err.message || t('common.error')), 'error');
         }
     }
 }
@@ -1474,20 +1475,20 @@ async function handleWithdrawEarnings() {
             onSuccess: async () => {
                 RS.isTransactionPending = false;
                 RS.pendingEarningsAmount = 0n;
-                showToast('Earnings Withdrawn!', 'success');
+                showToast(t('rental.toast.withdrawSuccess'), 'success');
                 await refreshData();
             },
             onError: (e) => {
                 RS.isTransactionPending = false;
                 if (!e.cancelled && e.type !== 'user_rejected') {
-                    showToast('Failed: ' + (e.message || 'Error'), 'error');
+                    showToast(t('rental.toast.withdrawFailed').replace('{error}', e.message || t('common.error')), 'error');
                 }
             }
         });
     } catch (err) {
         RS.isTransactionPending = false;
         if (!err.cancelled && err.type !== 'user_rejected') {
-            showToast('Failed: ' + (err.message || 'Error'), 'error');
+            showToast(t('rental.toast.withdrawFailed').replace('{error}', err.message || t('common.error')), 'error');
         }
     }
 }
@@ -1498,15 +1499,15 @@ async function handleWithdrawEarnings() {
 
 function shareListing(tokenId) {
     const url = `https://backcoin.org/#rental`;
-    const text = `Rent NFT Boosters on Backchain Boost Market!\n\nKeep up to 100% of your staking rewards by renting an NFT booster.\n\n${url}\n\n#Backchain #DeFi #BNBChain #opBNB #Web3`;
+    const text = t('rental.shareText').replace('{url}', url);
 
     if (navigator.share) {
-        navigator.share({ title: 'Backchain Boost Market', text, url }).catch(() => {});
+        navigator.share({ title: t('rental.title'), text, url }).catch(() => {});
     } else {
         navigator.clipboard.writeText(text).then(() => {
-            showToast('Link copied to clipboard!', 'success');
+            showToast(t('rental.toast.linkCopied'), 'success');
         }).catch(() => {
-            showToast('Could not copy link', 'error');
+            showToast(t('rental.toast.copyFailed'), 'error');
         });
     }
 }

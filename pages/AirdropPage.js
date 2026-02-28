@@ -5,7 +5,7 @@ import { State } from '../state.js';
 import * as db from '../modules/firebase-auth-service.js';
 import { showToast, closeModal, openModal } from '../ui-feedback.js';
 import { formatAddress, renderNoData, formatBigNumber, renderLoading, renderError } from '../utils.js';
-import { NetworkManager, irysUploadFile } from '../modules/core/index.js';
+import { NetworkManager, irysUploadFile, t } from '../modules/core/index.js';
 import { addresses, contractAddresses, agoraABI } from '../config.js';
 import { AirdropClaimTx } from '../modules/transactions/airdrop-claim-tx.js';
 import { BackchatTx } from '../modules/transactions/index.js';
@@ -19,15 +19,16 @@ const DEFAULT_HASHTAGS = "#BKC #Backcoin #Airdrop";
 const AUTO_APPROVE_HOURS = 2;
 
 const AUDIT_MESSAGES = [
-    "🔍 Your post is under security audit...",
-    "🛡️ Verifying post authenticity...",
-    "📋 Checking compliance with guidelines...",
-    "🔐 Security review in progress...",
-    "⏳ Audit team analyzing your submission..."
+    () => `🔍 ${t('airdrop.audit.underReview')}`,
+    () => `🛡️ ${t('airdrop.audit.verifying')}`,
+    () => `📋 ${t('airdrop.audit.checking')}`,
+    () => `🔐 ${t('airdrop.audit.reviewInProgress')}`,
+    () => `⏳ ${t('airdrop.audit.analyzing')}`,
 ];
 
 function getRandomAuditMessage() {
-    return AUDIT_MESSAGES[Math.floor(Math.random() * AUDIT_MESSAGES.length)];
+    const fn = AUDIT_MESSAGES[Math.floor(Math.random() * AUDIT_MESSAGES.length)];
+    return fn();
 }
 
 // Platform Usage Config (valores padrão - sobrescritos pelo Firebase)
@@ -139,8 +140,8 @@ async function _uploadMedia(file) {
 async function handleInlineCreatePost() {
     const input = document.getElementById('airdrop-compose-input');
     const content = input?.value?.trim();
-    if (!content) { showToast('Write something to post.', 'error'); return; }
-    if (content.length > 2000) { showToast('Post too long (max 2,000 chars).', 'error'); return; }
+    if (!content) { showToast(t('agora.toast.writeFirst'), 'error'); return; }
+    if (content.length > 2000) { showToast(t('agora.toast.postTooLong'), 'error'); return; }
 
     airdropState.isCreatingPost = true;
     updateContent();
@@ -156,7 +157,7 @@ async function handleInlineCreatePost() {
             contentType = m.type === 'video' ? 2 : 1;
         } catch (e) {
             console.error('[Airdrop] Media upload failed:', e);
-            showToast('Upload failed: ' + e.message, 'error');
+            showToast(t('airdrop.toast.uploadFailed', { error: e.message }), 'error');
             airdropState.isCreatingPost = false;
             updateContent();
             return;
@@ -175,7 +176,7 @@ async function handleInlineCreatePost() {
             airdropState.composeMediaFile = null;
             airdropState.composeMediaPreview = null;
             airdropState.isCreatingPost = false;
-            showToast('Post created! Now share it on X, Instagram & more.', 'success');
+            showToast(t('airdrop.postCreated'), 'success');
             // Reload Agora data to get the new post
             await loadAgoraData();
             updateContent();
@@ -514,7 +515,7 @@ async function loadAirdropData() {
             return;
         }
 
-        showToast("Error loading data. Please refresh.", "error");
+        showToast(t('common.error') + '. ' + t('common.refresh') + '.', "error");
     }
 }
 
@@ -639,13 +640,13 @@ function renderHeader() {
             <!-- Title Row -->
             <div class="flex items-center justify-between mb-3">
                 <div>
-                    <h1 class="text-lg md:text-2xl font-black text-white">Airdrop <span class="airdrop-gradient-text hidden md:inline">Campaign</span></h1>
+                    <h1 class="text-lg md:text-2xl font-black text-white">${t('airdrop.title')} <span class="airdrop-gradient-text hidden md:inline"></span></h1>
                     <span class="text-[9px] md:text-xs text-zinc-500">${TOTAL_NFTS} NFTs • 4 Tiers</span>
                 </div>
                 <a href="https://t.me/BackCoinorg" target="_blank"
                    class="flex items-center gap-1.5 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-400 px-3 py-1.5 rounded-full transition-all hover:scale-105 text-xs md:text-sm">
                     <i class="fa-brands fa-telegram"></i>
-                    <span class="hidden md:inline font-bold">Community</span>
+                    <span class="hidden md:inline font-bold">${t('nav.community')}</span>
                 </a>
             </div>
 
@@ -654,15 +655,15 @@ function renderHeader() {
             <div class="grid grid-cols-4 gap-2 md:gap-3 mb-3">
                 <div class="bg-zinc-900/80 border border-zinc-800 rounded-xl p-2 md:p-3 text-center">
                     <span class="text-sm md:text-xl font-bold text-amber-400 stat-value">${totalPoints.toLocaleString()}</span>
-                    <p class="text-[7px] md:text-[10px] text-zinc-500 uppercase tracking-wider">Points</p>
+                    <p class="text-[7px] md:text-[10px] text-zinc-500 uppercase tracking-wider">${t('airdrop.ranking.points')}</p>
                 </div>
                 <div class="bg-zinc-900/80 border border-zinc-800 rounded-xl p-2 md:p-3 text-center">
                     <span class="text-sm md:text-xl font-bold text-green-400 stat-value">${approvedCount}</span>
-                    <p class="text-[7px] md:text-[10px] text-zinc-500 uppercase tracking-wider">Posts</p>
+                    <p class="text-[7px] md:text-[10px] text-zinc-500 uppercase tracking-wider">${t('airdrop.ranking.posts')}</p>
                 </div>
                 <div class="bg-zinc-900/80 border border-zinc-800 rounded-xl p-2 md:p-3 text-center">
                     <span class="text-sm md:text-xl font-bold text-purple-400 stat-value">${multiplier.toFixed(1)}x</span>
-                    <p class="text-[7px] md:text-[10px] text-zinc-500 uppercase tracking-wider">Boost</p>
+                    <p class="text-[7px] md:text-[10px] text-zinc-500 uppercase tracking-wider">${t('airdrop.multiplier')}</p>
                 </div>
                 <div class="bg-zinc-900/80 border ${userTier ? userTier.border : 'border-zinc-800'} rounded-xl p-2 md:p-3 text-center relative overflow-hidden">
                     ${userTier ? `
@@ -671,7 +672,7 @@ function renderHeader() {
                         <p class="text-[7px] md:text-[10px] text-zinc-500 uppercase relative z-10">${userTier.name}</p>
                     ` : `
                         <span class="text-sm md:text-xl font-bold text-zinc-600">—</span>
-                        <p class="text-[7px] md:text-[10px] text-zinc-500 uppercase">Rank</p>
+                        <p class="text-[7px] md:text-[10px] text-zinc-500 uppercase">${t('airdrop.currentRank')}</p>
                     `}
                 </div>
             </div>
@@ -683,13 +684,13 @@ function renderHeader() {
                     <button data-target="earn"
                             class="nav-pill-btn flex-1 md:flex-none md:px-6 py-2.5 rounded-full text-xs md:text-sm font-bold transition-all flex items-center justify-center gap-1.5 relative
                                    ${airdropState.activeTab === 'earn' ? 'airdrop-tab-active shadow-lg shadow-amber-500/20' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}">
-                        <i class="fa-solid fa-coins"></i> Earn
+                        <i class="fa-solid fa-coins"></i> ${t('airdrop.tabs.earn')}
                         ${actionRequired > 0 ? `<span class="notif-badge">${actionRequired}</span>` : ''}
                     </button>
                     <button data-target="ranking"
                             class="nav-pill-btn flex-1 md:flex-none md:px-6 py-2.5 rounded-full text-xs md:text-sm font-bold transition-all flex items-center justify-center gap-1.5
                                    ${airdropState.activeTab === 'ranking' ? 'airdrop-tab-active shadow-lg shadow-amber-500/20' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}">
-                        <i class="fa-solid fa-trophy"></i> Ranking
+                        <i class="fa-solid fa-trophy"></i> ${t('airdrop.tabs.ranking')}
                     </button>
                 </div>
             </div>
@@ -830,13 +831,13 @@ function renderEarnTab() {
                 <div class="w-24 h-24 mx-auto mb-6 airdrop-float">
                     <img src="./assets/airdrop.png" alt="Connect" class="w-full h-full object-contain opacity-50">
                 </div>
-                <h3 class="text-lg font-bold text-white mb-2">Connect Your Wallet</h3>
-                <p class="text-zinc-500 text-sm max-w-xs mx-auto mb-4">Connect to start earning points and win NFT rewards.</p>
+                <h3 class="text-lg font-bold text-white mb-2">${t('common.connectWallet')}</h3>
+                <p class="text-zinc-500 text-sm max-w-xs mx-auto mb-4">${t('airdrop.subtitle')}</p>
 
                 <div class="max-w-xs mx-auto bg-zinc-900/60 border border-zinc-800 rounded-xl p-3">
                     <p class="text-zinc-500 text-[10px] uppercase tracking-wider mb-2">Win 1 of ${TOTAL_NFTS} NFT Boosters</p>
                     <div class="flex justify-center gap-3 text-lg">
-                        ${NFT_TIERS.map(t => `<span title="${t.name}">${t.icon}</span>`).join('')}
+                        ${NFT_TIERS.map(tr => `<span title="${tr.name}">${tr.icon}</span>`).join('')}
                     </div>
                 </div>
             </div>
@@ -897,8 +898,8 @@ function renderYourRankSnippet() {
                         <i class="fa-solid fa-arrow-up text-amber-400 text-xs"></i>
                     </div>
                     <div>
-                        <p class="text-zinc-300 text-sm font-medium">Start posting to join the ranking!</p>
-                        <p class="text-zinc-500 text-[10px]">Top 200 earn exclusive NFT Boosters</p>
+                        <p class="text-zinc-300 text-sm font-medium">${t('airdrop.postFirst')}</p>
+                        <p class="text-zinc-500 text-[10px]">${t('airdrop.nftRewards.description')}</p>
                     </div>
                 </div>
                 <i class="fa-solid fa-chevron-right text-zinc-600 text-xs"></i>
@@ -959,11 +960,11 @@ function renderComposeForm() {
             <div class="px-4 pt-4 pb-2">
                 <div class="flex items-center justify-between">
                     <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-pen-to-square text-indigo-400"></i> Create Post
+                        <i class="fa-solid fa-pen-to-square text-indigo-400"></i> ${t('airdrop.createPost')}
                     </h2>
                     ${username ? `<span class="text-xs text-indigo-400 font-medium bg-indigo-500/10 border border-indigo-500/20 rounded-lg px-2 py-0.5">@${username}</span>` : ''}
                 </div>
-                <p class="text-zinc-500 text-[10px] mt-0.5">Publish on Agora — the decentralized social network that can never be shut down</p>
+                <p class="text-zinc-500 text-[10px] mt-0.5">${t('airdrop.writePost')}</p>
             </div>
             <div class="px-4 pb-4">
                 <textarea id="airdrop-compose-input"
@@ -1033,10 +1034,10 @@ async function _copyShareText(postId) {
     const text = `I just posted on Backchain — a decentralized social network that can never be censored or shut down.\n\nRefer friends & earn BNB commissions forever.\n\n${url}\n\n#Backchain #BKC #Web3 #DeSoc #opBNB #Airdrop #BNBChain`;
     try {
         await navigator.clipboard.writeText(text);
-        showToast('Link & text copied! Paste it on your social network.', 'success');
+        showToast(t('common.copied'), 'success');
         return true;
     } catch {
-        showToast('Failed to copy. Try again.', 'error');
+        showToast(t('common.error'), 'error');
         return false;
     }
 }
@@ -1084,13 +1085,13 @@ function renderPostSection() {
             <div class="mt-3 bg-zinc-900/80 border border-zinc-800 rounded-2xl overflow-hidden">
                 <div class="px-4 pt-4 pb-2">
                     <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-share-nodes text-amber-400"></i> Share to Earn
+                        <i class="fa-solid fa-share-nodes text-amber-400"></i> ${t('airdrop.shareToEarn')}
                     </h2>
                     <p class="text-zinc-500 text-[10px] mt-0.5">Post → Share on X, Instagram & more → Earn BNB commissions</p>
                 </div>
                 <div class="px-4 pb-3 text-center">
                     <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
-                        <p class="text-amber-400 font-bold text-sm mb-1"><i class="fa-solid fa-pen-fancy mr-1"></i> Create Your First Post</p>
+                        <p class="text-amber-400 font-bold text-sm mb-1"><i class="fa-solid fa-pen-fancy mr-1"></i> ${t('airdrop.createPost')}</p>
                         <p class="text-zinc-400 text-xs">Write your first post above, share on X, and start earning. Every friend you refer earns you <strong class="text-amber-400">BNB commissions forever</strong>.</p>
                     </div>
                 </div>
@@ -1143,7 +1144,7 @@ function renderPostSection() {
                                 ` : `
                                     <a href="${tweetUrl}" target="_blank"
                                        class="share-on-x-btn flex-1 flex items-center justify-center gap-1.5 bg-black/60 hover:bg-[#1DA1F2]/15 border border-zinc-700 hover:border-[#1DA1F2]/50 rounded-lg py-1.5 px-2 text-[10px] text-zinc-300 hover:text-[#1DA1F2] transition-all social-btn"
-                                       data-post-id="${post.postId}" title="Share on X">
+                                       data-post-id="${post.postId}" title="${t('airdrop.shareOnX')}">
                                         <i class="fa-brands fa-x-twitter"></i> X
                                     </a>
                                 `}
@@ -1153,7 +1154,7 @@ function renderPostSection() {
                                     </span>
                                 ` : `
                                     <button class="share-on-ig-btn flex-1 flex items-center justify-center gap-1.5 bg-black/60 hover:bg-[#E4405F]/15 border border-zinc-700 hover:border-[#E4405F]/50 rounded-lg py-1.5 px-2 text-[10px] text-zinc-300 hover:text-[#E4405F] transition-all social-btn"
-                                            data-post-id="${post.postId}" title="Copy link for Instagram">
+                                            data-post-id="${post.postId}" title="${t('airdrop.shareOnInstagram')}">
                                         <i class="fa-brands fa-instagram"></i> Instagram
                                     </button>
                                 `}
@@ -1163,7 +1164,7 @@ function renderPostSection() {
                                     </span>
                                 ` : `
                                     <button class="share-on-other-btn flex-1 flex items-center justify-center gap-1.5 bg-black/60 hover:bg-amber-500/15 border border-zinc-700 hover:border-amber-500/50 rounded-lg py-1.5 px-2 text-[10px] text-zinc-300 hover:text-amber-400 transition-all social-btn"
-                                            data-post-id="${post.postId}" title="Copy link for any platform">
+                                            data-post-id="${post.postId}" title="${t('airdrop.shareOnOther')}">
                                         <i class="fa-solid fa-share-nodes"></i> Other
                                     </button>
                                 `}
@@ -1193,7 +1194,7 @@ function _renderSubmitSection() {
                        class="w-full bg-black/50 border border-zinc-600 rounded-xl pl-3 pr-20 py-2.5 text-white text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none transition-all placeholder:text-zinc-600">
                 <button id="submit-content-btn"
                         class="absolute right-1.5 top-1.5 bottom-1.5 bg-green-600 hover:bg-green-500 text-white font-bold px-3 rounded-lg transition-all text-sm">
-                    Submit
+                    ${t('common.send')}
                 </button>
             </div>
             <p class="text-zinc-600 text-[9px] mt-1.5 flex items-center gap-1">
@@ -1227,7 +1228,7 @@ function renderPlatformSection() {
             <div class="px-4 py-3 flex items-center justify-between">
                 <div class="flex items-center gap-2">
                     <i class="fa-solid fa-gamepad text-purple-400 text-xs"></i>
-                    <span class="text-zinc-300 text-sm font-medium">Platform Quests</span>
+                    <span class="text-zinc-300 text-sm font-medium">${t('airdrop.platformUsage')}</span>
                 </div>
                 <div class="flex items-center gap-3">
                     <span class="text-cyan-400 text-[10px] font-bold">${platformPoints.toLocaleString()} pts</span>
@@ -1278,8 +1279,8 @@ function renderPlatformSection() {
 // --- DAILY BONUSES ---
 function renderTasksSection() {
     const tasks = airdropState.dailyTasks || [];
-    const eligibleTasks = tasks.filter(t => t.eligible);
-    const completedTasks = tasks.filter(t => !t.eligible && t.timeLeftMs > 0);
+    const eligibleTasks = tasks.filter(tk => tk.eligible);
+    const completedTasks = tasks.filter(tk => !tk.eligible && tk.timeLeftMs > 0);
 
     if (tasks.length === 0) {
         return `
@@ -1348,14 +1349,14 @@ function renderSubmissionHistory() {
             <button id="history-toggle-btn" class="w-full px-4 py-3 flex items-center justify-between hover:bg-zinc-800/50 transition-colors">
                 <div class="flex items-center gap-2">
                     <i class="fa-solid fa-clock-rotate-left text-zinc-500 text-xs"></i>
-                    <span class="text-zinc-300 text-sm font-medium">My Submissions</span>
+                    <span class="text-zinc-300 text-sm font-medium">${t('common.history')}</span>
                     <span class="text-zinc-600 text-[10px]">${total} total</span>
                 </div>
                 <div class="flex items-center gap-3">
                     <div class="flex items-center gap-2">
-                        ${approvedCount > 0 ? `<span class="text-green-400 text-[10px]">${approvedCount} approved</span>` : ''}
-                        ${pendingCount > 0 ? `<span class="text-amber-400 text-[10px]">${pendingCount} pending</span>` : ''}
-                        ${rejectedCount > 0 ? `<span class="text-red-400 text-[10px]">${rejectedCount} rejected</span>` : ''}
+                        ${approvedCount > 0 ? `<span class="text-green-400 text-[10px]">${approvedCount} ${t('common.approved').toLowerCase()}</span>` : ''}
+                        ${pendingCount > 0 ? `<span class="text-amber-400 text-[10px]">${pendingCount} ${t('common.pending').toLowerCase()}</span>` : ''}
+                        ${rejectedCount > 0 ? `<span class="text-red-400 text-[10px]">${rejectedCount} ${t('common.rejected').toLowerCase()}</span>` : ''}
                     </div>
                     <i class="fa-solid fa-chevron-down text-zinc-500 text-xs accordion-chevron ${expanded ? 'expanded' : ''}"></i>
                 </div>
@@ -1385,7 +1386,7 @@ function renderSubmissionHistory() {
                             statusText = `
                                 <div class="mt-1.5 flex items-center gap-2 text-amber-400/80">
                                     <i class="fa-solid fa-magnifying-glass text-[10px] animate-pulse"></i>
-                                    <span class="text-[10px] font-medium">Under security audit...</span>
+                                    <span class="text-[10px] font-medium">${t('airdrop.audit.underReview')}</span>
                                 </div>
                             `;
                         }
@@ -1408,7 +1409,7 @@ function renderSubmissionHistory() {
                                         ${isReady ? `
                                             <button data-action="confirm" data-id="${sub.submissionId}"
                                                     class="action-btn bg-green-600 hover:bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded transition-colors">
-                                                Verify
+                                                ${t('common.confirm')}
                                             </button>
                                         ` : ''}
                                         <span class="font-mono font-bold ${sub.pointsAwarded ? 'text-green-400' : 'text-zinc-600'} text-sm">${pts}</span>
@@ -1445,7 +1446,7 @@ function renderLeaderboard() {
         const bgClass = isMe ? (type === 'posts' ? 'bg-amber-500/10' : 'bg-green-500/10') : '';
         const textClass = type === 'posts' ? 'text-amber-400' : 'text-green-400';
         const valueColor = type === 'posts' ? 'text-white' : 'text-green-400';
-        const valueLabel = type === 'posts' ? 'posts' : 'pts';
+        const valueLabel = type === 'posts' ? t('airdrop.ranking.posts').toLowerCase() : t('airdrop.ranking.points').toLowerCase();
 
         return `
             <div class="flex items-center justify-between p-3 ${bgClass} ${!isMe ? 'hover:bg-zinc-800/50' : ''} transition-colors ${isMe ? 'border-l-2 border-amber-500' : ''}">
@@ -1453,7 +1454,7 @@ function renderLeaderboard() {
                     <span class="w-8 h-8 rounded-full ${tierInfo.bg} flex items-center justify-center text-xs font-bold shrink-0">${tierInfo.icon || (i+1)}</span>
                     <div class="flex flex-col">
                         <span class="font-mono text-xs ${isMe ? textClass + ' font-bold' : 'text-zinc-400'}">
-                            ${formatAddress(item.walletAddress)}${isMe ? ' (You)' : ''}
+                            ${formatAddress(item.walletAddress)}${isMe ? ` (${t('airdrop.ranking.user')})` : ''}
                         </span>
                         ${tierInfo.tierName ? `<span class="text-[9px] ${tierInfo.tierTextColor}">${tierInfo.tierName}</span>` : ''}
                     </div>
@@ -1474,11 +1475,11 @@ function renderLeaderboard() {
     const pointsHidden = activeRanking === 'points' ? '' : 'hidden';
 
     const postsContent = postsList.length === 0
-        ? '<p class="p-6 text-center text-zinc-500 text-sm">No data yet - be the first!</p>'
+        ? `<p class="p-6 text-center text-zinc-500 text-sm">${t('common.noData')}</p>`
         : postsList.slice(0, 50).map((item, i) => renderRankingItem(item, i, 'posts')).join('');
 
     const pointsContent = pointsList.length === 0
-        ? '<p class="p-6 text-center text-zinc-500 text-sm">No data yet - be the first!</p>'
+        ? `<p class="p-6 text-center text-zinc-500 text-sm">${t('common.noData')}</p>`
         : pointsList.slice(0, 50).map((item, i) => renderRankingItem(item, i, 'points')).join('');
 
     return `
@@ -1536,7 +1537,7 @@ function renderLeaderboard() {
             <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 mb-5">
                 <div class="flex items-center justify-between mb-3">
                     <h3 class="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                        <i class="fa-solid fa-gem text-amber-500 text-[10px]"></i> NFT Reward Tiers
+                        <i class="fa-solid fa-gem text-amber-500 text-[10px]"></i> ${t('airdrop.nftRewards.title')}
                     </h3>
                     <span class="text-[10px] text-zinc-600">${TOTAL_NFTS} NFTs</span>
                 </div>
@@ -1563,17 +1564,17 @@ function renderLeaderboard() {
                 </div>
                 <p class="text-amber-400/60 text-[10px] mt-3 flex items-center gap-1">
                     <i class="fa-solid fa-info-circle"></i>
-                    NFT Boosters reduce token burn when claiming mining rewards
+                    ${t('airdrop.nftRewards.description')}
                 </p>
             </div>
 
             <!-- Ranking Toggle Tabs -->
             <div class="flex gap-2 mb-4">
                 <button data-ranking="posts" class="ranking-tab-btn flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${postsTabClass}">
-                    <i class="fa-solid fa-share-nodes"></i> By Posts
+                    <i class="fa-solid fa-share-nodes"></i> ${t('airdrop.ranking.byPosts')}
                 </button>
                 <button data-ranking="points" class="ranking-tab-btn flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${pointsTabClass}">
-                    <i class="fa-solid fa-star"></i> By Points
+                    <i class="fa-solid fa-star"></i> ${t('airdrop.ranking.byPoints')}
                 </button>
             </div>
 
@@ -1582,7 +1583,7 @@ function renderLeaderboard() {
                 <div class="bg-zinc-900/80 border border-zinc-800 rounded-xl overflow-hidden">
                     <div class="p-4 border-b border-zinc-800 flex items-center justify-between">
                         <h3 class="font-bold text-white text-sm flex items-center gap-2">
-                            <i class="fa-solid fa-crown text-yellow-500"></i> Top Content Creators
+                            <i class="fa-solid fa-crown text-yellow-500"></i> ${t('airdrop.ranking.byPosts')}
                         </h3>
                         <span class="text-zinc-500 text-xs">${postsList.length} creators</span>
                     </div>
@@ -1597,7 +1598,7 @@ function renderLeaderboard() {
                 <div class="bg-zinc-900/80 border border-zinc-800 rounded-xl overflow-hidden">
                     <div class="p-4 border-b border-zinc-800 flex items-center justify-between">
                         <h3 class="font-bold text-white text-sm flex items-center gap-2">
-                            <i class="fa-solid fa-star text-green-500"></i> Top Points Earners
+                            <i class="fa-solid fa-star text-green-500"></i> ${t('airdrop.ranking.byPoints')}
                         </h3>
                         <span class="text-zinc-500 text-xs">${pointsList.length} earners</span>
                     </div>
@@ -1658,7 +1659,7 @@ function handleCopySmartLink() {
     const textToCopy = `${refCode !== 'CODE' ? `https://backcoin.org/?ref=${refCode}` : 'https://backcoin.org'} ${DEFAULT_HASHTAGS}`;
 
     navigator.clipboard.writeText(textToCopy).then(() => {
-        showToast("Copied! Now paste it in your post.", "success");
+        showToast(t('common.copied'), "success");
         const btn = document.getElementById('copy-viral-btn');
         if (btn) {
             const original = btn.innerHTML;
@@ -1671,7 +1672,7 @@ function handleCopySmartLink() {
                 btn.classList.remove('bg-green-600');
             }, 2000);
         }
-    }).catch(() => showToast("Failed to copy.", "error"));
+    }).catch(() => showToast(t('common.error'), "error"));
 }
 
 function handleTabSwitch(e) {
@@ -1758,7 +1759,7 @@ function openConfirmationModal(submission) {
 
         try {
             await db.deleteSubmission(submissionId);
-            showToast("Post deleted. No penalty applied.", "info");
+            showToast(t('common.success'), "info");
             closeModal();
             await loadAirdropData();
             updateContent();
@@ -1794,12 +1795,12 @@ async function handleConfirmAuthenticity(e) {
     button.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Verifying...';
     try {
         await db.confirmSubmission(submissionId);
-        showToast("Success! Points added.", "success");
+        showToast(t('common.success'), "success");
         closeModal();
         await loadAirdropData();
         updateContent();
     } catch (error) {
-        showToast("Verification failed.", "error");
+        showToast(t('common.transactionFailed'), "error");
         button.disabled = false;
         button.innerHTML = 'Try Again';
     }
@@ -1817,7 +1818,7 @@ async function handleSubmissionAction(e) {
         if (!confirm("Remove this submission?")) return;
         try {
             await db.deleteSubmission(id);
-            showToast("Removed.", "info");
+            showToast(t('common.success'), "info");
             await loadAirdropData();
             updateContent();
         } catch (err) { showToast(err.message, "error"); }
@@ -1830,7 +1831,7 @@ async function handleSubmitUgc(e) {
 
     const input = document.getElementById('content-url-input');
     const url = input?.value.trim();
-    if (!url || !url.startsWith('http')) return showToast("Enter a valid URL.", "warning");
+    if (!url || !url.startsWith('http')) return showToast(t('common.error'), "warning");
 
     const originalText = btn.innerHTML;
     btn.disabled = true;
@@ -1839,7 +1840,7 @@ async function handleSubmitUgc(e) {
     try {
         await db.addSubmission(url);
 
-        showToast("Submitted! Your post is now under security audit.", "info");
+        showToast(t('common.success'), "info");
 
         input.value = '';
 
@@ -1866,7 +1867,7 @@ async function handleTaskClick(e) {
     const taskId = card.dataset.id;
     const url = card.dataset.url;
     if (url) window.open(url, '_blank');
-    const task = airdropState.dailyTasks.find(t => t.id === taskId);
+    const task = airdropState.dailyTasks.find(tk => tk.id === taskId);
     if (!task || !task.eligible) return;
     try {
         await db.recordDailyTaskCompletion(task, airdropState.user.pointsMultiplier);
@@ -1943,7 +1944,7 @@ export const AirdropPage = {
                         <div class="w-20 h-20 mx-auto mb-4 airdrop-float-slow">
                             <img src="./assets/airdrop.png" alt="Airdrop" class="w-full h-full object-contain drop-shadow-2xl">
                         </div>
-                        <p class="text-zinc-400 text-sm mb-4">Loading your campaign...</p>
+                        <p class="text-zinc-400 text-sm mb-4">${t('common.loading')}</p>
                         <div class="flex items-center justify-center gap-2">
                             <div class="w-2 h-2 rounded-full bg-amber-500 animate-bounce" style="animation-delay: 0s;"></div>
                             <div class="w-2 h-2 rounded-full bg-amber-500 animate-bounce" style="animation-delay: 0.1s;"></div>
@@ -1988,7 +1989,7 @@ export const AirdropPage = {
 
         } catch (e) {
             console.error(e);
-            renderError(container, "Failed to load interface.");
+            renderError(container, t('common.error'));
         }
     },
 
@@ -2071,7 +2072,7 @@ export const AirdropPage = {
             if (e.target.id === 'airdrop-media-input') {
                 const file = e.target.files?.[0];
                 if (!file) return;
-                if (file.size > 10 * 1024 * 1024) { showToast('Image too large (max 10 MB).', 'error'); return; }
+                if (file.size > 10 * 1024 * 1024) { showToast(t('common.error'), 'error'); return; }
                 airdropState.composeMediaFile = file;
                 const reader = new FileReader();
                 reader.onload = () => { airdropState.composeMediaPreview = reader.result; updateContent(); };

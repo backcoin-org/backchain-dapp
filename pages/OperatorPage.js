@@ -4,7 +4,7 @@
 import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
 import { addresses, ecosystemManagerABI } from '../config.js';
-import { NetworkManager, txEngine, getOperator, setOperator, clearOperator, hasOperator, getOperatorInfo, shortAddress } from '../modules/core/index.js';
+import { NetworkManager, txEngine, getOperator, setOperator, clearOperator, hasOperator, getOperatorInfo, shortAddress, t } from '../modules/core/index.js';
 import { formatBigNumber } from '../utils.js';
 
 const ethers = window.ethers;
@@ -133,13 +133,13 @@ function render(isActive) {
         <div class="text-center py-8 sm:py-12">
             <div class="op-hero-badge inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-5 py-2 mb-5">
                 <i class="fa-solid fa-code text-emerald-400 text-sm"></i>
-                <span class="text-emerald-400 text-sm font-bold">Permissionless Developer Program</span>
+                <span class="text-emerald-400 text-sm font-bold">${t('operator.badge')}</span>
             </div>
             <h1 class="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white mb-4 leading-tight">
-                Build on Backchain,<br class="sm:hidden"> <span class="text-emerald-400">Earn Forever</span>
+                ${t('operator.heroTitle')}
             </h1>
             <p class="text-zinc-400 text-base sm:text-lg max-w-xl mx-auto leading-relaxed mb-6">
-                Create your own frontend, bot, or integration. Every fee generated through your app sends <strong class="text-white">10-20% directly to your wallet</strong> — with no registration, no approval, and no middleman.
+                ${t('operator.heroDesc')}
             </p>
             <div class="flex flex-wrap justify-center gap-3 text-xs">
                 <span class="bg-zinc-800/60 border border-zinc-700/40 rounded-full px-3 py-1.5 text-zinc-300"><i class="fa-solid fa-infinity text-emerald-400 mr-1.5"></i>Perpetual revenue</span>
@@ -153,20 +153,20 @@ function render(isActive) {
         <div class="op-earnings-card rounded-2xl p-6 mb-10">
             <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div class="text-center sm:text-left">
-                    <p class="text-emerald-400/80 text-sm font-medium mb-1">Your Pending Earnings</p>
+                    <p class="text-emerald-400/80 text-sm font-medium mb-1">${t('operator.pendingBnb')}</p>
                     <p class="text-3xl sm:text-4xl font-extrabold text-white" id="op-pending">${pendingFormatted} <span class="text-lg text-zinc-400">BNB</span></p>
                 </div>
                 <button id="op-withdraw-btn"
                     class="bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-bold rounded-xl px-6 py-3 text-sm transition-colors flex items-center gap-2"
                     ${OS.pendingEth === 0n ? 'disabled' : ''}>
-                    <i class="fa-solid fa-wallet"></i> Withdraw BNB
+                    <i class="fa-solid fa-wallet"></i> ${t('operator.withdraw')}
                 </button>
             </div>
         </div>
         ` : `
         <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-6 mb-10 text-center">
             <i class="fa-solid fa-wallet text-4xl text-zinc-600 mb-3"></i>
-            <p class="text-zinc-400">Connect your wallet to see your operator earnings</p>
+            <p class="text-zinc-400">${t('operator.noEarnings')}</p>
         </div>
         `}
 
@@ -183,15 +183,15 @@ function render(isActive) {
 
         <!-- How It Works — Detailed -->
         <div class="mb-10">
-            <h2 class="text-xl font-bold text-white mb-6">How It Works</h2>
+            <h2 class="text-xl font-bold text-white mb-6">${t('operator.howItWorks.title')}</h2>
             <div class="space-y-4">
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-5 flex gap-4">
                     <div class="w-12 h-12 shrink-0 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
                         <i class="fa-solid fa-code text-xl text-emerald-400"></i>
                     </div>
                     <div>
-                        <h3 class="text-white font-bold text-sm mb-1">1. Build Your Application</h3>
-                        <p class="text-zinc-400 text-xs leading-relaxed">Create a custom frontend, trading bot, Telegram bot, Discord integration, mobile app — anything that interacts with Backchain smart contracts. Set your wallet address as the <code class="text-emerald-400 bg-zinc-800/60 px-1 py-0.5 rounded">operator</code> in one line of code.</p>
+                        <h3 class="text-white font-bold text-sm mb-1">1. ${t('operator.howItWorks.step1Title')}</h3>
+                        <p class="text-zinc-400 text-xs leading-relaxed">${t('operator.howItWorks.step1Desc')}</p>
                     </div>
                 </div>
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-5 flex gap-4">
@@ -199,8 +199,8 @@ function render(isActive) {
                         <i class="fa-solid fa-users text-xl text-blue-400"></i>
                     </div>
                     <div>
-                        <h3 class="text-white font-bold text-sm mb-1">2. Users Interact Through Your App</h3>
-                        <p class="text-zinc-400 text-xs leading-relaxed">Users stake BKC, buy NFTs, play Fortune Pool, certify documents, trade on Agora — any protocol action. Each action has a fee (gas-based or value-based), and your operator address travels with the transaction.</p>
+                        <h3 class="text-white font-bold text-sm mb-1">2. ${t('operator.howItWorks.step2Title')}</h3>
+                        <p class="text-zinc-400 text-xs leading-relaxed">${t('operator.howItWorks.step2Desc')}</p>
                     </div>
                 </div>
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-5 flex gap-4">
@@ -208,8 +208,8 @@ function render(isActive) {
                         <i class="fa-solid fa-sitemap text-xl text-amber-400"></i>
                     </div>
                     <div>
-                        <h3 class="text-white font-bold text-sm mb-1">3. Smart Contract Splits the Fee</h3>
-                        <p class="text-zinc-400 text-xs leading-relaxed">The <code class="text-emerald-400 bg-zinc-800/60 px-1 py-0.5 rounded">BackchainEcosystem</code> contract receives every fee and splits it automatically: Operator share (10-20%), Buyback & Burn, Treasury, and module-specific pools. The split is per-module, immutable, and verifiable on-chain.</p>
+                        <h3 class="text-white font-bold text-sm mb-1">3. ${t('operator.howItWorks.step3Title')}</h3>
+                        <p class="text-zinc-400 text-xs leading-relaxed">${t('operator.howItWorks.step3Desc')}</p>
                     </div>
                 </div>
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-5 flex gap-4">
@@ -374,12 +374,12 @@ function render(isActive) {
 
         <!-- Commission Rates (Live from Contract) -->
         <div class="mb-10">
-            <h2 class="text-xl font-bold text-white mb-2">Commission Rates</h2>
-            <p class="text-zinc-400 text-sm mb-5">Live data from the <code class="text-emerald-400 bg-zinc-800/60 px-1.5 py-0.5 rounded text-xs">BackchainEcosystem</code> contract. Each module has its own fee distribution.</p>
+            <h2 class="text-xl font-bold text-white mb-2">${t('operator.modulesTitle')}</h2>
+            <p class="text-zinc-400 text-sm mb-5">${t('operator.codeDesc')}</p>
             <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl overflow-hidden">
                 <div class="grid grid-cols-3 gap-2 px-4 py-3 border-b border-zinc-700/30 text-xs text-zinc-500 font-bold uppercase tracking-wider">
-                    <span>Module</span>
-                    <span class="text-center">Operator %</span>
+                    <span>${t('operator.moduleName')}</span>
+                    <span class="text-center">${t('operator.operatorFee')}</span>
                     <span class="text-right">Full Split</span>
                 </div>
                 <div id="op-modules-list">
@@ -402,7 +402,7 @@ function render(isActive) {
                         </div>
                     `).join('') : `
                         <div class="px-4 py-8 text-center text-zinc-500">
-                            <i class="fa-solid fa-spinner fa-spin mr-2"></i> Loading module data...
+                            <i class="fa-solid fa-spinner fa-spin mr-2"></i> ${t('common.loading')}
                         </div>
                     `}
                 </div>
@@ -685,7 +685,7 @@ async function withdrawEarnings() {
             OS.isWithdrawing = false;
             OS.pendingEth = 0n;
             updateEarningsUI();
-            showToast('BNB withdrawn successfully!', 'success');
+            showToast(t('operator.toast.withdrawSuccess'), 'success');
         },
         onError: (err) => {
             OS.isWithdrawing = false;
@@ -699,7 +699,7 @@ function setOperatorFromInput() {
     if (!input) return;
     const address = input.value.trim();
     if (!address) {
-        showToast('Enter an address', 'error');
+        showToast(t('common.error'), 'error');
         return;
     }
     const success = setOperator(address);
@@ -707,7 +707,7 @@ function setOperatorFromInput() {
         showToast(`Operator set to ${shortAddress(address)}`, 'success');
         updateOperatorDisplay();
     } else {
-        showToast('Invalid address', 'error');
+        showToast(t('referral.toast.invalidAddress'), 'error');
     }
 }
 

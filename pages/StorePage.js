@@ -23,6 +23,7 @@ import { formatBigNumber, renderNoData } from '../utils.js';
 import { showToast, openModal, closeModal, addNftToWallet } from '../ui-feedback.js';
 import { boosterTiers, addresses, nftPoolABI, ipfsGateway, getTierByBoost, getKeepRateFromBoost } from '../config.js';
 import { NftTx, FusionTx } from '../modules/transactions/index.js';
+import { t } from '../modules/core/index.js';
 
 // ============================================================================
 // CONSTANTS
@@ -637,8 +638,8 @@ export const StorePage = {
                         <div class="nft-header-left">
                             <div class="nft-header-icon"><i class="fa-solid fa-gem"></i></div>
                             <div>
-                                <div class="nft-header-title">Booster Market</div>
-                                <div class="nft-header-sub">Buy Booster NFTs to keep more staking rewards. Higher tier = higher keep rate</div>
+                                <div class="nft-header-title">${t('store.title')}</div>
+                                <div class="nft-header-sub">${t('store.subtitle')}</div>
                             </div>
                         </div>
                         <button id="nft-refresh-btn" class="nft-refresh-btn"><i class="fa-solid fa-rotate"></i></button>
@@ -653,7 +654,7 @@ export const StorePage = {
                             <div class="nft-tier-card" style="min-height:200px">
                                 <div class="nft-loading">
                                     <img src="./assets/bkc_logo_3d.png" class="nft-loading-icon" alt="">
-                                    <span style="font-size:10px;color:var(--nft-text-3)">Loading...</span>
+                                    <span style="font-size:10px;color:var(--nft-text-3)">${t('common.loading')}</span>
                                 </div>
                             </div>
                         `).join('')}
@@ -666,14 +667,14 @@ export const StorePage = {
                     <div class="nft-card">
                         <div id="nft-inv-toggle" class="nft-card-header">
                             <div class="nft-card-title">
-                                <i class="fa-solid fa-wallet"></i> My NFTs
+                                <i class="fa-solid fa-wallet"></i> ${t('store.inventory')}
                                 <span id="nft-inv-count" class="nft-card-badge">0</span>
                             </div>
                             <i id="nft-inv-chevron" class="fa-solid fa-chevron-down nft-card-chevron" style="transform:rotate(180deg)"></i>
                         </div>
                         <div id="nft-inv-body" class="nft-card-body">
                             <div id="nft-inv-grid" class="nft-inv-grid">
-                                <div class="nft-empty" style="grid-column:1/-1"><i class="fa-solid fa-gem"></i><p>Loading...</p></div>
+                                <div class="nft-empty" style="grid-column:1/-1"><i class="fa-solid fa-gem"></i><p>${t('common.loading')}</p></div>
                             </div>
                             <div id="nft-fusion-section"></div>
                         </div>
@@ -683,7 +684,7 @@ export const StorePage = {
                     <div class="nft-card">
                         <div id="nft-hist-toggle" class="nft-card-header">
                             <div class="nft-card-title">
-                                <i class="fa-solid fa-clock-rotate-left"></i> NFT Activity
+                                <i class="fa-solid fa-clock-rotate-left"></i> ${t('store.tradeHistory')}
                                 <span id="nft-hist-count" class="nft-card-badge">0</span>
                             </div>
                             <i id="nft-hist-chevron" class="fa-solid fa-chevron-down nft-card-chevron" style="transform:rotate(180deg)"></i>
@@ -692,7 +693,7 @@ export const StorePage = {
                             <div id="nft-hist-list" class="nft-hist-list">
                                 <div class="nft-loading">
                                     <img src="./assets/bkc_logo_3d.png" class="nft-loading-icon" alt="">
-                                    <span style="font-size:10px;color:var(--nft-text-3)">Loading...</span>
+                                    <span style="font-size:10px;color:var(--nft-text-3)">${t('common.loading')}</span>
                                 </div>
                             </div>
                         </div>
@@ -767,7 +768,7 @@ async function loadTutorData() {
 
 async function loadAllPoolsData() {
     // V10: Only Bronze pool exists — other tiers obtained via Fusion
-    const bronzeTier = boosterTiers.find(t => t.name === 'Bronze');
+    const bronzeTier = boosterTiers.find(tr => tr.name === 'Bronze');
     if (bronzeTier) await loadSinglePoolData(bronzeTier);
 }
 
@@ -878,15 +879,15 @@ function renderTutorBanner() {
         el.innerHTML = `
             <div class="nft-tutor-banner" style="background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.15)">
                 <i class="fa-solid fa-graduation-cap" style="color:var(--nft-green)"></i>
-                <span style="color:var(--nft-green)">Tutor active (${short}) — 5% of rewards go to tutor instead of being burned</span>
+                <span style="color:var(--nft-green)">${t('store.tutorBanner.hasTutor', { address: short })}</span>
             </div>
         `;
     } else {
         el.innerHTML = `
             <div class="nft-tutor-banner" style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.15)">
                 <i class="fa-solid fa-graduation-cap" style="color:var(--nft-red)"></i>
-                <span style="color:var(--nft-red)">No tutor — 10% of staking rewards burned.</span>
-                <a href="#" class="go-to-tutor">Set a Tutor</a>
+                <span style="color:var(--nft-red)">${t('store.tutorBanner.noTutor')}</span>
+                <a href="#" class="go-to-tutor">${t('store.tutorBanner.setTutor')}</a>
                 <span style="color:var(--nft-text-3);margin-left:2px">to reduce burn to 5%</span>
             </div>
         `;
@@ -901,7 +902,7 @@ function renderTierCards() {
     if (!grid) return;
 
     // Only render Bronze pool card + fusion path strip
-    const bronzeTier = boosterTiers.find(t => t.name === 'Bronze');
+    const bronzeTier = boosterTiers.find(tr => tr.name === 'Bronze');
     const bronzeStyle = getTierStyle('Bronze');
     const data = poolDataMap.get(bronzeTier.boostBips) || {};
     const isUserBronze = userBestBoost === bronzeTier.boostBips && userBestBoost > 0;
@@ -919,13 +920,13 @@ function renderTierCards() {
     const sellPriceStr = (netSell > 0n && userOwned > 0) ? formatBigNumber(netSell).toFixed(1) : '--';
 
     let buyDisabled = !State.isConnected || soldOut || insufficientBuy || buyPrice === 0n;
-    let buyLabel = soldOut ? 'Sold Out' : (insufficientBuy ? 'Low BKC' : 'Buy');
-    if (!State.isConnected) buyLabel = 'Connect';
+    let buyLabel = soldOut ? 'Sold Out' : (insufficientBuy ? 'Low BKC' : t('store.buy'));
+    if (!State.isConnected) buyLabel = t('common.connect');
 
     let sellDisabled = !State.isConnected || noSellable;
-    let sellLabel = 'Sell';
+    let sellLabel = t('store.sell');
     if (!State.isConnected) { sellLabel = '--'; }
-    else if (userOwned === 0) { sellLabel = 'No NFT'; }
+    else if (userOwned === 0) { sellLabel = t('store.noNftsYet'); }
     else if (noSellable) { sellLabel = 'Rented'; }
 
     grid.innerHTML = `
@@ -937,17 +938,17 @@ function renderTierCards() {
                 </div>
                 <div>
                     <div class="nft-tier-name" style="color:${bronzeStyle.color}">${bronzeStyle.icon} Bronze</div>
-                    <div class="nft-keep-badge" style="background:${bronzeStyle.bg};color:${bronzeStyle.color}">Keep ${bronzeStyle.keepRate}%</div>
+                    <div class="nft-keep-badge" style="background:${bronzeStyle.bg};color:${bronzeStyle.color}">${t('store.keepRate', { rate: bronzeStyle.keepRate })}</div>
                 </div>
             </div>
 
             <div class="nft-tier-prices">
                 <div class="nft-price-row">
-                    <span class="nft-price-label"><i class="fa-solid fa-cart-plus" style="color:var(--nft-green)"></i> Buy</span>
+                    <span class="nft-price-label"><i class="fa-solid fa-cart-plus" style="color:var(--nft-green)"></i> ${t('store.buyPrice')}</span>
                     <span class="nft-price-val" style="color:${soldOut ? 'var(--nft-text-3)' : 'var(--nft-text)'}">${soldOut ? 'Sold Out' : `${buyPriceStr} BKC`}</span>
                 </div>
                 <div class="nft-price-row">
-                    <span class="nft-price-label"><i class="fa-solid fa-money-bill-transfer" style="color:var(--nft-accent)"></i> Sell</span>
+                    <span class="nft-price-label"><i class="fa-solid fa-money-bill-transfer" style="color:var(--nft-accent)"></i> ${t('store.sellPrice')}</span>
                     <span class="nft-price-val" style="color:${userOwned > 0 ? 'var(--nft-text)' : 'var(--nft-text-3)'}">${userOwned > 0 ? `${sellPriceStr} BKC` : 'Buy first'}</span>
                 </div>
             </div>
@@ -1107,13 +1108,13 @@ function renderFusionSection() {
         <div class="nft-fusion-card">
             <div class="nft-fusion-tabs">
                 <button class="nft-fusion-tab ${fusionActiveTab === 'fuse' ? 'active' : ''}" data-fusion-tab="fuse">
-                    <i class="fa-solid fa-fire"></i> Forge
+                    <i class="fa-solid fa-fire"></i> ${t('store.fusion.fuseTab')}
                 </button>
                 <button class="nft-fusion-tab ${fusionActiveTab === 'bulk' ? 'active' : ''}" data-fusion-tab="bulk">
-                    <i class="fa-solid fa-layer-group"></i> Bulk
+                    <i class="fa-solid fa-layer-group"></i> ${t('store.fusion.bulkTab')}
                 </button>
                 <button class="nft-fusion-tab ${fusionActiveTab === 'split' ? 'active' : ''}" data-fusion-tab="split">
-                    <i class="fa-solid fa-scissors"></i> Split
+                    <i class="fa-solid fa-scissors"></i> ${t('store.fusion.splitTab')}
                 </button>
             </div>
             <div class="nft-fusion-body">
@@ -1188,10 +1189,10 @@ function renderFuseTab(nftsByTier) {
         fuseSelected = [];
         fuseTierFilter = null;
         // Show counts of owned NFTs per tier
-        const counts = [0, 1, 2].map(t => {
-            const name = TIER_NAMES_MAP[t];
+        const counts = [0, 1, 2].map(ti => {
+            const name = TIER_NAMES_MAP[ti];
             const s = getTierStyle(name);
-            const c = nftsByTier[t].length;
+            const c = nftsByTier[ti].length;
             return `<span style="color:${s.color}">${s.icon} ${c}</span>`;
         }).join(' <span style="opacity:0.3">/</span> ');
         return `
@@ -1217,13 +1218,13 @@ function renderFuseTab(nftsByTier) {
     const tierStyle = getTierStyle(tierName);
 
     // Tier filter buttons
-    const filterBtns = [0, 1, 2].map(t => {
-        const name = TIER_NAMES_MAP[t];
+    const filterBtns = [0, 1, 2].map(ti => {
+        const name = TIER_NAMES_MAP[ti];
         const style = getTierStyle(name);
-        const count = nftsByTier[t].length;
-        const isActive = t === fuseTierFilter;
+        const count = nftsByTier[ti].length;
+        const isActive = ti === fuseTierFilter;
         const isDisabled = count < 2;
-        return `<button class="nft-fusion-filter ${isActive ? 'active' : ''}" data-fuse-filter="${t}" ${isDisabled ? 'disabled' : ''} style="${isActive ? `border-color:${style.color};color:${style.color};background:${style.bg}` : ''}">
+        return `<button class="nft-fusion-filter ${isActive ? 'active' : ''}" data-fuse-filter="${ti}" ${isDisabled ? 'disabled' : ''} style="${isActive ? `border-color:${style.color};color:${style.color};background:${style.bg}` : ''}">
             ${style.icon} ${name} <span class="ff-count">${count}</span>
         </button>`;
     }).join('');
@@ -1307,10 +1308,10 @@ function renderBulkFuseTab(nftsByTier) {
         bulkFuseSelected = [];
         bulkFuseTierFilter = null;
         bulkFuseTargetTier = null;
-        const counts = [0, 1, 2].map(t => {
-            const name = TIER_NAMES_MAP[t];
+        const counts = [0, 1, 2].map(ti => {
+            const name = TIER_NAMES_MAP[ti];
             const s = getTierStyle(name);
-            const c = nftsByTier[t].length;
+            const c = nftsByTier[ti].length;
             return `<span style="color:${s.color}">${s.icon} ${c}</span>`;
         }).join(' <span style="opacity:0.3">/</span> ');
         return `
@@ -1335,13 +1336,13 @@ function renderBulkFuseTab(nftsByTier) {
     const tierStyle = getTierStyle(tierName);
 
     // Tier filter buttons
-    const filterBtns = [0, 1, 2].map(t => {
-        const name = TIER_NAMES_MAP[t];
+    const filterBtns = [0, 1, 2].map(ti => {
+        const name = TIER_NAMES_MAP[ti];
         const style = getTierStyle(name);
-        const count = nftsByTier[t].length;
-        const isActive = t === bulkFuseTierFilter;
+        const count = nftsByTier[ti].length;
+        const isActive = ti === bulkFuseTierFilter;
         const isDisabled = count < 4;
-        return `<button class="nft-fusion-filter ${isActive ? 'active' : ''}" data-bulk-filter="${t}" ${isDisabled ? 'disabled' : ''} style="${isActive ? `border-color:${style.color};color:${style.color};background:${style.bg}` : ''}">
+        return `<button class="nft-fusion-filter ${isActive ? 'active' : ''}" data-bulk-filter="${ti}" ${isDisabled ? 'disabled' : ''} style="${isActive ? `border-color:${style.color};color:${style.color};background:${style.bg}` : ''}">
             ${style.icon} ${name} <span class="ff-count">${count}</span>
         </button>`;
     }).join('');
@@ -1521,9 +1522,9 @@ function renderSplitTab(nftsByTier) {
                             This is <strong>irreversible</strong>.
                         </div>
                         <div class="nft-split-confirm-btns">
-                            <button class="nft-split-confirm-cancel" id="split-cancel-btn">Cancel</button>
+                            <button class="nft-split-confirm-cancel" id="split-cancel-btn">${t('common.cancel')}</button>
                             <button class="nft-split-confirm-go" id="split-confirm-btn" data-split-tokenid="${nft.tokenId}" data-split-source="${nft.tier}" data-split-target="${splitTargetTier}">
-                                <i class="fa-solid fa-scissors"></i> Confirm Split
+                                <i class="fa-solid fa-scissors"></i> ${t('common.confirm')} ${t('store.fusion.splitTab')}
                             </button>
                         </div>
                     </div>
@@ -1579,7 +1580,7 @@ function renderInventory() {
     if (countEl) countEl.textContent = boosters.length;
 
     if (!State.isConnected) {
-        container.innerHTML = `<div class="nft-empty" style="grid-column:1/-1"><i class="fa-solid fa-wallet"></i><p>Connect wallet to view</p></div>`;
+        container.innerHTML = `<div class="nft-empty" style="grid-column:1/-1"><i class="fa-solid fa-wallet"></i><p>${t('common.connectWalletFirst')}</p></div>`;
         return;
     }
 
@@ -1587,8 +1588,8 @@ function renderInventory() {
         container.innerHTML = `
             <div class="nft-empty" style="grid-column:1/-1">
                 <i class="fa-solid fa-gem"></i>
-                <p>No NFTs owned</p>
-                <p style="font-size:10px;color:var(--nft-text-3);margin-top:4px">Buy from a tier above to reduce your recycle rate</p>
+                <p>${t('store.noNftsYet')}</p>
+                <p style="font-size:10px;color:var(--nft-text-3);margin-top:4px">${t('store.buyFirstNft')}</p>
             </div>
         `;
         return;
@@ -1599,7 +1600,7 @@ function renderInventory() {
     const now = Math.floor(Date.now() / 1000);
 
     container.innerHTML = boosters.map(nft => {
-        const tier = boosterTiers.find(t => t.boostBips === Number(nft.boostBips));
+        const tier = boosterTiers.find(tr => tr.boostBips === Number(nft.boostBips));
         const style = getTierStyle(tier?.name);
 
         const tokenIdStr = nft.tokenId?.toString();
@@ -1625,7 +1626,7 @@ function renderInventory() {
                 <div class="nft-inv-name" style="color:${style.color}">${tier?.name || 'NFT'}</div>
                 <div class="nft-inv-id">#${nft.tokenId}</div>
                 <div class="nft-inv-actions">
-                    ${isAvailable ? `<a href="#" class="nft-inv-rent go-to-rental" data-tokenid="${nft.tokenId}">Rent</a>` : ''}
+                    ${isAvailable ? `<a href="#" class="nft-inv-rent go-to-rental" data-tokenid="${nft.tokenId}">${t('store.listForRent')}</a>` : ''}
                     <a href="#" class="nft-inv-metamask" data-add-wallet="${nft.tokenId}" data-tier-name="${tier?.name || 'NFT'}" title="Add to MetaMask">
                         <i class="fa-solid fa-wallet" style="font-size:9px"></i>
                     </a>
@@ -1661,7 +1662,7 @@ async function loadTradeHistory() {
     const container = document.getElementById('nft-hist-list');
 
     if (!State.userAddress) {
-        if (container) container.innerHTML = `<div class="nft-empty"><i class="fa-solid fa-wallet"></i><p>Connect wallet to view</p></div>`;
+        if (container) container.innerHTML = `<div class="nft-empty"><i class="fa-solid fa-wallet"></i><p>${t('common.connectWalletToView')}</p></div>`;
         return;
     }
 
@@ -1694,7 +1695,7 @@ function renderTradeHistory() {
     if (!container) return;
 
     if (!State.isConnected) {
-        container.innerHTML = `<div class="nft-empty"><i class="fa-solid fa-wallet"></i><p>Connect wallet to view</p></div>`;
+        container.innerHTML = `<div class="nft-empty"><i class="fa-solid fa-wallet"></i><p>${t('common.connectWalletToView')}</p></div>`;
         return;
     }
 
@@ -1702,7 +1703,7 @@ function renderTradeHistory() {
         container.innerHTML = `
             <div class="nft-empty">
                 <i class="fa-solid fa-receipt"></i>
-                <p>No NFT activity yet</p>
+                <p>${t('store.noTradeHistory')}</p>
             </div>
         `;
         return;
@@ -1865,7 +1866,7 @@ function setupEventListeners() {
                     button: fuseExecBtn,
                     onSuccess: async ({ newTokenId, resultTier }) => {
                         const tierName = TIER_NAMES_MAP[resultTier] || 'NFT';
-                        showToast(`Fused into ${tierName} #${newTokenId}!`, "success");
+                        showToast(t('store.toast.fuseSuccess', { tier: `${tierName} #${newTokenId}` }), "success");
                         // Optimistic: remove 2 source NFTs, add 1 higher-tier
                         optimisticBoosterUpdate({
                             remove: [t1, t2],
@@ -1878,7 +1879,7 @@ function setupEventListeners() {
                     },
                     onError: (error) => {
                         if (!error.cancelled && error.type !== 'user_rejected') {
-                            showToast("Fuse failed: " + (error.message || 'Unknown'), "error");
+                            showToast(t('store.toast.fuseFailed', { error: error.message || t('common.unknownError') }), "error");
                         }
                     }
                 });
@@ -1954,7 +1955,7 @@ function setupEventListeners() {
                     button: bulkExecBtn,
                     onSuccess: async ({ newTokenIds, targetTier: tt, inputCount }) => {
                         const targetName = TIER_NAMES_MAP[tt] || 'NFT';
-                        showToast(`Bulk forged ${inputCount} NFTs into ${newTokenIds.length}x ${targetName}!`, "success");
+                        showToast(t('store.toast.bulkFuseSuccess'), "success");
                         optimisticBoosterUpdate({
                             remove: tokenIds,
                             add: newTokenIds.map(id => ({ tokenId: id, boostBips: TIER_TO_BOOST[tt] || 1000 }))
@@ -1966,7 +1967,7 @@ function setupEventListeners() {
                     },
                     onError: (error) => {
                         if (!error.cancelled && error.type !== 'user_rejected') {
-                            showToast("Bulk forge failed: " + (error.message || 'Unknown'), "error");
+                            showToast(t('store.toast.bulkFuseFailed', { error: error.message || t('common.unknownError') }), "error");
                         }
                     }
                 });
@@ -2038,7 +2039,7 @@ function setupEventListeners() {
                     ...txParams,
                     onSuccess: async ({ newTokenIds, targetTier: tt }) => {
                         const tierName = TIER_NAMES_MAP[tt] || 'NFT';
-                        showToast(`Split into ${newTokenIds.length}x ${tierName}!`, "success");
+                        showToast(t('store.toast.splitSuccess', { tier: tierName }), "success");
                         // Optimistic: remove source NFT, add new lower-tier NFTs
                         optimisticBoosterUpdate({
                             remove: [tokenId],
@@ -2055,7 +2056,7 @@ function setupEventListeners() {
                         splitConfirmPending = false;
                         renderFusionSection();
                         if (!error.cancelled && error.type !== 'user_rejected') {
-                            showToast("Split failed: " + (error.message || 'Unknown'), "error");
+                            showToast(t('store.toast.splitFailed', { error: error.message || t('common.unknownError') }), "error");
                         }
                     }
                 });
@@ -2094,7 +2095,7 @@ function setupEventListeners() {
                 return;
             }
 
-            const tier = boosterTiers.find(t => t.boostBips === boostBips);
+            const tier = boosterTiers.find(tr => tr.boostBips === boostBips);
             if (!tier) return;
 
             const data = poolDataMap.get(boostBips);
@@ -2102,7 +2103,7 @@ function setupEventListeners() {
 
             const poolAddress = data.poolAddress;
             if (!poolAddress) {
-                showToast("Pool address not found", "error");
+                showToast(t('common.error'), "error");
                 return;
             }
 
@@ -2114,7 +2115,7 @@ function setupEventListeners() {
                         poolAddress,
                         button: actionBtn,
                         onSuccess: async (receipt, tokenId) => {
-                            showToast(`${tier.name} NFT purchased!`, "success");
+                            showToast(t('store.toast.buySuccess', { tier: tier.name }), "success");
                             invalidateAllPoolCaches();
                             // Optimistic: add new NFT immediately
                             if (tokenId != null) {
@@ -2129,7 +2130,7 @@ function setupEventListeners() {
                         },
                         onError: (error) => {
                             if (!error.cancelled && error.type !== 'user_rejected') {
-                                showToast("Buy failed: " + (error.message || error.reason || 'Unknown'), "error");
+                                showToast(t('store.toast.buyFailed', { error: error.message || error.reason || t('common.unknownError') }), "error");
                             }
                         }
                     });
@@ -2137,7 +2138,7 @@ function setupEventListeners() {
                     // Sell
                     const tokenId = data.firstSellableTokenId;
                     if (!tokenId) {
-                        showToast("No NFT available to sell", "error");
+                        showToast(t('store.noNftsYet'), "error");
                         isTransactionInProgress = false;
                         return;
                     }
@@ -2147,7 +2148,7 @@ function setupEventListeners() {
                         tokenId,
                         button: actionBtn,
                         onSuccess: async () => {
-                            showToast(`${tier.name} NFT sold!`, "success");
+                            showToast(t('store.toast.sellSuccess', { tier: tier.name }), "success");
                             invalidateAllPoolCaches();
                             // Optimistic: remove sold NFT immediately
                             optimisticBoosterUpdate({ remove: [tokenId] });
@@ -2160,7 +2161,7 @@ function setupEventListeners() {
                         },
                         onError: (error) => {
                             if (!error.cancelled && error.type !== 'user_rejected') {
-                                showToast("Sell failed: " + (error.message || error.reason || 'Unknown'), "error");
+                                showToast(t('store.toast.sellFailed', { error: error.message || error.reason || t('common.unknownError') }), "error");
                             }
                         }
                     });

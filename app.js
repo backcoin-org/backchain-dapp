@@ -12,8 +12,9 @@ import { DOMElements } from './dom-elements.js';
 import { State } from './state.js';
 import { initPublicProvider, initWalletSubscriptions, disconnectWallet, openConnectModal } from './modules/wallet.js';
 import { showToast, showShareModal, showWelcomeModal, dismissSplash, openModal, closeModal } from './ui-feedback.js';
-import { formatBigNumber } from './utils.js'; 
-import { loadAddresses } from './config.js'; 
+import { formatBigNumber } from './utils.js';
+import { loadAddresses } from './config.js';
+import { initI18n, t } from './modules/i18n/index.js'; 
 
 // V7.9: Import from new transaction module
 import { executeFaucetClaim } from './modules/transactions/faucet-tx.js'; 
@@ -167,6 +168,7 @@ function navigateTo(pageId, forceUpdate = false) {
         
         const wasNewPage = activePageId !== pageId;
         activePageId = pageId;
+        window._activePageId = pageId;
 
         // Highlight nav item (sidebar)
         const activeNavItem = document.querySelector(`.sidebar-link[data-target="${pageId}"]`);
@@ -280,7 +282,7 @@ function performUIUpdate(forcePageUpdate) {
 
     } else {
         // Estilo "Desconectado"
-        const defaultText = `<i class="fa-solid fa-plug"></i> Connect Wallet`;
+        const defaultText = `<i class="fa-solid fa-plug"></i> ${t('common.connectWallet')}`;
         
         connectBtns.forEach(btn => {
             if (btn) {
@@ -322,13 +324,13 @@ function onWalletStateChange(changes) {
     updateUIState(shouldForceUpdate); 
     
     if (isConnected && isNewConnection) {
-        showToast(`Connected: ${formatAddress(address)}`, "success");
+        showToast(`${t('common.connect')}: ${formatAddress(address)}`, "success");
         // Gasless tutor onboarding: auto-set tutor + faucet bonus via API
         if (localStorage.getItem('backchain_tutor')) {
             processTutorAfterConnect();
         }
     }
-    else if (!isConnected && wasConnected) showToast("Wallet disconnected.", "info");
+    else if (!isConnected && wasConnected) showToast(t('feedback.walletDisconnected'), "info");
 }
 
 // ============================================================================
@@ -371,7 +373,7 @@ function setupGlobalListeners() {
                 const pageId = item.dataset.target;
                 
                 if (pageId === 'faucet') {
-                    showToast("Accessing Testnet Faucet...", "info");
+                    showToast(t('dashboard.faucet.sending'), "info");
                     const success = await executeFaucetClaim(null);
                     if (success) updateUIState(true);
                     return; 
@@ -573,15 +575,18 @@ window.addEventListener('load', async () => {
         DOMElements.earn = document.getElementById('staking');
     }
 
+    // Initialize i18n (language detection + static element translation)
+    initI18n();
+
     try {
-        const addressesLoaded = await loadAddresses(); 
+        const addressesLoaded = await loadAddresses();
         if (!addressesLoaded) throw new Error("Failed to load contract addresses");
     } catch (error) {
         console.error("❌ Critical Initialization Error:", error);
-        showToast("Initialization failed. Please refresh.", "error");
+        showToast(t('common.error') + ': ' + t('common.retry'), "error");
         return;
     }
-    
+
     setupGlobalListeners();
 
     await initPublicProvider();

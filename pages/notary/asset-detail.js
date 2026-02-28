@@ -6,6 +6,7 @@ import { State } from '../../state.js';
 import { addresses } from '../../config.js';
 import { NT, ASSET_TYPES, ANNOTATION_TYPES, EXPLORER_ADDR } from './state.js';
 import { getAssetTypeInfo, getAnnotationTypeInfo, formatDateFull, shortenAddress, resolveStorageUrl, getFileTypeInfo } from './utils.js';
+import { t } from '../../modules/core/index.js';
 
 const ethers = window.ethers;
 
@@ -51,16 +52,16 @@ export function renderAssetDetail(el) {
             <!-- Document Preview -->
             <div style="margin-bottom:16px;cursor:pointer" onclick="window.open('${docUrl}','_blank')">
                 <div style="min-height:200px;max-height:400px;background:var(--nt-bg3);border-radius:var(--nt-radius);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;border:1px solid var(--nt-border);transition:border-color var(--nt-transition)" onmouseover="this.style.borderColor='rgba(245,158,11,0.3)'" onmouseout="this.style.borderColor='var(--nt-border)'">
-                    <img src="${docUrl}" style="width:100%;height:100%;object-fit:contain;max-height:400px" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" alt="Document">
+                    <img src="${docUrl}" style="width:100%;height:100%;object-fit:contain;max-height:400px" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" alt="${t('notary.certDetailView.viewDocument')}">
                     <div style="display:none;flex-direction:column;align-items:center;justify-content:center;width:100%;height:200px;position:absolute;inset:0;background:var(--nt-bg3)">
                         <i class="${fileInfo.icon}" style="font-size:48px;color:${fileInfo.color};margin-bottom:8px"></i>
                         <span style="font-size:12px;color:var(--nt-text-2);font-weight:600">${fileName || fileInfo.label + ' file'}</span>
                         ${fileSize ? `<span style="font-size:11px;color:var(--nt-text-3);margin-top:2px">${fileSize}</span>` : ''}
-                        <span style="font-size:10px;color:var(--nt-accent);margin-top:6px"><i class="fa-solid fa-arrow-up-right-from-square" style="margin-right:4px"></i>Tap to open</span>
+                        <span style="font-size:10px;color:var(--nt-accent);margin-top:6px"><i class="fa-solid fa-arrow-up-right-from-square" style="margin-right:4px"></i>${t('notary.assetDetailView.tapToOpen')}</span>
                     </div>
                     <div style="position:absolute;top:12px;right:12px;background:rgba(0,0,0,0.85);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;color:var(--nt-accent);font-family:monospace">#${asset.id}</div>
                     <div style="position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.75);padding:4px 10px;border-radius:8px;font-size:10px;color:var(--nt-text-2)">
-                        <i class="fa-solid fa-arrow-up-right-from-square" style="margin-right:4px"></i>Tap to view
+                        <i class="fa-solid fa-arrow-up-right-from-square" style="margin-right:4px"></i>${t('notary.assetDetailView.tapToView')}
                     </div>
                 </div>
             </div>
@@ -70,32 +71,32 @@ export function renderAssetDetail(el) {
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
                 <div class="nt-card" style="padding:12px;text-align:center">
                     <div style="font-size:18px;font-weight:800;color:var(--nt-text);font-family:monospace">${asset.transferCount || 0}</div>
-                    <div style="font-size:10px;color:var(--nt-text-3);margin-top:2px">Transfers</div>
+                    <div style="font-size:10px;color:var(--nt-text-3);margin-top:2px">${t('notary.assetDetailView.transfers')}</div>
                 </div>
                 <div class="nt-card" style="padding:12px;text-align:center">
                     <div style="font-size:18px;font-weight:800;color:var(--nt-text);font-family:monospace">${asset.annotationCount || 0}</div>
-                    <div style="font-size:10px;color:var(--nt-text-3);margin-top:2px">Annotations</div>
+                    <div style="font-size:10px;color:var(--nt-text-3);margin-top:2px">${t('notary.assetDetailView.annotations')}</div>
                 </div>
                 <div class="nt-card" style="padding:12px;text-align:center">
                     <div style="font-size:18px;font-weight:800;color:var(--nt-text);font-family:monospace">${formatDateFull(asset.registeredAt)?.split(',')[0] || '—'}</div>
-                    <div style="font-size:10px;color:var(--nt-text-3);margin-top:2px">Registered</div>
+                    <div style="font-size:10px;color:var(--nt-text-3);margin-top:2px">${t('notary.assetDetailView.registeredOn')}</div>
                 </div>
             </div>
 
             <!-- Owner -->
             <div class="nt-card" style="margin-bottom:12px;padding:14px">
-                <div style="font-size:10px;font-weight:600;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Owner</div>
+                <div style="font-size:10px;font-weight:600;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">${t('notary.assetDetailView.owner')}</div>
                 <div style="font-size:12px;font-family:monospace;color:var(--nt-text-2)">${asset.owner || '—'}</div>
-                ${isOwner ? '<div style="font-size:10px;color:var(--nt-green);margin-top:4px"><i class="fa-solid fa-check-circle" style="margin-right:3px"></i>You own this asset</div>' : ''}
+                ${isOwner ? `<div style="font-size:10px;color:var(--nt-green);margin-top:4px"><i class="fa-solid fa-check-circle" style="margin-right:3px"></i>${t('notary.assetDetailView.youOwnThis')}</div>` : ''}
             </div>
 
             <!-- Document Hash -->
             ${asset.documentHash && asset.documentHash !== '0x' + '0'.repeat(64) ? `
                 <div class="nt-card" style="margin-bottom:12px;padding:14px">
                     <div style="font-size:10px;font-weight:600;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">
-                        <i class="fa-solid fa-fingerprint" style="color:var(--nt-accent);margin-right:4px"></i>Document Hash
+                        <i class="fa-solid fa-fingerprint" style="color:var(--nt-accent);margin-right:4px"></i>${t('notary.assetDetailView.documentHash')}
                     </div>
-                    <div class="nt-hash-display" onclick="NotaryPage.copyHash('${asset.documentHash}')" title="Click to copy">
+                    <div class="nt-hash-display" onclick="NotaryPage.copyHash('${asset.documentHash}')" title="${t('common.copy')}">
                         ${asset.documentHash}
                         <i class="fa-regular fa-copy" style="float:right;margin-top:2px;color:var(--nt-accent)"></i>
                     </div>
@@ -105,7 +106,7 @@ export function renderAssetDetail(el) {
             <!-- Additional Info -->
             ${asset.parsedMeta?.extra ? `
                 <div class="nt-card" style="margin-bottom:12px;padding:14px">
-                    <div style="font-size:10px;font-weight:600;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Additional Info</div>
+                    <div style="font-size:10px;font-weight:600;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">${t('notary.assetDetailView.additionalInfo')}</div>
                     <div style="font-size:13px;color:var(--nt-text-2);line-height:1.5">${asset.parsedMeta.extra}</div>
                 </div>
             ` : ''}
@@ -114,54 +115,54 @@ export function renderAssetDetail(el) {
             ${isOwner ? `
                 <div style="display:flex;gap:8px;margin-bottom:16px">
                     <button class="nt-btn-primary" style="flex:1;padding:14px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(135deg,#3b82f6,#6366f1)" onclick="NotaryPage.toggleAssetTransferForm()">
-                        <i class="fa-solid fa-paper-plane"></i>Transfer
+                        <i class="fa-solid fa-paper-plane"></i>${t('notary.assetDetailView.transferOwnership')}
                     </button>
                     <button class="nt-btn-primary" style="flex:1;padding:14px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px" onclick="NotaryPage.toggleAnnotationForm()">
-                        <i class="fa-solid fa-note-sticky"></i>Annotate
+                        <i class="fa-solid fa-note-sticky"></i>${t('notary.assetDetailView.annotate')}
                     </button>
                 </div>
 
                 <!-- Transfer Form (hidden by default) -->
                 <div id="nt-asset-transfer-form" class="nt-card" style="display:none;margin-bottom:12px;padding:16px">
                     <div style="font-size:11px;font-weight:600;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px">
-                        <i class="fa-solid fa-paper-plane" style="color:#6366f1;margin-right:4px"></i>Transfer Asset
+                        <i class="fa-solid fa-paper-plane" style="color:#6366f1;margin-right:4px"></i>${t('notary.assetDetailView.transferAsset')}
                     </div>
                     <div style="font-size:12px;color:var(--nt-text-2);margin-bottom:12px">
-                        Transfer ownership. This creates a permanent on-chain record.
+                        ${t('notary.assetDetailView.transferDesc')}
                     </div>
-                    <input id="nt-asset-transfer-addr" type="text" placeholder="New owner address (0x...)"
+                    <input id="nt-asset-transfer-addr" type="text" placeholder="${t('notary.assetDetailView.newOwnerPlaceholder')}"
                         style="width:100%;padding:12px 14px;background:var(--nt-bg);border:1px solid var(--nt-border);border-radius:10px;color:var(--nt-text);font-size:13px;font-family:monospace;outline:none;box-sizing:border-box;margin-bottom:8px;transition:border-color var(--nt-transition)"
                         onfocus="this.style.borderColor='rgba(99,102,241,0.5)'" onblur="this.style.borderColor='var(--nt-border)'">
-                    <input id="nt-asset-transfer-value" type="text" placeholder="Declared value in BNB (optional)"
+                    <input id="nt-asset-transfer-value" type="text" placeholder="${t('notary.assetDetailView.declaredValuePlaceholder')}"
                         style="width:100%;padding:12px 14px;background:var(--nt-bg);border:1px solid var(--nt-border);border-radius:10px;color:var(--nt-text);font-size:13px;outline:none;box-sizing:border-box;margin-bottom:8px;transition:border-color var(--nt-transition)"
                         onfocus="this.style.borderColor='rgba(99,102,241,0.5)'" onblur="this.style.borderColor='var(--nt-border)'">
-                    <input id="nt-asset-transfer-note" type="text" placeholder="Transfer note (optional)"
+                    <input id="nt-asset-transfer-note" type="text" placeholder="${t('notary.assetDetailView.transferNotePlaceholder')}"
                         style="width:100%;padding:12px 14px;background:var(--nt-bg);border:1px solid var(--nt-border);border-radius:10px;color:var(--nt-text);font-size:13px;outline:none;box-sizing:border-box;margin-bottom:10px;transition:border-color var(--nt-transition)"
                         onfocus="this.style.borderColor='rgba(99,102,241,0.5)'" onblur="this.style.borderColor='var(--nt-border)'">
                     <div style="display:flex;gap:8px">
                         <button id="nt-btn-transfer-asset" class="nt-btn-primary" style="flex:1;padding:12px;font-size:13px;background:linear-gradient(135deg,#3b82f6,#6366f1);display:flex;align-items:center;justify-content:center;gap:6px" onclick="NotaryPage.handleTransferAsset()">
-                            <i class="fa-solid fa-paper-plane"></i>Transfer
+                            <i class="fa-solid fa-paper-plane"></i>${t('notary.assetDetailView.transferOwnership')}
                         </button>
-                        <button class="nt-btn-secondary" style="padding:12px 16px;font-size:13px" onclick="NotaryPage.toggleAssetTransferForm()">Cancel</button>
+                        <button class="nt-btn-secondary" style="padding:12px 16px;font-size:13px" onclick="NotaryPage.toggleAssetTransferForm()">${t('common.cancel')}</button>
                     </div>
                 </div>
 
                 <!-- Annotation Form (hidden by default) -->
                 <div id="nt-annotation-form" class="nt-card" style="display:none;margin-bottom:12px;padding:16px">
                     <div style="font-size:11px;font-weight:600;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px">
-                        <i class="fa-solid fa-note-sticky" style="color:var(--nt-accent);margin-right:4px"></i>Add Annotation
+                        <i class="fa-solid fa-note-sticky" style="color:var(--nt-accent);margin-right:4px"></i>${t('notary.assetDetailView.addAnnotation')}
                     </div>
                     <select id="nt-annotation-type" style="width:100%;padding:12px 14px;background:var(--nt-bg);border:1px solid var(--nt-border);border-radius:10px;color:var(--nt-text);font-size:13px;outline:none;box-sizing:border-box;margin-bottom:8px">
-                        ${ANNOTATION_TYPES.map(t => `<option value="${t.id}" style="background:var(--nt-bg)">${t.name}</option>`).join('')}
+                        ${ANNOTATION_TYPES.map(at => `<option value="${at.id}" style="background:var(--nt-bg)">${at.name}</option>`).join('')}
                     </select>
-                    <textarea id="nt-annotation-meta" placeholder="Details about this annotation..."
+                    <textarea id="nt-annotation-meta" placeholder="${t('notary.assetDetailView.annotationPlaceholder')}"
                         style="width:100%;padding:12px 14px;background:var(--nt-bg);border:1px solid var(--nt-border);border-radius:10px;color:var(--nt-text);font-size:13px;outline:none;box-sizing:border-box;resize:vertical;min-height:60px;font-family:inherit;margin-bottom:10px;transition:border-color var(--nt-transition)"
                         onfocus="this.style.borderColor='rgba(245,158,11,0.5)'" onblur="this.style.borderColor='var(--nt-border)'"></textarea>
                     <div style="display:flex;gap:8px">
                         <button id="nt-btn-add-annotation" class="nt-btn-primary" style="flex:1;padding:12px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px" onclick="NotaryPage.handleAddAnnotation()">
-                            <i class="fa-solid fa-plus"></i>Add Annotation
+                            <i class="fa-solid fa-plus"></i>${t('notary.assetDetailView.addAnnotation')}
                         </button>
-                        <button class="nt-btn-secondary" style="padding:12px 16px;font-size:13px" onclick="NotaryPage.toggleAnnotationForm()">Cancel</button>
+                        <button class="nt-btn-secondary" style="padding:12px 16px;font-size:13px" onclick="NotaryPage.toggleAnnotationForm()">${t('common.cancel')}</button>
                     </div>
                 </div>
             ` : ''}
@@ -170,13 +171,13 @@ export function renderAssetDetail(el) {
             <div class="nt-card" style="margin-bottom:12px;padding:0;overflow:hidden">
                 <div style="padding:14px 16px;border-bottom:1px solid var(--nt-border);display:flex;align-items:center;justify-content:space-between">
                     <div style="font-size:13px;font-weight:700;color:var(--nt-text)">
-                        <i class="fa-solid fa-note-sticky" style="color:var(--nt-accent);margin-right:6px"></i>Annotations
+                        <i class="fa-solid fa-note-sticky" style="color:var(--nt-accent);margin-right:6px"></i>${t('notary.assetDetailView.annotations')}
                     </div>
-                    <span style="font-size:11px;color:var(--nt-text-3)">${annotations.length} total</span>
+                    <span style="font-size:11px;color:var(--nt-text-3)">${annotations.length} ${t('common.total').toLowerCase()}</span>
                 </div>
                 ${annotations.length === 0 ? `
                     <div style="text-align:center;padding:24px;color:var(--nt-text-3);font-size:12px">
-                        No annotations yet
+                        ${t('notary.assetDetailView.noAnnotations')}
                     </div>
                 ` : annotations.map(ann => {
                     const annType = getAnnotationTypeInfo(ann.annotationType);
@@ -202,14 +203,14 @@ export function renderAssetDetail(el) {
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
                 ${docUrl ? `
                     <a href="${docUrl}" target="_blank" class="nt-btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:12px">
-                        <i class="fa-solid fa-eye"></i>View Document
+                        <i class="fa-solid fa-eye"></i>${t('notary.certDetailView.viewDocument')}
                     </a>
                 ` : ''}
                 <a href="${EXPLORER_ADDR}${addresses?.notary}?a=${asset.id}" target="_blank" class="nt-btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:12px">
-                    <i class="fa-solid fa-arrow-up-right-from-square"></i>View on Explorer
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i>${t('common.viewOnExplorer')}
                 </a>
                 <button class="nt-btn-secondary" style="font-size:12px;display:inline-flex;align-items:center;gap:6px" onclick="NotaryPage.addToWallet('${asset.id}')">
-                    <i class="fa-solid fa-wallet"></i>Add to Wallet
+                    <i class="fa-solid fa-wallet"></i>${t('notary.nftCard.addToWallet')}
                 </button>
             </div>
         </div>

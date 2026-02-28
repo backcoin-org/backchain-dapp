@@ -5,6 +5,7 @@
 import { addresses } from '../../config.js';
 import { NT, EXPLORER_ADDR } from './state.js';
 import { shortenAddress, formatTimestamp } from './utils.js';
+import { t } from '../../modules/core/index.js';
 
 export function renderStats(el) {
     if (NT.statsLoading && !NT.stats) {
@@ -27,28 +28,28 @@ export function renderStats(el) {
                         <i class="fa-solid fa-stamp" style="font-size:16px;color:var(--nt-accent)"></i>
                     </div>
                     <div class="nt-stat-value">${stats?.totalCertifications ?? stats?.totalNotarizations ?? '—'}</div>
-                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">Notarizations</div>
+                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">${t('notary.statsTab.notarizations')}</div>
                 </div>
                 <div class="nt-stat-card">
                     <div style="width:36px;height:36px;border-radius:50%;background:rgba(34,197,94,0.1);display:inline-flex;align-items:center;justify-content:center;margin-bottom:10px">
                         <i class="fa-solid fa-right-left" style="font-size:16px;color:var(--nt-green)"></i>
                     </div>
                     <div class="nt-stat-value">${stats?.totalTransfers ?? '—'}</div>
-                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">Transfers</div>
+                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">${t('notary.statsTab.totalTransfers')}</div>
                 </div>
                 <div class="nt-stat-card">
                     <div style="width:36px;height:36px;border-radius:50%;background:rgba(245,158,11,0.1);display:inline-flex;align-items:center;justify-content:center;margin-bottom:10px">
                         <i class="fa-solid fa-house" style="font-size:16px;color:var(--nt-accent)"></i>
                     </div>
                     <div class="nt-stat-value">${stats?.totalAssets ?? '—'}</div>
-                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">Assets</div>
+                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">${t('notary.statsTab.totalAssets')}</div>
                 </div>
                 <div class="nt-stat-card">
                     <div style="width:36px;height:36px;border-radius:50%;background:rgba(96,165,250,0.1);display:inline-flex;align-items:center;justify-content:center;margin-bottom:10px">
                         <i class="fa-solid fa-note-sticky" style="font-size:16px;color:var(--nt-blue)"></i>
                     </div>
                     <div class="nt-stat-value">${stats?.totalAnnotations ?? '—'}</div>
-                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">Annotations</div>
+                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">${t('notary.statsTab.annotations')}</div>
                 </div>
             </div>
 
@@ -56,13 +57,13 @@ export function renderStats(el) {
             <div class="nt-card" style="margin-top:16px;padding:0;overflow:hidden">
                 <div style="padding:16px 20px;border-bottom:1px solid var(--nt-border)">
                     <div style="font-size:13px;font-weight:700;color:var(--nt-text)">
-                        <i class="fa-solid fa-clock-rotate-left" style="color:var(--nt-accent);margin-right:6px"></i>Recent Notarizations
+                        <i class="fa-solid fa-clock-rotate-left" style="color:var(--nt-accent);margin-right:6px"></i>${t('notary.statsTab.recentActivity')}
                     </div>
                 </div>
                 <div id="nt-recent-feed">
                     ${NT.recentNotarizations.length === 0 ? `
                         <div style="text-align:center;padding:32px 20px;color:var(--nt-text-3);font-size:13px">
-                            ${NT.statsLoading ? '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>Loading...' : 'No recent notarizations found'}
+                            ${NT.statsLoading ? `<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>${t('common.loading')}` : t('notary.statsTab.noRecentNotarizations')}
                         </div>
                     ` : NT.recentNotarizations.map(item => `
                         <div class="nt-recent-item">
@@ -70,7 +71,7 @@ export function renderStats(el) {
                                 <i class="fa-solid fa-stamp" style="font-size:14px;color:var(--nt-accent)"></i>
                             </div>
                             <div style="flex:1;min-width:0">
-                                <div style="font-size:12px;font-weight:600;color:var(--nt-text)">Certificate #${item.tokenId}</div>
+                                <div style="font-size:12px;font-weight:600;color:var(--nt-text)">${t('notary.certDetail.title').replace('{id}', item.tokenId)}</div>
                                 <div style="font-size:11px;color:var(--nt-text-3)">${shortenAddress(item.owner)}</div>
                             </div>
                             <div style="text-align:right;flex-shrink:0">
@@ -83,7 +84,7 @@ export function renderStats(el) {
 
             <div style="text-align:center;margin-top:16px">
                 <a href="${EXPLORER_ADDR}${addresses?.notary}" target="_blank" class="nt-btn-secondary" style="font-size:12px;padding:10px 20px;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
-                    <i class="fa-solid fa-arrow-up-right-from-square"></i>View Contract on Explorer
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i>${t('notary.statsTab.viewContract')}
                 </a>
             </div>
         </div>

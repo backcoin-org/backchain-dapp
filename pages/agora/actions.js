@@ -8,7 +8,7 @@ import { State } from '../../state.js';
 import { showToast } from '../../ui-feedback.js';
 import { agoraABI } from '../../config.js';
 import { BackchatTx } from '../../modules/transactions/index.js';
-import { irysUploadFile } from '../../modules/core/index.js';
+import { irysUploadFile, t } from '../../modules/core/index.js';
 import { LiveStream } from '../../modules/webrtc-live.js';
 import { BC, getMaxContent, getOperatorAddress, MEDIA_LIMITS, GALLERY_MAX_ITEMS, SOCIAL_LINK_TYPES } from './state.js';
 import { getProfileName, getProfileUsername, getIPFSUrl } from './utils.js';
@@ -47,9 +47,9 @@ export function goBack() {
 export async function doCreatePost() {
     const input = document.getElementById('bc-compose-input');
     const content = input?.value?.trim();
-    if (!content) { showToast('Please write something', 'error'); return; }
+    if (!content) { showToast(t('agora.toast.pleaseWrite'), 'error'); return; }
     const maxLen = getMaxContent();
-    if (content.length > maxLen) { showToast(`Post too long (max ${maxLen.toLocaleString()} chars)`, 'error'); return; }
+    if (content.length > maxLen) { showToast(t('agora.toast.postTooLong', {max: maxLen.toLocaleString()}), 'error'); return; }
 
     BC.isPosting = true;
     BC._render();
@@ -80,7 +80,7 @@ export async function doCreatePost() {
             }
         } catch (e) {
             console.error('[Agora] Media upload failed:', e);
-            showToast('Upload failed: ' + e.message, 'error');
+            showToast(t('agora.toast.uploadFailed', {error: e.message}), 'error');
             BC.isPosting = false;
             BC.isUploadingImage = false;
             BC._render();
@@ -105,7 +105,7 @@ export async function doCreatePost() {
             BC.pendingMediaType = null;
             BC.composeTag = 0;
             BC.isPosting = false;
-            showToast('Post created!', 'success');
+            showToast(t('agora.toast.postCreated'), 'success');
             await loadPosts();
         },
         onError: () => {
@@ -120,7 +120,7 @@ export async function doCreatePost() {
 export async function doCreateReply(parentId) {
     const input = document.getElementById('bc-reply-input');
     const content = input?.value?.trim();
-    if (!content) { showToast('Please write a reply', 'error'); return; }
+    if (!content) { showToast(t('agora.toast.pleaseWriteReply'), 'error'); return; }
 
     const btn = document.getElementById('bc-reply-btn');
     await BackchatTx.createReply({
@@ -129,7 +129,7 @@ export async function doCreateReply(parentId) {
         button: btn,
         onSuccess: async () => {
             if (input) input.value = '';
-            showToast('Reply posted!', 'success');
+            showToast(t('agora.toast.replyPosted'), 'success');
             await loadPosts();
             BC._render();
         }
@@ -144,7 +144,7 @@ export async function doRepost(originalPostId) {
         button: btn,
         onSuccess: async () => {
             closeModal('repost');
-            showToast('Reposted!', 'success');
+            showToast(t('agora.toast.reposted'), 'success');
             await loadPosts();
         }
     });
@@ -154,7 +154,7 @@ export async function doLike(postId) {
     const myAddr = State.userAddress?.toLowerCase();
     // Check if already in cart
     if (BC.actionCart.some(a => a.type === 'like' && String(a.targetId) === String(postId))) {
-        showToast('Already in cart', 'info');
+        showToast(t('agora.toast.alreadyInCart'), 'info');
         return;
     }
     // Optimistic UI
@@ -166,7 +166,7 @@ export async function doLike(postId) {
     const postLabel = `Post #${postId}`;
     BC.actionCart.push({ type: 'like', targetId: String(postId), label: postLabel });
     _saveCart();
-    showToast('Like added to cart', 'success');
+    showToast(t('agora.toast.likeAddedToCart'), 'success');
     BC._render();
 }
 
@@ -176,7 +176,7 @@ export async function doSuperLike(postId, amount) {
         postId, ethAmount,
         operator: getOperatorAddress(),
         onSuccess: async () => {
-            showToast('Super Liked!', 'success');
+            showToast(t('agora.toast.superLiked'), 'success');
             await loadPosts();
         }
     });
@@ -185,14 +185,14 @@ export async function doSuperLike(postId, amount) {
 export async function doDownvote(postId) {
     // Check if already in cart
     if (BC.actionCart.some(a => a.type === 'downvote' && String(a.targetId) === String(postId))) {
-        showToast('Already in cart', 'info');
+        showToast(t('agora.toast.alreadyInCart'), 'info');
         return;
     }
     // Add to cart
     const postLabel = `Post #${postId}`;
     BC.actionCart.push({ type: 'downvote', targetId: String(postId), label: postLabel });
     _saveCart();
-    showToast('Downvote added to cart', 'success');
+    showToast(t('agora.toast.downvoteAddedToCart'), 'success');
     BC._render();
 }
 
@@ -200,7 +200,7 @@ export async function doDeletePost(postId) {
     await BackchatTx.deletePost({
         postId,
         onSuccess: async () => {
-            showToast('Post deleted', 'success');
+            showToast(t('agora.toast.deleteSuccess'), 'success');
             await loadPosts();
         }
     });
@@ -209,15 +209,15 @@ export async function doDeletePost(postId) {
 export async function doEditPost(postId) {
     const input = document.getElementById('bc-edit-post-input');
     const newContent = input?.value?.trim();
-    if (!newContent) { showToast('Content is required', 'error'); return; }
+    if (!newContent) { showToast(t('agora.toast.contentRequired'), 'error'); return; }
     const maxLen = getMaxContent();
-    if (newContent.length > maxLen) { showToast(`Too long (max ${maxLen.toLocaleString()})`, 'error'); return; }
+    if (newContent.length > maxLen) { showToast(t('agora.toast.tooLong', {max: maxLen.toLocaleString()}), 'error'); return; }
 
     const btn = document.getElementById('bc-edit-post-btn');
     await BackchatTx.editPost({
         postId, newContent, button: btn,
         onSuccess: async () => {
-            showToast('Post edited!', 'success');
+            showToast(t('agora.toast.postEdited'), 'success');
             closeModal('edit-post');
             await loadPosts();
             BC._render();
@@ -237,7 +237,7 @@ export async function doBlockUser(address) {
         userAddress: address,
         onSuccess: () => {
             BC.blockedAuthors.add(address.toLowerCase());
-            showToast('User blocked', 'success');
+            showToast(t('agora.toast.userBlocked'), 'success');
             BC._render();
         },
         onError: (err) => { showToast(err?.shortMessage || err?.message || 'Block failed', 'error'); }
@@ -249,7 +249,7 @@ export async function doUnblockUser(address) {
         userAddress: address,
         onSuccess: () => {
             BC.blockedAuthors.delete(address.toLowerCase());
-            showToast('User unblocked', 'success');
+            showToast(t('agora.toast.userUnblocked'), 'success');
             BC._render();
         },
         onError: (err) => { showToast(err?.shortMessage || err?.message || 'Unblock failed', 'error'); }
@@ -260,7 +260,7 @@ export async function doPinPost(postId) {
     await BackchatTx.pinPost({
         postId,
         onSuccess: async () => {
-            showToast('Post pinned!', 'success');
+            showToast(t('agora.toast.postPinned'), 'success');
             await loadPosts();
         }
     });
@@ -269,7 +269,7 @@ export async function doPinPost(postId) {
 export async function doFollow(address) {
     // Check if already in cart
     if (BC.actionCart.some(a => a.type === 'follow' && a.targetId.toLowerCase() === address.toLowerCase())) {
-        showToast('Already in cart', 'info');
+        showToast(t('agora.toast.alreadyInCart'), 'info');
         return;
     }
     // Optimistic UI
@@ -278,7 +278,7 @@ export async function doFollow(address) {
     const name = getProfileName(address);
     BC.actionCart.push({ type: 'follow', targetId: address, label: name });
     _saveCart();
-    showToast('Follow added to cart', 'success');
+    showToast(t('agora.toast.followAddedToCart'), 'success');
     BC._render();
 }
 
@@ -287,7 +287,7 @@ export async function doUnfollow(address) {
         toUnfollow: address,
         onSuccess: () => {
             BC.following.delete(address.toLowerCase());
-            showToast('Unfollowed', 'success');
+            showToast(t('agora.toast.unfollowed'), 'success');
             BC._render();
         }
     });
@@ -307,7 +307,7 @@ export async function doCreateProfile() {
         operator: getOperatorAddress(),
         button: btn,
         onSuccess: async () => {
-            showToast('Profile created!', 'success');
+            showToast(t('agora.toast.profileCreated'), 'success');
             BC.hasProfile = true;
             BC.userProfile = { username: BC.wizUsername, displayName: BC.wizDisplayName, bio: BC.wizBio, language: BC.wizLanguage, address: State.userAddress };
             BC.profiles.set(State.userAddress.toLowerCase(), { username: BC.wizUsername, displayName: BC.wizDisplayName, bio: BC.wizBio, language: BC.wizLanguage });
@@ -335,16 +335,16 @@ export async function doUpdateProfile() {
     if (avatarFile) {
         try {
             btn && (btn.disabled = true);
-            btn && (btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading avatar...');
+            btn && (btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('agora.modals.editProfile.uploadingAvatar')}`);
             const result = await irysUploadFile(avatarFile, {
                 tags: [{ name: 'Type', value: 'agora-avatar' }],
                 optimize: { maxWidth: 512, maxHeight: 512, quality: 0.8 }
             });
             avatar = result.id;
         } catch (e) {
-            showToast('Avatar upload error: ' + e.message, 'error');
+            showToast(t('agora.toast.avatarUploadError', {error: e.message}), 'error');
             btn && (btn.disabled = false);
-            btn && (btn.innerHTML = '<i class="fa-solid fa-check"></i> Save Changes');
+            btn && (btn.innerHTML = `<i class="fa-solid fa-check"></i> ${t('agora.modals.editProfile.confirm')}`);
             return;
         }
     }
@@ -354,16 +354,16 @@ export async function doUpdateProfile() {
     if (bannerFile) {
         try {
             btn && (btn.disabled = true);
-            btn && (btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading cover...');
+            btn && (btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('agora.modals.editProfile.uploadingCover')}`);
             const result = await irysUploadFile(bannerFile, {
                 tags: [{ name: 'Type', value: 'agora-banner' }],
                 optimize: { maxWidth: 1200, maxHeight: 400, quality: 0.85 }
             });
             banner = result.id;
         } catch (e) {
-            showToast('Cover upload error: ' + e.message, 'error');
+            showToast(t('agora.toast.coverUploadError', {error: e.message}), 'error');
             btn && (btn.disabled = false);
-            btn && (btn.innerHTML = '<i class="fa-solid fa-check"></i> Save Changes');
+            btn && (btn.innerHTML = `<i class="fa-solid fa-check"></i> ${t('agora.modals.editProfile.confirm')}`);
             return;
         }
     }
@@ -383,7 +383,7 @@ export async function doUpdateProfile() {
             BC.userProfile.links = links;
             BC.profiles.set(State.userAddress.toLowerCase(), { ...BC.profiles.get(State.userAddress.toLowerCase()), displayName, bio, avatar, banner, language, location, links });
             closeModal('edit-profile');
-            showToast('Profile updated!', 'success');
+            showToast(t('agora.toast.profileUpdated'), 'success');
             BC._render();
         }
     });
@@ -400,8 +400,8 @@ export async function doObtainBadge(tier = 0) {
             BC.hasBadge = true;
             BC.badgeTier = Math.max(BC.badgeTier, tier);
             closeModal('badge');
-            const names = ['Verified', 'Premium', 'Elite'];
-            showToast(`${names[tier]} badge obtained!`, 'success');
+            const names = [t('agora.modals.badge.verified'), t('agora.modals.badge.premium'), t('agora.modals.badge.elite')];
+            showToast(t('agora.toast.badgeObtained', {name: names[tier]}), 'success');
             BC._render();
         }
     });
@@ -414,7 +414,7 @@ export async function doReportPost(postId, category = 0) {
             const post = BC.postsById.get(Number(postId));
             if (post) BC.blockedAuthors.add(post.author.toLowerCase());
             closeModal('report');
-            showToast('Post reported. Author blocked from your feed.', 'success');
+            showToast(t('agora.toast.postReported'), 'success');
             BC._render();
         },
         onError: (err) => { showToast(err?.shortMessage || err?.message || 'Report failed', 'error'); }
@@ -427,8 +427,8 @@ export async function doBoostPost(postId, tier = 0) {
         postId, tier, days, operator: getOperatorAddress(),
         onSuccess: () => {
             closeModal('boost-post');
-            const names = ['Standard', 'Featured'];
-            showToast(`Post boosted (${names[tier]}) for ${days} day${days !== 1 ? 's' : ''}!`, 'success');
+            const names = [t('agora.modals.boost.standard'), t('agora.modals.boost.featured')];
+            showToast(t('agora.toast.postBoosted', {tier: names[tier], days: String(days)}), 'success');
             BC._render();
         },
         onError: (err) => { showToast(err?.shortMessage || err?.message || 'Boost failed', 'error'); }
@@ -442,7 +442,7 @@ export async function doTipPost(postId) {
         operator: getOperatorAddress(),
         onSuccess: () => {
             closeModal('tip');
-            showToast(`Tipped ${amount} BNB!`, 'success');
+            showToast(t('agora.toast.tipped', {amount}), 'success');
             BC._render();
         },
         onError: (err) => { showToast(err?.shortMessage || err?.message || 'Tip failed', 'error'); }
@@ -455,7 +455,7 @@ export async function doBoostProfile(days = 1) {
         onSuccess: () => {
             BC.isBoosted = true;
             closeModal('boost');
-            showToast(`Profile boosted for ${days} day${days !== 1 ? 's' : ''}!`, 'success');
+            showToast(t('agora.toast.profileBoosted', {days: String(days)}), 'success');
             BC._render();
         },
         onError: (err) => { showToast(err?.shortMessage || err?.message || 'Boost failed', 'error'); }
@@ -493,7 +493,7 @@ export async function confirmChangeTag() {
         postId: _changeTagPostId,
         newTag: _changeTagNewTag,
         onSuccess: async () => {
-            showToast('Tag changed!', 'success');
+            showToast(t('agora.toast.tagChanged'), 'success');
             await loadPosts();
         }
     });
@@ -515,17 +515,17 @@ export function handleImageSelect(e) {
     const files = e.target?.files;
     if (!files || files.length === 0) return;
     const remaining = GALLERY_MAX_ITEMS - BC.pendingMedia.length;
-    if (remaining <= 0) { showToast(`Max ${GALLERY_MAX_ITEMS} media items`, 'error'); return; }
+    if (remaining <= 0) { showToast(t('agora.toast.maxMediaItems', {max: String(GALLERY_MAX_ITEMS)}), 'error'); return; }
     const toAdd = Array.from(files).slice(0, remaining);
     let processed = 0;
 
     for (const file of toAdd) {
         const isImage = file.type.startsWith('image/');
         const isVideo = file.type.startsWith('video/');
-        if (!isImage && !isVideo) { showToast('Unsupported file type. Use images or videos.', 'error'); continue; }
+        if (!isImage && !isVideo) { showToast(t('agora.toast.unsupportedFileType'), 'error'); continue; }
         const limit = isVideo ? MEDIA_LIMITS.video : MEDIA_LIMITS.image;
-        if (!limit.types.includes(file.type)) { showToast(`Invalid ${isVideo ? 'video' : 'image'} format.`, 'error'); continue; }
-        if (file.size > limit.max) { showToast(`File too large. Maximum ${limit.label}.`, 'error'); continue; }
+        if (!limit.types.includes(file.type)) { showToast(t('agora.toast.invalidFormat', {type: isVideo ? 'video' : 'image'}), 'error'); continue; }
+        if (file.size > limit.max) { showToast(t('agora.toast.fileTooLarge', {limit: limit.label}), 'error'); continue; }
 
         if (isVideo) {
             const video = document.createElement('video');
@@ -608,12 +608,12 @@ function renderWizardStatus() {
     const row = document.getElementById('wiz-username-status');
     if (row) {
         if (BC.wizChecking) {
-            row.innerHTML = '<span class="bc-username-checking"><i class="fa-solid fa-spinner fa-spin"></i> Checking...</span>';
+            row.innerHTML = `<span class="bc-username-checking"><i class="fa-solid fa-spinner fa-spin"></i> ${t('agora.profileSetup.usernameChecking')}</span>`;
         } else if (BC.wizUsernameOk === true) {
-            row.innerHTML = `<span class="bc-username-ok"><i class="fa-solid fa-check"></i> Available</span>
-                ${BC.wizFee && BC.wizFee !== '0.0' ? `<span class="bc-username-fee">${BC.wizFee} BNB</span>` : '<span class="bc-username-fee">FREE</span>'}`;
+            row.innerHTML = `<span class="bc-username-ok"><i class="fa-solid fa-check"></i> ${t('agora.profileSetup.usernameAvailable')}</span>
+                ${BC.wizFee && BC.wizFee !== '0.0' ? `<span class="bc-username-fee">${BC.wizFee} BNB</span>` : `<span class="bc-username-fee">${t('agora.profileSetup.usernameFree')}</span>`}`;
         } else if (BC.wizUsernameOk === false) {
-            row.innerHTML = '<span class="bc-username-taken"><i class="fa-solid fa-xmark"></i> Taken</span>';
+            row.innerHTML = `<span class="bc-username-taken"><i class="fa-solid fa-xmark"></i> ${t('agora.profileSetup.usernameTaken')}</span>`;
         } else {
             row.innerHTML = '';
         }
@@ -630,18 +630,18 @@ let _mediaRecorder = null;
 let _recordedChunks = [];
 
 export async function goLive() {
-    if (BC.isLive) { showToast('You are already live!', 'info'); return; }
-    if (!State.isConnected) { showToast('Connect your wallet to go live', 'error'); return; }
+    if (BC.isLive) { showToast(t('agora.toast.alreadyLive'), 'info'); return; }
+    if (!State.isConnected) { showToast(t('agora.toast.connectToGoLive'), 'error'); return; }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        showToast('Your browser does not support live streaming (HTTPS required)', 'error');
+        showToast(t('agora.toast.browserNoSupport'), 'error');
         return;
     }
     try {
-        showToast('Requesting camera access...', 'info');
+        showToast(t('agora.toast.requestingCamera'), 'info');
         const testStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         testStream.getTracks().forEach(t => t.stop());
 
-        showToast('Creating live post on-chain...', 'info');
+        showToast(t('agora.toast.creatingLivePost'), 'info');
         await BackchatTx.createPost({
             content: 'LIVE NOW', tag: BC.composeTag, contentType: 2,
             operator: getOperatorAddress(),
@@ -678,7 +678,7 @@ export async function goLive() {
                         const el = document.querySelector('[data-live-viewers]');
                         if (el) el.textContent = `${count} viewer${count !== 1 ? 's' : ''}`;
                     };
-                    showToast('You are now LIVE!', 'success');
+                    showToast(t('agora.toast.youAreLive'), 'success');
                     BC._render();
                     setTimeout(() => {
                         const video = document.getElementById('bc-local-video');
@@ -686,23 +686,23 @@ export async function goLive() {
                     }, 150);
                 } catch (e) {
                     console.error('[Agora] LiveStream start error:', e);
-                    showToast('Failed to start stream: ' + e.message, 'error');
+                    showToast(t('agora.toast.failedToStartStream', {error: e.message}), 'error');
                 }
             },
             onError: (e) => {
-                showToast('Failed to create live post: ' + (e?.message || 'Transaction rejected'), 'error');
+                showToast(t('agora.toast.failedToCreateLive', {error: e?.message || 'Transaction rejected'}), 'error');
             }
         });
     } catch (e) {
         console.error('[Agora] goLive error:', e);
         if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
-            showToast('Camera/mic permission denied. Please allow access and try again.', 'error');
+            showToast(t('agora.toast.cameraPermDenied'), 'error');
         } else if (e.name === 'NotFoundError') {
-            showToast('No camera or microphone found on this device', 'error');
+            showToast(t('agora.toast.noCameraFound'), 'error');
         } else if (e.name === 'NotReadableError') {
-            showToast('Camera is in use by another application', 'error');
+            showToast(t('agora.toast.cameraInUse'), 'error');
         } else {
-            showToast('Failed to go live: ' + e.message, 'error');
+            showToast(t('agora.toast.failedToGoLive', {error: e.message}), 'error');
         }
     }
 }
@@ -714,7 +714,7 @@ export async function endLive() {
     BC.liveStream = null;
     BC.isLive = false;
     BC.liveViewerCount = 0;
-    showToast('Stream ended. Saving recording...', 'success');
+    showToast(t('agora.toast.streamEndedSaving'), 'success');
     BC._render();
     const vodCID = await _uploadVOD();
     if (vodCID) {
@@ -726,19 +726,19 @@ export async function endLive() {
 export async function watchLive(postId) {
     if (!State.isConnected) return;
     const room = await LiveStream.getRoomByPostId(postId);
-    if (!room) { showToast('Stream has ended', 'info'); return; }
+    if (!room) { showToast(t('agora.toast.streamEnded'), 'info'); return; }
     const ls = new LiveStream();
     ls.onRemoteStream = (stream) => {
         const video = document.getElementById('bc-remote-video');
         if (video) video.srcObject = stream;
     };
     ls.onStreamEnd = () => {
-        showToast('Stream ended', 'info');
+        showToast(t('agora.toast.streamEnded'), 'info');
         BC.liveStream = null;
         BC.watchingStreamId = null;
         BC._render();
     };
-    ls.onError = (msg) => { showToast('Stream error: ' + msg, 'error'); };
+    ls.onError = (msg) => { showToast(t('agora.toast.streamError', {error: msg}), 'error'); };
     await ls.joinStream(room.id, State.userAddress);
     BC.liveStream = ls;
     BC.watchingStreamId = String(postId);
@@ -785,18 +785,18 @@ async function _uploadVOD() {
     const blob = new Blob(_recordedChunks, { type: 'video/webm' });
     const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
     if (blob.size > 100 * 1024 * 1024) {
-        showToast(`Recording too large (${sizeMB}MB). Max 100MB.`, 'error');
+        showToast(t('agora.toast.recordingTooLarge', {size: sizeMB}), 'error');
         return null;
     }
-    showToast(`Saving recording to Arweave (${sizeMB}MB)...`, 'info');
+    showToast(t('agora.toast.savingRecording', {size: sizeMB}), 'info');
     try {
         const file = new File([blob], `agora-live-${Date.now()}.webm`, { type: 'video/webm' });
         const result = await irysUploadFile(file, { tags: [{ name: 'Type', value: 'agora-vod' }] });
-        showToast('Live recording saved permanently!', 'success');
+        showToast(t('agora.toast.recordingSaved'), 'success');
         return result.id;
     } catch (e) {
         console.error('[Agora] VOD upload failed:', e);
-        showToast('Failed to save recording: ' + e.message, 'error');
+        showToast(t('agora.toast.failedToSaveRecording', {error: e.message}), 'error');
         return null;
     } finally {
         _recordedChunks = [];
@@ -870,7 +870,7 @@ export function clearCart() {
     BC.actionCart = [];
     BC.cartVisible = false;
     _saveCart();
-    showToast('Cart cleared', 'info');
+    showToast(t('agora.toast.cartCleared'), 'info');
     BC._render();
 }
 
@@ -892,7 +892,7 @@ export function getCartFeeTotal() {
 }
 
 export async function submitCart() {
-    if (BC.actionCart.length === 0) { showToast('Cart is empty', 'info'); return; }
+    if (BC.actionCart.length === 0) { showToast(t('agora.toast.cartEmpty'), 'info'); return; }
     if (BC.cartSubmitting) return;
 
     BC.cartSubmitting = true;
@@ -910,14 +910,14 @@ export async function submitCart() {
             BC.cartVisible = false;
             BC.cartSubmitting = false;
             _saveCart();
-            showToast(`${items.length} actions registered on blockchain!`, 'success');
+            showToast(t('agora.toast.batchSuccess', {count: String(items.length)}), 'success');
             await loadPosts();
             BC._render();
         },
         onError: (err) => {
             console.error('[Agora] Batch failed:', err);
             BC.cartSubmitting = false;
-            showToast(err?.shortMessage || err?.message || 'Batch transaction failed', 'error');
+            showToast(err?.shortMessage || err?.message || t('agora.toast.batchFailed'), 'error');
             BC._render();
         }
     });
@@ -946,7 +946,7 @@ export function sharePost(postId) {
         navigator.share({ title: `${authorName} on Backchain`, text, url }).catch(() => {});
     } else {
         navigator.clipboard.writeText(url).then(() => {
-            showToast('Link copied!', 'success');
+            showToast(t('agora.toast.linkCopied'), 'success');
         }).catch(() => {
             const input = document.createElement('input');
             input.value = url;
@@ -954,7 +954,7 @@ export function sharePost(postId) {
             input.select();
             document.execCommand('copy');
             document.body.removeChild(input);
-            showToast('Link copied!', 'success');
+            showToast(t('agora.toast.linkCopied'), 'success');
         });
     }
 }

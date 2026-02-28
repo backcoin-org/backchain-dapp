@@ -6,6 +6,7 @@
 import { DOMElements } from './dom-elements.js';
 // Se State não for usado aqui, pode remover a importação, mas mantive para compatibilidade
 import { State } from './state.js';
+import { t } from './modules/i18n/index.js';
 
 // Timer Management
 let activeTimerElements = []; 
@@ -138,7 +139,7 @@ const updateAllTimers = () => {
         const remaining = unlockTime - now;
 
         if (remaining <= 0) {
-            el.innerHTML = `<span class="text-green-500 font-semibold flex items-center"><i class="fa-solid fa-lock-open mr-1"></i> Unlocked</span>`;
+            el.innerHTML = `<span class="text-green-500 font-semibold flex items-center"><i class="fa-solid fa-lock-open mr-1"></i> ${t('feedback.unlocked')}</span>`;
             const parentCard = el.closest('.delegation-card');
             if (parentCard) {
                 parentCard.querySelector('.force-unstake-btn')?.remove();
@@ -194,31 +195,28 @@ export const handleRpcError = (error) => {
     const errorMessage = error.message || error?.data?.message || String(error);
 
     if (errorCode === -32002 || errorMessage.includes('-32002')) {
-        showToast(
-            'MetaMask has a pending request. Please open your MetaMask wallet extension and complete or reject any pending actions.',
-            'warning'
-        );
+        showToast(t('feedback.metamaskPending'), 'warning');
         return;
     }
 
     if (errorCode === 4001 || errorMessage.toLowerCase().includes('user rejected') || errorMessage.toLowerCase().includes('user denied')) {
-        showToast('Transaction cancelled by user.', 'info');
+        showToast(t('feedback.txCancelled'), 'info');
         return;
     }
 
     if (errorMessage.toLowerCase().includes('insufficient funds')) {
-        showToast('Insufficient funds in your wallet.', 'error');
+        showToast(t('feedback.insufficientFunds'), 'error');
         return;
     }
 
-    showToast(`Error: ${errorMessage.substring(0, 100)}...`, 'error');
+    showToast(`${t('common.error')}: ${errorMessage.substring(0, 100)}...`, 'error');
 };
 
 // --- ADD NFT TO WALLET ---
 
 export async function addNftToWallet(tokenId, tierName) {
     if (!window.ethereum) {
-        showToast('MetaMask not detected', 'error');
+        showToast(t('feedback.metamaskNotDetected'), 'error');
         return;
     }
 
@@ -238,13 +236,13 @@ export async function addNftToWallet(tokenId, tierName) {
         });
 
         if (wasAdded) {
-            showToast(`${tierName} NFT #${tokenId} added to wallet!`, 'success');
+            showToast(t('feedback.nftAddedToWallet', { tier: tierName, id: tokenId }), 'success');
         } else {
-            showToast('NFT not added to wallet', 'info');
+            showToast(t('feedback.nftNotAdded'), 'info');
         }
     } catch (error) {
         console.error('Error adding NFT to wallet:', error);
-        showToast('Failed to add NFT to wallet', 'error');
+        showToast(t('feedback.failedToAddNft'), 'error');
     }
 }
 
@@ -257,8 +255,8 @@ export function showShareModal(userAddress) {
     const shortAddr = isConnected ? `${userAddress.slice(0, 6)}...${userAddress.slice(-4)}` : '';
 
     const shareText = isConnected
-        ? encodeURIComponent("Join Backchain — I'll be your tutor! Stake BKC, earn rewards, and I'll earn too. Use my invite link:")
-        : encodeURIComponent("Check out Backchain — Unstoppable DeFi on opBNB. Stake, trade NFTs, play Fortune Pool & more!");
+        ? encodeURIComponent(t('feedback.shareConnectedText'))
+        : encodeURIComponent(t('feedback.shareDisconnectedText'));
 
     const content = `
         <div class="text-center py-2">
@@ -266,28 +264,28 @@ export function showShareModal(userAddress) {
                 <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-amber-500/20 to-orange-500/20 rounded-full mb-3">
                     <i class="fa-solid fa-graduation-cap text-3xl text-amber-400"></i>
                 </div>
-                <h2 class="text-2xl font-bold text-white mb-1">${isConnected ? 'Invite & Earn' : 'Share Backchain'}</h2>
+                <h2 class="text-2xl font-bold text-white mb-1">${isConnected ? t('feedback.inviteEarn') : t('feedback.shareBackchain')}</h2>
                 <p class="text-zinc-400 text-sm">${isConnected
-                    ? 'Share your tutor link — earn <strong class="text-amber-400">10% ETH</strong> + <strong class="text-amber-400">5% BKC</strong> from every friend'
-                    : 'Connect your wallet to get a personal tutor link and earn commissions!'}</p>
+                    ? t('feedback.shareTutorDesc')
+                    : t('feedback.connectForTutorLink')}</p>
             </div>
 
             ${isConnected ? `
             <!-- Tutor Reward Badges -->
             <div class="flex justify-center gap-2 mb-4">
                 <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                    <i class="fa-solid fa-coins"></i> 10% ETH Fees
+                    <i class="fa-solid fa-coins"></i> ${t('feedback.badge10BNB')}
                 </span>
                 <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold bg-purple-500/15 text-purple-400 border border-purple-500/30">
-                    <i class="fa-solid fa-gem"></i> 5% BKC Claims
+                    <i class="fa-solid fa-gem"></i> ${t('feedback.badge5BKC')}
                 </span>
                 <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                    <i class="fa-solid fa-infinity"></i> Forever
+                    <i class="fa-solid fa-infinity"></i> ${t('feedback.badgeForever')}
                 </span>
             </div>
             ` : `
             <div class="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-                <p class="text-amber-400 text-xs"><i class="fa-solid fa-lightbulb mr-1"></i> Connect your wallet to generate a personal invite link with your tutor referral built in!</p>
+                <p class="text-amber-400 text-xs"><i class="fa-solid fa-lightbulb mr-1"></i> ${t('feedback.connectForTutorLink')}</p>
             </div>
             `}
 
@@ -295,11 +293,11 @@ export function showShareModal(userAddress) {
             <div class="grid grid-cols-4 gap-3 mb-5">
                 <a href="https://twitter.com/intent/tweet?text=${shareText}&url=${encodeURIComponent(shareUrl)}" target="_blank" class="flex flex-col items-center justify-center bg-zinc-800 hover:bg-sky-600 border border-zinc-700 hover:border-sky-500 rounded-xl p-3 transition-all duration-300 group">
                     <i class="fa-brands fa-x-twitter text-xl text-zinc-400 group-hover:text-white transition-colors mb-1"></i>
-                    <span class="text-[10px] text-zinc-500 group-hover:text-white">Twitter</span>
+                    <span class="text-[10px] text-zinc-500 group-hover:text-white">${t('feedback.shareOn.twitter')}</span>
                 </a>
                 <a href="https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${shareText}" target="_blank" class="flex flex-col items-center justify-center bg-zinc-800 hover:bg-blue-600 border border-zinc-700 hover:border-blue-500 rounded-xl p-3 transition-all duration-300 group">
                     <i class="fa-brands fa-telegram text-xl text-zinc-400 group-hover:text-white transition-colors mb-1"></i>
-                    <span class="text-[10px] text-zinc-500 group-hover:text-white">Telegram</span>
+                    <span class="text-[10px] text-zinc-500 group-hover:text-white">${t('feedback.shareOn.telegram')}</span>
                 </a>
                 <a href="https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(shareUrl)}&title=Backchain%20Protocol&summary=${shareText}" target="_blank" class="flex flex-col items-center justify-center bg-zinc-800 hover:bg-blue-700 border border-zinc-700 hover:border-blue-600 rounded-xl p-3 transition-all duration-300 group">
                     <i class="fa-brands fa-linkedin-in text-xl text-zinc-400 group-hover:text-white transition-colors mb-1"></i>
@@ -307,7 +305,7 @@ export function showShareModal(userAddress) {
                 </a>
                 <a href="https://wa.me/?text=${shareText}%20${encodeURIComponent(shareUrl)}" target="_blank" class="flex flex-col items-center justify-center bg-zinc-800 hover:bg-green-600 border border-zinc-700 hover:border-green-500 rounded-xl p-3 transition-all duration-300 group">
                     <i class="fa-brands fa-whatsapp text-xl text-zinc-400 group-hover:text-white transition-colors mb-1"></i>
-                    <span class="text-[10px] text-zinc-500 group-hover:text-white">WhatsApp</span>
+                    <span class="text-[10px] text-zinc-500 group-hover:text-white">${t('feedback.shareOn.whatsapp')}</span>
                 </a>
             </div>
 
@@ -334,7 +332,7 @@ export function showShareModal(userAddress) {
             ${isConnected ? `
             <p class="mt-3 text-[11px] text-zinc-500">
                 <i class="fa-solid fa-link text-amber-400/60 mr-1"></i>
-                Your tutor address <span class="font-mono text-zinc-400">${shortAddr}</span> is embedded in this link
+                ${t('feedback.tutorEmbedded', { addr: shortAddr })}
             </p>
             ` : ''}
 
@@ -342,8 +340,8 @@ export function showShareModal(userAddress) {
             <p class="mt-3 text-[11px] text-zinc-600">
                 <i class="fa-solid fa-circle-info mr-1"></i>
                 ${isConnected
-                    ? 'Friends who join via your link automatically set you as their tutor'
-                    : 'Share now — every new user strengthens the ecosystem'}
+                    ? t('feedback.footerConnected')
+                    : t('feedback.footerDisconnected')}
             </p>
         </div>
     `;

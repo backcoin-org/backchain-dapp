@@ -4,6 +4,7 @@
 
 import { NT } from './state.js';
 import { injectStyles } from './styles.js';
+import { t } from '../../modules/core/index.js';
 import { loadFees, loadCertificates, loadAssets, loadStats } from './data-loader.js';
 import {
     navigateView, goBack, setTab, viewCert, viewAsset,
@@ -39,8 +40,8 @@ function renderHeader() {
                     <i class="fa-solid fa-arrow-left"></i>
                 </button>
                 <div>
-                    <div style="font-size:15px;font-weight:700;color:var(--nt-text)">Certificate #${NT.selectedCert?.id || ''}</div>
-                    <div style="font-size:11px;color:var(--nt-text-3)">Document details</div>
+                    <div style="font-size:15px;font-weight:700;color:var(--nt-text)">${t('notary.certDetail.title').replace('{id}', NT.selectedCert?.id || '')}</div>
+                    <div style="font-size:11px;color:var(--nt-text-3)">${t('notary.certDetail.subtitle')}</div>
                 </div>
             </div>
         `;
@@ -54,8 +55,8 @@ function renderHeader() {
                     <i class="fa-solid fa-arrow-left"></i>
                 </button>
                 <div>
-                    <div style="font-size:15px;font-weight:700;color:var(--nt-text)">Asset #${NT.selectedAsset?.id || ''}</div>
-                    <div style="font-size:11px;color:var(--nt-text-3)">Property details</div>
+                    <div style="font-size:15px;font-weight:700;color:var(--nt-text)">${t('notary.assetDetail.title').replace('{id}', NT.selectedAsset?.id || '')}</div>
+                    <div style="font-size:11px;color:var(--nt-text-3)">${t('notary.assetDetail.subtitle')}</div>
                 </div>
             </div>
         `;
@@ -69,8 +70,8 @@ function renderHeader() {
                     <i class="fa-solid fa-arrow-left"></i>
                 </button>
                 <div>
-                    <div style="font-size:15px;font-weight:700;color:var(--nt-text)">Register Asset</div>
-                    <div style="font-size:11px;color:var(--nt-text-3)">On-chain property registration</div>
+                    <div style="font-size:15px;font-weight:700;color:var(--nt-text)">${t('notary.registerAsset.title')}</div>
+                    <div style="font-size:11px;color:var(--nt-text-3)">${t('notary.registerAsset.subtitle')}</div>
                 </div>
             </div>
         `;
@@ -82,23 +83,23 @@ function renderHeader() {
             <div class="nt-brand">
                 <div class="nt-brand-icon"><i class="fa-solid fa-stamp"></i></div>
                 <div>
-                    <div class="nt-brand-name">Digital Notary</div>
-                    <div class="nt-brand-sub">Blockchain registry &amp; certification</div>
+                    <div class="nt-brand-name">${t('notary.brandName')}</div>
+                    <div class="nt-brand-sub">${t('notary.brandSub')}</div>
                 </div>
             </div>
         </div>
         <nav class="nt-nav">
             <button class="nt-nav-item ${NT.activeTab === 'documents' ? 'active' : ''}" onclick="NotaryPage.setTab('documents')">
-                <i class="fa-solid fa-certificate"></i><span>Documents</span>
+                <i class="fa-solid fa-certificate"></i><span>${t('notary.documents')}</span>
             </button>
             <button class="nt-nav-item ${NT.activeTab === 'assets' ? 'active' : ''}" onclick="NotaryPage.setTab('assets')">
-                <i class="fa-solid fa-house"></i><span>Assets</span>
+                <i class="fa-solid fa-house"></i><span>${t('notary.assets')}</span>
             </button>
             <button class="nt-nav-item ${NT.activeTab === 'verify' ? 'active' : ''}" onclick="NotaryPage.setTab('verify')">
-                <i class="fa-solid fa-shield-check"></i><span>Verify</span>
+                <i class="fa-solid fa-shield-check"></i><span>${t('notary.verify')}</span>
             </button>
             <button class="nt-nav-item ${NT.activeTab === 'stats' ? 'active' : ''}" onclick="NotaryPage.setTab('stats')">
-                <i class="fa-solid fa-chart-simple"></i><span>Stats</span>
+                <i class="fa-solid fa-chart-simple"></i><span>${t('notary.stats')}</span>
             </button>
         </nav>
     `;

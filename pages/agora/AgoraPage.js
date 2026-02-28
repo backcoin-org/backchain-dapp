@@ -4,6 +4,7 @@
 
 import { State } from '../../state.js';
 import { openConnectModal, disconnectWallet as doDisconnect } from '../../modules/wallet.js';
+import { t } from '../../modules/core/index.js';
 import { BC, getMaxContent } from './state.js';
 import { getProfileName, getInitials, escapeHtml, linkifyContent } from './utils.js';
 import { injectStyles } from './styles.js';
@@ -22,9 +23,9 @@ import { renderModals, openSuperLike, confirmSuperLike, openDownvote, confirmDow
 function renderHeader() {
     const isDetailView = ['post-detail', 'user-profile', 'profile-setup'].includes(BC.view);
     if (isDetailView) {
-        let title = 'Post';
+        let title = t('agora.post');
         if (BC.view === 'user-profile') title = getProfileName(BC.selectedProfile);
-        if (BC.view === 'profile-setup') title = 'Create Profile';
+        if (BC.view === 'profile-setup') title = t('agora.createProfile');
         return `
             <div class="bc-header">
                 <div class="bc-back-header">
@@ -38,22 +39,22 @@ function renderHeader() {
             <div class="bc-header-bar">
                 <div class="bc-brand">
                     <img src="assets/Agora.png" alt="Agora" class="bc-brand-icon" onerror="this.style.display='none'">
-                    <span class="bc-brand-name">Agora</span>
+                    <span class="bc-brand-name">${t('agora.brandName')}</span>
                 </div>
                 <div class="bc-header-right">
                     ${_renderWalletBtn()}
-                    <button class="bc-icon-btn" onclick="AgoraPage.refresh()" title="Refresh"><i class="fa-solid fa-arrows-rotate"></i></button>
+                    <button class="bc-icon-btn" onclick="AgoraPage.refresh()" title="${t('common.refresh')}"><i class="fa-solid fa-arrows-rotate"></i></button>
                 </div>
             </div>
             <div class="bc-nav">
                 <button class="bc-nav-item ${BC.activeTab === 'feed' ? 'active' : ''}" onclick="AgoraPage.setTab('feed')">
-                    <i class="fa-solid fa-house"></i> Feed
+                    <i class="fa-solid fa-house"></i> ${t('agora.feed')}
                 </button>
                 <button class="bc-nav-item ${BC.activeTab === 'discover' ? 'active' : ''}" onclick="AgoraPage.setTab('discover')">
-                    <i class="fa-solid fa-fire"></i> Discover
+                    <i class="fa-solid fa-fire"></i> ${t('agora.discover')}
                 </button>
                 <button class="bc-nav-item ${BC.activeTab === 'profile' ? 'active' : ''}" onclick="AgoraPage.setTab('profile')">
-                    <i class="fa-solid fa-user"></i> Profile
+                    <i class="fa-solid fa-user"></i> ${t('agora.profile')}
                 </button>
             </div>
         </div>`;
@@ -71,7 +72,7 @@ function _renderWalletBtn() {
         </button>`;
     }
     return `<button class="bc-wallet-inline disconnected" onclick="event.stopPropagation(); AgoraPage.connectWallet()" title="Connect Wallet">
-        <i class="fa-solid fa-wallet"></i> Connect
+        <i class="fa-solid fa-wallet"></i> ${t('agora.wallet.connect')}
     </button>`;
 }
 
@@ -226,7 +227,7 @@ function renderCartBar() {
 
     const ICONS = { like: 'fa-heart', follow: 'fa-user-plus', downvote: 'fa-arrow-down' };
     const ICON_CLASS = { like: 'like', follow: 'follow', downvote: 'downvote' };
-    const LABELS = { like: 'Like', follow: 'Follow', downvote: 'Downvote' };
+    const LABELS = { like: t('agora.postCard.like'), follow: t('agora.userProfile.follow'), downvote: t('agora.postCard.downvote') };
 
     let panelHTML = '';
     if (BC.cartVisible) {
@@ -247,12 +248,12 @@ function renderCartBar() {
         panelHTML = `
             <div class="bc-cart-panel">
                 <div class="bc-cart-header">
-                    <span class="bc-cart-title">Action Cart (${count})</span>
-                    <button class="bc-cart-clear" onclick="AgoraPage.clearCart()"><i class="fa-solid fa-trash"></i> Clear All</button>
+                    <span class="bc-cart-title">${t('agora.cart.title')} (${count})</span>
+                    <button class="bc-cart-clear" onclick="AgoraPage.clearCart()"><i class="fa-solid fa-trash"></i> ${t('agora.cart.clear')}</button>
                 </div>
                 ${itemsHTML}
                 <div class="bc-cart-footer">
-                    <div class="bc-cart-warning"><i class="fa-solid fa-circle-info"></i> Not registered on blockchain yet</div>
+                    <div class="bc-cart-warning"><i class="fa-solid fa-circle-info"></i> ${t('agora.cart.notOnChainYet')}</div>
                 </div>
             </div>`;
     }
@@ -263,13 +264,13 @@ function renderCartBar() {
             <div class="bc-cart-summary" onclick="AgoraPage.toggleCart()">
                 <div class="bc-cart-info">
                     <span class="bc-cart-badge">${count}</span>
-                    <span class="bc-cart-label"><strong>${count} action${count !== 1 ? 's' : ''}</strong> not on blockchain yet</span>
+                    <span class="bc-cart-label">${t('agora.cart.actionsNotOnChain', {count: String(count)})}</span>
                 </div>
                 <div class="bc-cart-actions">
                     <button class="bc-cart-submit-btn" onclick="event.stopPropagation(); AgoraPage.submitCart()" ${BC.cartSubmitting ? 'disabled' : ''}>
                         ${BC.cartSubmitting
-                            ? '<i class="fa-solid fa-spinner fa-spin"></i> Registering...'
-                            : '<i class="fa-solid fa-link"></i> Register'}
+                            ? `<i class="fa-solid fa-spinner fa-spin"></i> ${t('common.processing')}`
+                            : `<i class="fa-solid fa-link"></i> ${t('agora.cart.submit')}`}
                     </button>
                     <button class="bc-cart-toggle" onclick="event.stopPropagation(); AgoraPage.toggleCart()">
                         <i class="fa-solid fa-chevron-${BC.cartVisible ? 'down' : 'up'}"></i>
@@ -285,7 +286,7 @@ function renderCartBar() {
 
 function _renderFAB() {
     if (!State.isConnected) return '';
-    return `<button class="bc-fab" onclick="AgoraPage.openCompose()" title="New Post">
+    return `<button class="bc-fab" onclick="AgoraPage.openCompose()" title="${t('agora.compose.newPost')}">
         <i class="fa-solid fa-plus"></i>
     </button>`;
 }
@@ -300,7 +301,7 @@ function _renderComposeModal() {
         <div class="bc-modal-overlay" id="modal-compose" onclick="if(event.target===this) AgoraPage.closeModal('compose')">
             <div class="bc-modal-box" style="max-width:540px;width:95%;">
                 <div class="bc-modal-top">
-                    <span class="bc-modal-title"><i class="fa-solid fa-pen-to-square" style="color:var(--bc-accent)"></i> New Post</span>
+                    <span class="bc-modal-title"><i class="fa-solid fa-pen-to-square" style="color:var(--bc-accent)"></i> ${t('agora.compose.post')}</span>
                     <button class="bc-modal-x" onclick="AgoraPage.closeModal('compose')"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="bc-modal-inner" style="padding:0;">
@@ -455,7 +456,7 @@ function _toggleCaption(postId) {
     el.classList.toggle('expanded');
     // Update "more" hint
     const hint = el.querySelector('.bc-tiktok-more');
-    if (hint) hint.textContent = el.classList.contains('expanded') ? ' less' : ' more';
+    if (hint) hint.textContent = el.classList.contains('expanded') ? ` ${t('agora.less')}` : ` ${t('agora.more')}`;
 }
 
 // ============================================================================

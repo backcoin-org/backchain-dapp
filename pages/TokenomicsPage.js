@@ -3,6 +3,7 @@
 
 import { State } from '../state.js';
 import { formatBigNumber } from '../utils.js';
+import { t } from '../modules/core/index.js';
 
 // ==========================================================
 //  1. CONSTANTS
@@ -68,12 +69,10 @@ function renderHero() {
             </div>
             <h1 class="text-2xl font-black text-white mb-2">
                 <span class="bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">BACKCHAIN</span>
-                <span class="text-zinc-400 font-normal">Tokenomics</span>
+                <span class="text-zinc-400 font-normal">${t('tokenomics.title')}</span>
             </h1>
             <p class="text-zinc-500 text-sm max-w-md mx-auto">
-                Modular smart contract ecosystem. <span class="text-amber-400">Real yield</span> from protocol fees.
-                <span class="text-emerald-400">Deflationary</span> by design.
-                No admin keys. <span class="text-purple-400">Unstoppable.</span>
+                ${t('tokenomics.subtitle')}
             </p>
         </div>`;
 }
@@ -86,24 +85,24 @@ function renderSupply() {
         <div class="tk-section tk-fade" style="animation-delay:0.1s">
             <div class="flex items-center gap-2 mb-4">
                 <div class="tk-icon-box" style="background:rgba(245,158,11,0.2)"><i class="fa-solid fa-coins text-amber-400"></i></div>
-                <div><h2 class="text-white font-bold">Token Supply</h2><p class="text-zinc-500 text-xs">BKC — ERC-20 on opBNB</p></div>
+                <div><h2 class="text-white font-bold">${t('tokenomics.tokenSupply')}</h2><p class="text-zinc-500 text-xs">${t('tokenomics.erc20OnOpbnb')}</p></div>
             </div>
             <div class="grid grid-cols-3 gap-3 mb-4">
                 <div class="tk-card text-center">
-                    <p class="text-zinc-500 text-[10px] uppercase mb-1">Max Supply</p>
+                    <p class="text-zinc-500 text-[10px] uppercase mb-1">${t('tokenomics.maxSupply')}</p>
                     <p class="text-xl font-black text-white">${fmt(MAX_SUPPLY)}</p>
                 </div>
                 <div class="tk-card text-center">
-                    <p class="text-zinc-500 text-[10px] uppercase mb-1">Circulating</p>
+                    <p class="text-zinc-500 text-[10px] uppercase mb-1">${t('tokenomics.circulating')}</p>
                     <p class="text-xl font-black text-emerald-400">${fmt(currentSupply)}</p>
                 </div>
                 <div class="tk-card text-center">
-                    <p class="text-zinc-500 text-[10px] uppercase mb-1">To Mine</p>
+                    <p class="text-zinc-500 text-[10px] uppercase mb-1">${t('tokenomics.unminted')}</p>
                     <p class="text-xl font-black text-amber-400">${fmt(remaining)}</p>
                 </div>
             </div>
             <div class="tk-bar mb-2"><div class="tk-bar-fill bg-gradient-to-r from-amber-500 to-emerald-500" style="width:${pct}%"></div></div>
-            <p class="text-center text-zinc-600 text-[10px]"><i class="fa-solid fa-hammer mr-1"></i>${pct}% minted — remaining ${fmt(remaining)} BKC mined via BuybackMiner</p>
+            <p class="text-center text-zinc-600 text-[10px]"><i class="fa-solid fa-hammer mr-1"></i>${t('tokenomics.mintedSoFar', { pct })}</p>
         </div>`;
 }
 
@@ -112,7 +111,7 @@ function renderTGE() {
         <div class="tk-section tk-fade" style="animation-delay:0.15s">
             <div class="flex items-center gap-2 mb-4">
                 <div class="tk-icon-box" style="background:rgba(168,85,247,0.2)"><i class="fa-solid fa-rocket text-purple-400"></i></div>
-                <div><h2 class="text-white font-bold">TGE — Token Launch</h2><p class="text-zinc-500 text-xs">20M BKC minted at genesis</p></div>
+                <div><h2 class="text-white font-bold">${t('tokenomics.tgeAllocation')}</h2><p class="text-zinc-500 text-xs">${t('tokenomics.tokensAtLaunch')}</p></div>
             </div>
             <div class="flex items-center justify-center gap-6 mb-4">
                 <div class="tk-pie-ring" style="background: conic-gradient(#f59e0b 0% 17.5%, #ea580c 17.5% 35%, #10b981 35% 100%);">
@@ -125,21 +124,21 @@ function renderTGE() {
                     <div class="flex items-center gap-2">
                         <div class="w-3 h-3 rounded-full bg-amber-500"></div>
                         <div>
-                            <p class="text-white font-bold text-sm">17.5% Phase 1</p>
+                            <p class="text-white font-bold text-sm">17.5% ${t('tokenomics.phase')} 1</p>
                             <p class="text-zinc-500 text-[10px]">${fmt(AIRDROP_PHASE1)} BKC</p>
                         </div>
                     </div>
                     <div class="flex items-center gap-2">
                         <div class="w-3 h-3 rounded-full bg-orange-600"></div>
                         <div>
-                            <p class="text-white font-bold text-sm">17.5% Phase 2</p>
+                            <p class="text-white font-bold text-sm">17.5% ${t('tokenomics.phase')} 2</p>
                             <p class="text-zinc-500 text-[10px]">${fmt(AIRDROP_PHASE2)} BKC</p>
                         </div>
                     </div>
                     <div class="flex items-center gap-2">
                         <div class="w-3 h-3 rounded-full bg-emerald-500"></div>
                         <div>
-                            <p class="text-white font-bold text-sm">65% Liquidity</p>
+                            <p class="text-white font-bold text-sm">65% ${t('tokenomics.liquidityPool')}</p>
                             <p class="text-zinc-500 text-[10px]">${fmt(LIQUIDITY_AMOUNT)} BKC</p>
                         </div>
                     </div>
@@ -151,9 +150,9 @@ function renderTGE() {
                 <div class="flex items-center justify-between mb-2">
                     <div class="flex items-center gap-2">
                         <span class="text-lg"><i class="fa-solid fa-parachute-box text-amber-400"></i></span>
-                        <p class="text-amber-400 font-bold text-sm">Phase 1 — ${fmt(AIRDROP_PHASE1)} BKC</p>
+                        <p class="text-amber-400 font-bold text-sm">${t('tokenomics.phase')} 1 — ${fmt(AIRDROP_PHASE1)} BKC</p>
                     </div>
-                    <span class="tk-badge" style="background:rgba(34,197,94,0.2);color:#4ade80">ACTIVE</span>
+                    <span class="tk-badge" style="background:rgba(34,197,94,0.2);color:#4ade80">${t('common.active').toUpperCase()}</span>
                 </div>
                 <p class="text-zinc-400 text-xs mb-2">Earn points and climb the ranking to win NFT Boosters + BKC tokens.</p>
                 <div class="grid grid-cols-2 gap-2 mb-3 text-[10px]">
@@ -176,10 +175,10 @@ function renderTGE() {
                 </div>
                 <div class="flex gap-2">
                     <a href="#airdrop" class="inline-flex items-center gap-1.5 text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors">
-                        <i class="fa-solid fa-arrow-right"></i> Join Airdrop
+                        <i class="fa-solid fa-arrow-right"></i> ${t('nav.airdrop')}
                     </a>
                     <a href="#referral" class="inline-flex items-center gap-1.5 text-xs font-bold text-cyan-400 hover:text-cyan-300 transition-colors ml-4">
-                        <i class="fa-solid fa-user-plus"></i> Invite Friends
+                        <i class="fa-solid fa-user-plus"></i> ${t('tokenomics.inviteFriends')}
                     </a>
                 </div>
             </div>
@@ -190,11 +189,11 @@ function renderTGE() {
                     <div class="flex items-center gap-2">
                         <span class="text-lg"><i class="fa-solid fa-lock text-zinc-500"></i></span>
                         <div>
-                            <p class="text-zinc-400 font-bold text-sm">Phase 2 — ${fmt(AIRDROP_PHASE2)} BKC</p>
-                            <p class="text-zinc-600 text-[10px]">Criteria to be announced</p>
+                            <p class="text-zinc-400 font-bold text-sm">${t('tokenomics.phase')} 2 — ${fmt(AIRDROP_PHASE2)} BKC</p>
+                            <p class="text-zinc-600 text-[10px]">${t('tutorials.comingSoon')}</p>
                         </div>
                     </div>
-                    <span class="tk-badge" style="background:rgba(113,113,122,0.2);color:#a1a1aa">SOON</span>
+                    <span class="tk-badge" style="background:rgba(113,113,122,0.2);color:#a1a1aa">${t('tutorials.comingSoon').toUpperCase()}</span>
                 </div>
             </div>
         </div>`;
@@ -205,7 +204,7 @@ function renderFeeFlow() {
         <div class="tk-section tk-fade" style="animation-delay:0.2s">
             <div class="flex items-center gap-2 mb-4">
                 <div class="tk-icon-box" style="background:rgba(6,182,212,0.2)"><i class="fa-solid fa-arrows-split-up-and-left text-cyan-400"></i></div>
-                <div><h2 class="text-white font-bold">Fee Flow</h2><p class="text-zinc-500 text-xs">How protocol revenue is distributed</p></div>
+                <div><h2 class="text-white font-bold">${t('tokenomics.feeFlow')}</h2><p class="text-zinc-500 text-xs">${t('tokenomics.feeFlowDesc')}</p></div>
             </div>
 
             <div class="tk-card mb-3">
@@ -251,7 +250,7 @@ function renderPricing() {
         <div class="tk-section tk-fade" style="animation-delay:0.3s">
             <div class="flex items-center gap-2 mb-4">
                 <div class="tk-icon-box" style="background:rgba(245,158,11,0.2)"><i class="fa-solid fa-receipt text-amber-400"></i></div>
-                <div><h2 class="text-white font-bold">Fixed Pricing</h2><p class="text-zinc-500 text-xs">Minimum fees ensure ecosystem sustainability</p></div>
+                <div><h2 class="text-white font-bold">${t('tokenomics.feeFlow')}</h2><p class="text-zinc-500 text-xs">${t('tokenomics.feeFlowDesc')}</p></div>
             </div>
             <div class="grid grid-cols-2 gap-2">
                 <div class="tk-card flex items-center gap-2 p-2">
@@ -328,7 +327,7 @@ function renderPricing() {
                 </div>
             </div>
             <div class="mt-3 p-3 rounded-lg text-center" style="background:rgba(39,39,42,0.5);border:1px solid rgba(63,63,70,0.5)">
-                <p class="text-zinc-500 text-[10px]"><i class="fa-solid fa-users mr-1"></i>Operators earn 10-20% commission on every action — <a href="#operator" class="text-emerald-400 hover:underline">become an operator</a></p>
+                <p class="text-zinc-500 text-[10px]"><i class="fa-solid fa-users mr-1"></i>${t('tokenomics.operatorCut')} — <a href="#operator" class="text-emerald-400 hover:underline">${t('tokenomics.becomeOperator')}</a></p>
             </div>
         </div>`;
 }
@@ -338,7 +337,7 @@ function renderBoosters() {
         <div class="tk-section tk-fade" style="animation-delay:0.35s">
             <div class="flex items-center gap-2 mb-4">
                 <div class="tk-icon-box" style="background:rgba(139,92,246,0.2)"><i class="fa-solid fa-gem text-violet-400"></i></div>
-                <div><h2 class="text-white font-bold">NFT Boosters</h2><p class="text-zinc-500 text-xs">Reduce burn rate on staking claim rewards</p></div>
+                <div><h2 class="text-white font-bold">${t('tutorials.categories.nftBoosters')}</h2><p class="text-zinc-500 text-xs">${t('tokenomics.deflationaryDesign')}</p></div>
             </div>
             <div class="grid grid-cols-2 gap-2">
                 <div class="tk-card p-3">
@@ -413,7 +412,7 @@ function renderEarnings() {
         <div class="tk-section tk-fade" style="animation-delay:0.4s">
             <div class="flex items-center gap-2 mb-4">
                 <div class="tk-icon-box" style="background:rgba(245,158,11,0.2)"><i class="fa-solid fa-sack-dollar text-amber-400"></i></div>
-                <div><h2 class="text-white font-bold">How to Earn</h2><p class="text-zinc-500 text-xs">6 ways to generate income</p></div>
+                <div><h2 class="text-white font-bold">${t('tokenomics.footer')}</h2><p class="text-zinc-500 text-xs">${t('tokenomics.startStaking')}</p></div>
             </div>
             <div class="space-y-2">
                 <div class="tk-card">
@@ -491,7 +490,7 @@ function renderContracts() {
         <div class="tk-section tk-fade" style="animation-delay:0.5s">
             <div class="flex items-center gap-2 mb-4">
                 <div class="tk-icon-box" style="background:rgba(161,161,170,0.2)"><i class="fa-solid fa-file-contract text-zinc-400"></i></div>
-                <div><h2 class="text-white font-bold">Smart Contract Modules</h2><p class="text-zinc-500 text-xs">Modular ecosystem — no admin, no blacklist</p></div>
+                <div><h2 class="text-white font-bold">${t('tokenomics.ecosystemModules')}</h2><p class="text-zinc-500 text-xs">${t('about.keyFeatures.modularDesc')}</p></div>
             </div>
             <div class="grid grid-cols-2 gap-2 text-[10px]">
                 <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-coins text-amber-400"></i><span class="text-zinc-400">BKCToken</span></div>
@@ -511,11 +510,11 @@ function renderContracts() {
                 <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-faucet-drip text-sky-400"></i><span class="text-zinc-400">SimpleBKCFaucet</span></div>
             </div>
             <div class="mt-3 p-3 rounded-lg" style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3)">
-                <p class="text-emerald-400 text-xs font-medium text-center"><i class="fa-solid fa-shield-halved mr-1"></i>Progressive decentralization: Admin → Multisig → Timelock → DAO</p>
+                <p class="text-emerald-400 text-xs font-medium text-center"><i class="fa-solid fa-shield-halved mr-1"></i>${t('about.keyFeatures.noAdmin')}: ${t('about.keyFeatures.noAdminDesc')}</p>
             </div>
             <div class="mt-3 text-center">
                 <a href="https://sepolia.etherscan.io" target="_blank" class="inline-flex items-center gap-2 text-xs text-zinc-500 hover:text-amber-400 transition-colors">
-                    <i class="fa-solid fa-external-link"></i> View all contracts on Explorer
+                    <i class="fa-solid fa-external-link"></i> ${t('common.viewOnExplorer')}
                 </a>
             </div>
         </div>`;
@@ -541,7 +540,7 @@ export function render() {
             ${renderEarnings()}
             ${renderContracts()}
             <div class="text-center py-6 text-zinc-600 text-xs">
-                <p>Unstoppable, permissionless DeFi infrastructure</p>
+                <p>${t('tokenomics.subtitle')}</p>
                 <p class="mt-1">BACKCHAIN &copy; 2024-2026</p>
             </div>
         </div>`;

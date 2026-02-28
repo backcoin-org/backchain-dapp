@@ -4,7 +4,7 @@
 
 import { NotaryTx } from '../../modules/transactions/index.js';
 import { resolveOperator } from '../../modules/core/operator.js';
-import { irysUploadFile } from '../../modules/core/index.js';
+import { irysUploadFile, t } from '../../modules/core/index.js';
 import { showToast } from '../../ui-feedback.js';
 import { addresses } from '../../config.js';
 import { State } from '../../state.js';
@@ -240,7 +240,7 @@ export async function handleMint() {
     NT.isProcessing = true;
 
     const btn = document.getElementById('nt-btn-mint');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>Uploading...'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>${t('notary.actions.uploading')}`; }
 
     showOverlay('uploading');
 
@@ -301,7 +301,7 @@ export async function handleMint() {
                     NT._render();
                     loadCertificates();
 
-                    showToast('Document certified on Arweave + Blockchain!', 'success');
+                    showToast(t('notary.toast.notarizeSuccess'), 'success');
                 }, 3000);
             },
 
@@ -309,7 +309,7 @@ export async function handleMint() {
                 if (error.cancelled || error.type === 'user_rejected') {
                     NT.isProcessing = false;
                     hideOverlay();
-                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-stamp" style="margin-right:6px"></i>Sign & Mint'; }
+                    if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fa-solid fa-stamp" style="margin-right:6px"></i>${t('notary.wizard.signAndMint')}`; }
                     return;
                 }
                 throw error;
@@ -320,9 +320,9 @@ export async function handleMint() {
         console.error('[NotaryPage] Mint error:', e);
         hideOverlay();
         NT.isProcessing = false;
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-stamp" style="margin-right:6px"></i>Sign & Mint'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fa-solid fa-stamp" style="margin-right:6px"></i>${t('notary.wizard.signAndMint')}`; }
         if (e.code !== 4001 && e.code !== 'ACTION_REJECTED') {
-            showToast(e.message || 'Certification failed', 'error');
+            showToast(e.message || t('notary.toast.notarizeFailed', { error: '' }), 'error');
         }
     }
 }
@@ -336,13 +336,13 @@ export async function handleRegisterAsset() {
     NT.isProcessing = true;
 
     const btn = document.getElementById('nt-btn-register-asset');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>Registering...'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>${t('notary.actions.registering')}`; }
 
     try {
         // Upload supporting document to Arweave if provided
         let uploadUri = '';
         if (NT.assetWizFile) {
-            if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>Uploading document...';
+            if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>${t('notary.actions.uploadingDoc')}`;
             const uploadResult = await irysUploadFile(NT.assetWizFile, {
                 tags: [
                     { name: 'Type', value: 'notary-asset-doc' },
@@ -352,7 +352,7 @@ export async function handleRegisterAsset() {
             });
             uploadUri = `ipfs://${uploadResult.id}`;
             console.log('[NotaryPage] Asset doc upload:', uploadResult.url);
-            if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>Registering...';
+            if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>${t('notary.actions.registering')}`;
         }
 
         const metaObj = {
@@ -390,14 +390,14 @@ export async function handleRegisterAsset() {
                     NT._render();
                     loadAssets();
 
-                    showToast(`Asset #${tokenId} registered!`, 'success');
+                    showToast(t('notary.toast.registerAssetSuccess'), 'success');
                 }, 3000);
             },
 
             onError: (error) => {
                 if (error.cancelled || error.type === 'user_rejected') {
                     NT.isProcessing = false;
-                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-file-signature" style="margin-right:6px"></i>Register Asset'; }
+                    if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fa-solid fa-file-signature" style="margin-right:6px"></i>${t('notary.registerAsset.title')}`; }
                     return;
                 }
                 throw error;
@@ -407,9 +407,9 @@ export async function handleRegisterAsset() {
     } catch (e) {
         console.error('[NotaryPage] Register asset error:', e);
         NT.isProcessing = false;
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-file-signature" style="margin-right:6px"></i>Register Asset'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fa-solid fa-file-signature" style="margin-right:6px"></i>${t('notary.registerAsset.title')}`; }
         if (e.code !== 4001 && e.code !== 'ACTION_REJECTED') {
-            showToast(e.message || 'Registration failed', 'error');
+            showToast(e.message || t('notary.toast.registerAssetFailed', { error: '' }), 'error');
         }
     }
 }
@@ -427,13 +427,13 @@ export async function handleTransferAsset() {
     const ethers = window.ethers;
 
     if (!newOwner || !ethers.isAddress(newOwner)) {
-        showToast('Enter a valid wallet address', 'error');
+        showToast(t('notary.toast.invalidAddress'), 'error');
         return;
     }
 
     const asset = NT.selectedAsset;
     if (!asset?.id) {
-        showToast('Asset not found', 'error');
+        showToast(t('notary.toast.assetNotFound'), 'error');
         return;
     }
 
@@ -442,7 +442,7 @@ export async function handleTransferAsset() {
         : 0n;
     const transferNote = noteInput?.value?.trim() || '';
 
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>Transferring...'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>${t('notary.actions.transferring')}`; }
 
     try {
         await NotaryTx.transferAsset({
@@ -454,7 +454,7 @@ export async function handleTransferAsset() {
             button: btn,
 
             onSuccess: (receipt) => {
-                showToast(`Asset #${asset.id} transferred!`, 'success');
+                showToast(t('notary.toast.transferSuccess'), 'success');
                 asset.owner = newOwner;
                 NT.selectedAsset = asset;
                 loadAssets();
@@ -463,7 +463,7 @@ export async function handleTransferAsset() {
 
             onError: (error) => {
                 if (error.cancelled || error.type === 'user_rejected') {
-                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-paper-plane" style="margin-right:6px"></i>Transfer'; }
+                    if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fa-solid fa-paper-plane" style="margin-right:6px"></i>${t('notary.certDetailView.confirmTransfer')}`; }
                     return;
                 }
                 throw error;
@@ -471,9 +471,9 @@ export async function handleTransferAsset() {
         });
     } catch (e) {
         console.error('[NotaryPage] Asset transfer error:', e);
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-paper-plane" style="margin-right:6px"></i>Transfer'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fa-solid fa-paper-plane" style="margin-right:6px"></i>${t('notary.certDetailView.confirmTransfer')}`; }
         if (e.code !== 4001 && e.code !== 'ACTION_REJECTED') {
-            showToast(e.message || 'Transfer failed', 'error');
+            showToast(e.message || t('notary.toast.transferFailed', { error: '' }), 'error');
         }
     }
 }
@@ -489,14 +489,14 @@ export async function handleAddAnnotation() {
 
     const asset = NT.selectedAsset;
     if (!asset?.id) {
-        showToast('Asset not found', 'error');
+        showToast(t('notary.toast.assetNotFound'), 'error');
         return;
     }
 
     const annotationType = parseInt(typeSelect?.value) || 0;
     const meta = metaInput?.value?.trim() || '';
 
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>Adding...'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>${t('notary.actions.adding')}`; }
 
     try {
         await NotaryTx.addAnnotation({
@@ -507,7 +507,7 @@ export async function handleAddAnnotation() {
             button: btn,
 
             onSuccess: (receipt, annotationId) => {
-                showToast(`Annotation added to asset #${asset.id}!`, 'success');
+                showToast(t('notary.toast.annotationSuccess'), 'success');
                 // Reload annotations
                 loadAssetAnnotations(asset.id).then(() => {
                     // Update annotation count in local state
@@ -515,13 +515,13 @@ export async function handleAddAnnotation() {
                     NT.selectedAsset = asset;
                     NT._render();
                 });
-                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-plus" style="margin-right:6px"></i>Add Annotation'; }
+                if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fa-solid fa-plus" style="margin-right:6px"></i>${t('notary.assetDetailView.addAnnotation')}`; }
                 if (metaInput) metaInput.value = '';
             },
 
             onError: (error) => {
                 if (error.cancelled || error.type === 'user_rejected') {
-                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-plus" style="margin-right:6px"></i>Add Annotation'; }
+                    if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fa-solid fa-plus" style="margin-right:6px"></i>${t('notary.assetDetailView.addAnnotation')}`; }
                     return;
                 }
                 throw error;
@@ -529,9 +529,9 @@ export async function handleAddAnnotation() {
         });
     } catch (e) {
         console.error('[NotaryPage] Annotation error:', e);
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-plus" style="margin-right:6px"></i>Add Annotation'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fa-solid fa-plus" style="margin-right:6px"></i>${t('notary.assetDetailView.addAnnotation')}`; }
         if (e.code !== 4001 && e.code !== 'ACTION_REJECTED') {
-            showToast(e.message || 'Annotation failed', 'error');
+            showToast(e.message || t('notary.toast.annotationFailed', { error: '' }), 'error');
         }
     }
 }
@@ -594,17 +594,17 @@ export async function handleTransfer() {
     const ethers = window.ethers;
 
     if (!newOwner || !ethers.isAddress(newOwner)) {
-        showToast('Enter a valid wallet address', 'error');
+        showToast(t('notary.toast.invalidAddress'), 'error');
         return;
     }
 
     const cert = NT.selectedCert;
     if (!cert?.hash) {
-        showToast('Certificate not found', 'error');
+        showToast(t('notary.toast.certNotFound'), 'error');
         return;
     }
 
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>Transferring...'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>${t('notary.actions.transferring')}`; }
 
     try {
         await NotaryTx.transferCertificate({
@@ -614,7 +614,7 @@ export async function handleTransfer() {
             button: btn,
 
             onSuccess: (receipt) => {
-                showToast(`Certificate #${cert.id} transferred!`, 'success');
+                showToast(t('notary.toast.transferSuccess'), 'success');
                 // Update local state
                 cert.owner = newOwner;
                 NT.selectedCert = cert;
@@ -624,7 +624,7 @@ export async function handleTransfer() {
 
             onError: (error) => {
                 if (error.cancelled || error.type === 'user_rejected') {
-                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-paper-plane" style="margin-right:6px"></i>Transfer'; }
+                    if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fa-solid fa-paper-plane" style="margin-right:6px"></i>${t('notary.certDetailView.confirmTransfer')}`; }
                     return;
                 }
                 throw error;
@@ -632,9 +632,9 @@ export async function handleTransfer() {
         });
     } catch (e) {
         console.error('[NotaryPage] Transfer error:', e);
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-paper-plane" style="margin-right:6px"></i>Transfer'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fa-solid fa-paper-plane" style="margin-right:6px"></i>${t('notary.certDetailView.confirmTransfer')}`; }
         if (e.code !== 4001 && e.code !== 'ACTION_REJECTED') {
-            showToast(e.message || 'Transfer failed', 'error');
+            showToast(e.message || t('notary.toast.transferFailed', { error: '' }), 'error');
         }
     }
 }
@@ -648,24 +648,24 @@ let _addToWalletBusy = false;
 export async function addToWallet(tokenId) {
     // Debounce — prevent rapid repeated calls that trigger MetaMask spam filter
     if (_addToWalletBusy) {
-        showToast('Please wait...', 'info');
+        showToast(t('notary.toast.pleaseWait'), 'info');
         return;
     }
 
     const contractAddress = addresses?.notary;
     if (!contractAddress) {
-        showToast('Contract address not found', 'error');
+        showToast(t('notary.toast.contractNotFound'), 'error');
         return;
     }
 
     const provider = State.web3Provider || window.ethereum;
     if (!provider) {
-        showToast('Connect your wallet first', 'error');
+        showToast(t('notary.toast.connectFirst'), 'error');
         return;
     }
 
     if (!State.isConnected) {
-        showToast('Wallet disconnected. Please reconnect.', 'error');
+        showToast(t('notary.toast.walletDisconnected'), 'error');
         return;
     }
 
@@ -685,7 +685,7 @@ export async function addToWallet(tokenId) {
             },
         });
         if (result) {
-            showToast(`Token #${tokenId} added to wallet!`, 'success');
+            showToast(t('notary.toast.tokenAdded', { id: String(tokenId) }), 'success');
         }
     } catch (error) {
         console.warn('[Notary] wallet_watchAsset error:', error);
@@ -699,14 +699,14 @@ export async function addToWallet(tokenId) {
 
         // Spam filter — don't retry, just tell user to wait
         if (msg.includes('spam') || msg.includes('rate limit') || msg.includes('too many')) {
-            showToast('MetaMask is rate-limited. Wait a moment and try again.', 'error');
+            showToast(t('notary.toast.rateLimited'), 'error');
             _addToWalletBusy = false;
             return;
         }
 
         // Network mismatch
         if (msg.includes('network') || msg.includes('chain') || msg.includes('ownership')) {
-            showToast('Check your wallet network and try again.', 'error');
+            showToast(t('notary.toast.networkMismatch'), 'error');
             _addToWalletBusy = false;
             return;
         }
@@ -724,10 +724,10 @@ export async function addToWallet(tokenId) {
                     },
                 }],
             });
-            showToast(`Token #${tokenId} added!`, 'success');
+            showToast(t('notary.toast.tokenAdded', { id: String(tokenId) }), 'success');
         } catch (e2) {
             console.warn('[Notary] fallback also failed:', e2);
-            showToast('Open MetaMask → NFTs → Import NFT to add manually', 'info');
+            showToast(t('notary.toast.addManually'), 'info');
         }
     } finally {
         // Cooldown — prevent spam filter even after success
@@ -738,8 +738,8 @@ export async function addToWallet(tokenId) {
 export function copyHash(hash) {
     if (!hash) return;
     navigator.clipboard.writeText(hash).then(() => {
-        showToast('Hash copied!', 'success');
+        showToast(t('notary.toast.hashCopied'), 'success');
     }).catch(() => {
-        showToast('Failed to copy', 'error');
+        showToast(t('notary.toast.copyFailed'), 'error');
     });
 }

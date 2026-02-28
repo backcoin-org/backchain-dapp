@@ -9,6 +9,7 @@ import { showToast } from '../ui-feedback.js';
 import { openConnectModal } from '../modules/wallet.js';
 import { getBkcPrice, formatUsd } from '../modules/price-service.js';
 import { addresses } from '../config.js';
+import { t } from '../modules/core/index.js';
 
 // ════════════════════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -439,7 +440,7 @@ async function executeBuySwap(btn) {
         setSwapBtn(btn, 'Processing...', true);
         const receipt = await tx.wait();
 
-        showToast('Swap successful! Bought BKC', 'success');
+        showToast(t('trade.toast.swapSuccess'), 'success');
         console.log(`[Trade] Buy TX: ${receipt.hash}`);
         resetAfterSwap();
 
@@ -472,7 +473,7 @@ async function executeSellSwap(btn) {
         const pool = new ethers.Contract(poolAddr, POOL_ABI, signer);
 
         // Step 1: Approve BKC to LiquidityPool (skip if enough allowance)
-        setSwapBtn(btn, 'Approving BKC...', true);
+        setSwapBtn(btn, t('trade.toast.approving'), true);
         const allowance = await bkc.allowance(State.userAddress, poolAddr);
         if (allowance < amountIn) {
             const appOvr = await getGasOverrides();
@@ -497,7 +498,7 @@ async function executeSellSwap(btn) {
         setSwapBtn(btn, 'Processing...', true);
         const receipt = await tx.wait();
 
-        showToast('Swap successful! Sold BKC for BNB', 'success');
+        showToast(t('trade.toast.swapSuccess'), 'success');
         console.log(`[Trade] Sell TX: ${receipt.hash}`);
         resetAfterSwap();
 
@@ -519,7 +520,7 @@ function handleSwapError(err) {
         showToast('Insufficient BNB for gas fees. You need more BNB in your wallet.', 'error');
     } else {
         console.error('[Trade] Swap failed:', err);
-        showToast(`Swap failed: ${err.reason || err.shortMessage || err.message}`, 'error');
+        showToast(t('trade.toast.swapFailed', { error: err.reason || err.shortMessage || err.message }), 'error');
     }
 }
 
@@ -558,7 +559,7 @@ function updateSwapButton() {
     if (!btn) return;
 
     if (!State.isConnected) {
-        btn.textContent = 'Connect Wallet';
+        btn.textContent = t('trade.connectWallet');
         btn.disabled = false;
         btn.className = 'execute-trade-btn';
         return;
@@ -566,7 +567,7 @@ function updateSwapButton() {
 
     const val = parseFloat(TS.inputAmount);
     if (!val || val <= 0) {
-        btn.textContent = 'Enter amount';
+        btn.textContent = t('trade.enterAmount');
         btn.disabled = true;
         btn.className = 'execute-trade-btn';
         return;
@@ -575,26 +576,26 @@ function updateSwapButton() {
     // Check balance
     const amountIn = ethers.parseEther(TS.inputAmount);
     if (TS.direction === 'buy' && TS.ethBalance < amountIn + GAS_RESERVE) {
-        btn.textContent = 'Insufficient BNB';
+        btn.textContent = t('trade.insufficientBnb');
         btn.disabled = true;
         btn.className = 'execute-trade-btn';
         return;
     }
     if (TS.direction === 'sell' && TS.bkcBalance < amountIn) {
-        btn.textContent = 'Insufficient BKC';
+        btn.textContent = t('trade.insufficientBkc');
         btn.disabled = true;
         btn.className = 'execute-trade-btn';
         return;
     }
 
     if (TS.priceImpact > 5) {
-        btn.textContent = `Swap (${TS.priceImpact.toFixed(1)}% impact)`;
+        btn.textContent = t('trade.swapWithImpact', { impact: TS.priceImpact.toFixed(1) });
         btn.disabled = false;
         btn.className = 'execute-trade-btn warning';
         return;
     }
 
-    btn.textContent = 'Swap';
+    btn.textContent = t('trade.swap');
     btn.disabled = false;
     btn.className = 'execute-trade-btn';
 }
@@ -689,7 +690,7 @@ function renderSwapCard() {
         <div class="swap-box-container">
             <!-- Header -->
             <div class="trade-header">
-                <h3>Trade</h3>
+                <h3>${t('trade.title')}</h3>
                 <button class="trade-settings-btn" id="trade-settings-toggle" title="Slippage settings">
                     <i class="fa-solid fa-gear"></i>
                 </button>
@@ -698,7 +699,7 @@ function renderSwapCard() {
             <!-- Settings panel -->
             <div class="trade-settings-panel ${TS.showSettings ? 'open' : ''}" id="trade-settings-panel">
                 <div class="trade-slippage-row">
-                    <label>Slippage</label>
+                    <label>${t('trade.slippage')}</label>
                     <button class="trade-slip-btn ${TS.slippage === 0.5 ? 'active' : ''}" data-slip="0.5">0.5%</button>
                     <button class="trade-slip-btn ${TS.slippage === 1 ? 'active' : ''}" data-slip="1">1%</button>
                     <button class="trade-slip-btn ${TS.slippage === 3 ? 'active' : ''}" data-slip="3">3%</button>
@@ -712,7 +713,7 @@ function renderSwapCard() {
                 <!-- FROM -->
                 <div class="swap-panel">
                     <div class="swap-panel-header">
-                        <span>From</span>
+                        <span>${t('trade.youPay')}</span>
                     </div>
                     <div class="swap-panel-main">
                         <input type="text" class="swap-amount" id="trade-input"
@@ -739,7 +740,7 @@ function renderSwapCard() {
                 <!-- TO -->
                 <div class="swap-panel">
                     <div class="swap-panel-header">
-                        <span>To (estimated)</span>
+                        <span>${t('trade.youReceive')}</span>
                     </div>
                     <div class="swap-panel-main">
                         <span class="swap-amount" id="trade-output" style="color:#98a1c0">${TS.estimatedOutputFormatted}</span>
@@ -759,14 +760,14 @@ function renderSwapCard() {
             <div class="trade-info" id="trade-info">
                 <div class="trade-info-row">
                     <span>Price</span>
-                    <span id="trade-price">${TS.priceBkcPerEth ? '1 BNB = ' + formatPrice(TS.priceBkcPerEth) + ' BKC' : 'Loading...'}</span>
+                    <span id="trade-price">${TS.priceBkcPerEth ? '1 BNB = ' + formatPrice(TS.priceBkcPerEth) + ' BKC' : t('common.loading')}</span>
                 </div>
                 <div class="trade-info-row">
-                    <span>Price Impact</span>
+                    <span>${t('trade.priceImpact')}</span>
                     <span id="trade-impact">~0%</span>
                 </div>
                 <div class="trade-info-row">
-                    <span>Max Slippage</span>
+                    <span>${t('trade.slippageTolerance')}</span>
                     <span id="trade-slip-display">${TS.slippage}%</span>
                 </div>
             </div>
@@ -774,7 +775,7 @@ function renderSwapCard() {
             <!-- Swap button -->
             <div id="swap-box-button-container">
                 <button class="execute-trade-btn" id="trade-swap-btn" disabled>
-                    ${State.isConnected ? 'Enter amount' : 'Connect Wallet'}
+                    ${State.isConnected ? t('trade.enterAmount') : t('trade.connectWallet')}
                 </button>
             </div>
         </div>
@@ -782,15 +783,15 @@ function renderSwapCard() {
         <!-- Pool info -->
         <div class="trade-pool-info">
             <span>Pool: <a href="${EXPLORER}/address/${poolAddr}" target="_blank" rel="noopener noreferrer">${poolAddr.slice(0,6)}...${poolAddr.slice(-4)}</a></span>
-            <span>Fee: 0.3%</span>
-            <span class="trade-uni-badge"><i class="fa-solid fa-droplet"></i> Backchain AMM</span>
+            <span>${t('trade.swapFee')}: 0.3%</span>
+            <span class="trade-uni-badge"><i class="fa-solid fa-droplet"></i> ${t('trade.backcoinPool')}</span>
         </div>
 
         <!-- Price Chart -->
         <div class="trade-chart-card">
             <div class="trade-chart-header">
                 <div class="trade-chart-price-block">
-                    <span class="trade-chart-label">BKC Price</span>
+                    <span class="trade-chart-label">${t('trade.chart.bkcPrice')}</span>
                     <span id="chart-current-price" class="trade-chart-current">--</span>
                     <span id="chart-change" class="trade-chart-change flat">--</span>
                 </div>

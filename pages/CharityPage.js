@@ -23,7 +23,7 @@ import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
 import { addresses } from '../config.js';
 import { CharityTx } from '../modules/transactions/index.js';
-import { irysUploadFile } from '../modules/core/index.js';
+import { irysUploadFile, t } from '../modules/core/index.js';
 
 const ethers = window.ethers;
 
@@ -585,7 +585,7 @@ const renderEmpty = (msg) => `<div class="cp-empty">
     <h3 style="font-size:1.25rem;margin-bottom:0.5rem">${msg}</h3>
     <p class="text-zinc-500 text-sm" style="max-width:360px;margin:0 auto 1.5rem">Create a campaign to raise BNB for a cause you care about. Share it and earn referral rewards!</p>
     <button class="cp-btn cp-btn-primary" onclick="CharityPage.openCreate()" style="margin:0 auto">
-        <i class="fa-solid fa-plus"></i> Create Campaign
+        <i class="fa-solid fa-plus"></i> ${t('charity.createCampaign')}
     </button>
     <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:1.5rem">
         ${Object.entries(CATEGORIES).map(([key, cat]) =>
@@ -664,8 +664,8 @@ const renderMain = () => {
                         <i class="fa-solid fa-hand-holding-heart text-2xl text-amber-400"></i>
                     </div>
                     <div>
-                        <h1 class="text-2xl font-bold text-white">Charity Pool</h1>
-                        <p class="text-sm text-zinc-500">Support causes with BNB &bull; Share & earn referral rewards</p>
+                        <h1 class="text-2xl font-bold text-white">${t('charity.title')}</h1>
+                        <p class="text-sm text-zinc-500">${t('charity.subtitle')}</p>
                     </div>
                 </div>
                 <div class="flex gap-2">
@@ -682,11 +682,11 @@ const renderMain = () => {
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
                 <div class="cp-stat-card">
                     <p class="text-2xl font-bold text-emerald-400 font-mono"><i class="fa-solid fa-coins text-lg mr-1"></i>${CS.stats ? fmt(CS.stats.raised) : '--'}</p>
-                    <p class="text-[10px] text-zinc-500 uppercase mt-1">Total Donated</p>
+                    <p class="text-[10px] text-zinc-500 uppercase mt-1">${t('charity.totalDonated')}</p>
                 </div>
                 <div class="cp-stat-card">
                     <p class="text-2xl font-bold text-amber-400 font-mono">${CS.stats?.created ?? '--'}</p>
-                    <p class="text-[10px] text-zinc-500 uppercase mt-1">Campaigns</p>
+                    <p class="text-[10px] text-zinc-500 uppercase mt-1">${t('charity.totalCampaigns')}</p>
                 </div>
                 <div class="cp-stat-card">
                     <p class="text-2xl font-bold text-blue-400 font-mono"><i class="fa-solid fa-coins text-lg mr-1"></i>${CS.stats ? fmt(CS.stats.fees) : '--'}</p>
@@ -716,9 +716,9 @@ const renderMain = () => {
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-lg font-bold text-white flex items-center gap-2">
                     <i class="fa-solid fa-fire text-amber-500"></i>
-                    ${CS.selectedCategory ? `${CATEGORIES[CS.selectedCategory]?.emoji} ${CATEGORIES[CS.selectedCategory]?.name}` : 'Active Campaigns'}
+                    ${CS.selectedCategory ? `${CATEGORIES[CS.selectedCategory]?.emoji} ${CATEGORIES[CS.selectedCategory]?.name}` : t('charity.activeCampaigns')}
                 </h2>
-                <span class="text-xs text-zinc-500">${sorted.length} campaigns</span>
+                <span class="text-xs text-zinc-500">${sorted.length}</span>
             </div>
 
             <!-- Campaigns Grid -->
@@ -841,7 +841,7 @@ const renderDetail = (c) => {
                                 <button class="cp-preset" onclick="CharityPage.setAmt(0.5,'detail-amount')">0.5</button>
                             </div>
                             <button id="btn-donate-detail" class="cp-btn cp-btn-success w-full" onclick="CharityPage.donateDetail('${c.id}')">
-                                <i class="fa-solid fa-heart"></i> Donate Now
+                                <i class="fa-solid fa-heart"></i> ${t('charity.donateModal.donateNow')}
                             </button>
                             <div class="cp-fee-preview mt-2" id="detail-fee-preview">
                                 ~<strong>5%</strong> platform fee &bull; ~<strong>95%</strong> to campaign
@@ -851,17 +851,17 @@ const renderDetail = (c) => {
 
                         ${isCreator && isActive ? `
                         <button id="btn-close-campaign" class="cp-btn cp-btn-danger w-full" onclick="CharityPage.closeCampaign('${c.id}')">
-                            <i class="fa-solid fa-xmark"></i> Close Campaign
+                            <i class="fa-solid fa-xmark"></i> ${t('charity.closeCampaign')}
                         </button>` : ''}
 
                         ${isCreator && canWd ? `
                         <button id="btn-withdraw" class="cp-btn cp-btn-primary w-full" onclick="CharityPage.withdraw('${c.id}')">
-                            <i class="fa-solid fa-wallet"></i> Withdraw Funds
+                            <i class="fa-solid fa-wallet"></i> ${t('charity.withdrawFunds')}
                         </button>` : ''}
 
                         ${isActive ? `
                         <button class="cp-btn cp-btn-secondary w-full" onclick="CharityPage.openBoost('${c.id}')">
-                            <i class="fa-solid fa-rocket"></i> Boost Campaign
+                            <i class="fa-solid fa-rocket"></i> ${t('charity.boostCampaign')}
                         </button>` : ''}
 
                         <!-- Share -->
@@ -898,13 +898,13 @@ const renderDonateModal = () => `
     <div class="cp-modal" id="modal-donate" onclick="if(event.target===this) CharityPage.closeModal('donate')">
         <div class="cp-modal-content">
             <div class="cp-modal-header">
-                <h3 class="cp-modal-title"><i class="fa-solid fa-heart text-emerald-500"></i> Donate</h3>
+                <h3 class="cp-modal-title"><i class="fa-solid fa-heart text-emerald-500"></i> ${t('charity.donate')}</h3>
                 <button class="cp-modal-close" onclick="CharityPage.closeModal('donate')"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="cp-modal-body">
                 <div id="donate-campaign-info"></div>
                 <div class="cp-form-group">
-                    <label class="cp-form-label">Amount (BNB)</label>
+                    <label class="cp-form-label">${t('charity.donateModal.amount')}</label>
                     <div class="cp-balance-row">
                         <span class="bal">Balance: <span id="donate-bal">${State?.ethBalance ? Number(ethers.formatEther(State.ethBalance)).toFixed(4) : '--'}</span> BNB</span>
                         <button class="max-btn" onclick="CharityPage.setMax('donate-amount')">MAX</button>
@@ -926,8 +926,8 @@ const renderDonateModal = () => `
                 </div>
             </div>
             <div class="cp-modal-footer">
-                <button class="cp-btn cp-btn-secondary" onclick="CharityPage.closeModal('donate')">Cancel</button>
-                <button id="btn-donate" class="cp-btn cp-btn-success" onclick="CharityPage.donate()"><i class="fa-solid fa-heart"></i> Donate</button>
+                <button class="cp-btn cp-btn-secondary" onclick="CharityPage.closeModal('donate')">${t('common.cancel')}</button>
+                <button id="btn-donate" class="cp-btn cp-btn-success" onclick="CharityPage.donate()"><i class="fa-solid fa-heart"></i> ${t('charity.donateModal.donateNow')}</button>
             </div>
         </div>
     </div>`;
@@ -936,7 +936,7 @@ const renderBoostModal = () => `
     <div class="cp-modal" id="modal-boost" onclick="if(event.target===this) CharityPage.closeModal('boost')">
         <div class="cp-modal-content">
             <div class="cp-modal-header">
-                <h3 class="cp-modal-title"><i class="fa-solid fa-rocket text-amber-500"></i> Boost Campaign</h3>
+                <h3 class="cp-modal-title"><i class="fa-solid fa-rocket text-amber-500"></i> ${t('charity.boostModal.title')}</h3>
                 <button class="cp-modal-close" onclick="CharityPage.closeModal('boost')"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="cp-modal-body">
@@ -956,9 +956,9 @@ const renderBoostModal = () => `
                 </div>
             </div>
             <div class="cp-modal-footer">
-                <button class="cp-btn cp-btn-secondary" onclick="CharityPage.closeModal('boost')">Cancel</button>
+                <button class="cp-btn cp-btn-secondary" onclick="CharityPage.closeModal('boost')">${t('common.cancel')}</button>
                 <button id="btn-boost" class="cp-btn cp-btn-primary" onclick="CharityPage.confirmBoost()">
-                    <i class="fa-solid fa-rocket"></i> Boost
+                    <i class="fa-solid fa-rocket"></i> ${t('charity.boostModal.boostNow')}
                 </button>
             </div>
         </div>
@@ -986,7 +986,7 @@ const renderCreateWizard = () => `
         <div class="flex items-center gap-4 mb-6">
             <button class="cp-btn cp-btn-secondary" onclick="CharityPage.cancelCreate()"><i class="fa-solid fa-arrow-left"></i></button>
             <div>
-                <h1 class="text-xl font-bold text-white">Create Campaign</h1>
+                <h1 class="text-xl font-bold text-white">${t('charity.createCampaign')}</h1>
                 <p class="text-sm text-zinc-500">Step ${CS.createStep} of 4</p>
             </div>
         </div>
@@ -1160,9 +1160,9 @@ function cancelCreate() {
 function saveWizardStepData() {
     switch (CS.createStep) {
         case 2: {
-            const t = document.getElementById('wiz-title');
+            const titleEl = document.getElementById('wiz-title');
             const d = document.getElementById('wiz-desc');
-            if (t) CS.createTitle = t.value;
+            if (titleEl) CS.createTitle = titleEl.value;
             if (d) CS.createDesc = d.value;
             break;
         }
@@ -1177,7 +1177,7 @@ function saveWizardStepData() {
 }
 
 async function wizardLaunch() {
-    if (!State?.isConnected) return showToast('Connect wallet', 'warning');
+    if (!State?.isConnected) return showToast(t('common.connectWalletFirst'), 'warning');
 
     const goal = document.getElementById('wiz-goal')?.value;
     const duration = document.getElementById('wiz-duration')?.value;
@@ -1228,14 +1228,14 @@ async function wizardLaunch() {
                     });
                 } catch {}
             }
-            showToast('Campaign created!', 'success');
+            showToast(t('charity.toast.createSuccess'), 'success');
             cancelCreate();
             await loadData();
             render();
         },
         onError: (error) => {
             if (!error.cancelled && error.type !== 'user_rejected') {
-                showToast(error.message?.slice(0, 80) || 'Failed', 'error');
+                showToast(error.message?.slice(0, 80) || t('common.transactionFailed'), 'error');
             }
         }
     });
@@ -1295,10 +1295,10 @@ function openMyCampaigns() {
         listEl.innerHTML = `
             <div class="cp-empty">
                 <i class="fa-solid fa-folder-open"></i>
-                <h3>No campaigns yet</h3>
+                <h3>${t('common.noData')}</h3>
                 <p class="text-zinc-600 text-sm mb-4">Create your first campaign to start raising funds</p>
                 <button class="cp-btn cp-btn-primary" onclick="CharityPage.closeModal('my');CharityPage.openCreate()">
-                    <i class="fa-solid fa-plus"></i> Create Campaign
+                    <i class="fa-solid fa-plus"></i> ${t('charity.createCampaign')}
                 </button>
             </div>`;
     } else {
@@ -1382,7 +1382,7 @@ function setMax(inputId) {
     if (!State?.ethBalance) return;
     // Leave some for gas (~0.001 BNB)
     const maxVal = Number(ethers.formatEther(State.ethBalance)) - 0.001;
-    if (maxVal <= 0) { showToast('Insufficient BNB balance', 'error'); return; }
+    if (maxVal <= 0) { showToast(t('common.insufficientBalance'), 'error'); return; }
     const el = document.getElementById(inputId);
     if (el) {
         el.value = Math.floor(maxVal * 10000) / 10000; // 4 decimals
@@ -1419,7 +1419,7 @@ function updateDonatePreview(inputId, previewId) {
 // ============================================================================
 
 async function donateAction() {
-    if (!State?.isConnected) return showToast('Connect wallet', 'warning');
+    if (!State?.isConnected) return showToast(t('common.connectWalletFirst'), 'warning');
     const c = CS.currentCampaign;
     if (!c) return;
     const amount = document.getElementById('donate-amount')?.value;
@@ -1429,18 +1429,18 @@ async function donateAction() {
         campaignId: c.id, amount: ethers.parseEther(amount),
         button: document.getElementById('btn-donate'),
         onSuccess: async () => {
-            showToast('Thank you for your donation!', 'success');
+            showToast(t('charity.toast.donationSuccess'), 'success');
             closeModal('donate');
             await loadData(); render();
         },
         onError: (error) => {
-            if (!error.cancelled && error.type !== 'user_rejected') showToast(error.message?.slice(0, 80) || 'Failed', 'error');
+            if (!error.cancelled && error.type !== 'user_rejected') showToast(error.message?.slice(0, 80) || t('common.transactionFailed'), 'error');
         }
     });
 }
 
 async function donateDetail(id) {
-    if (!State?.isConnected) return showToast('Connect wallet', 'warning');
+    if (!State?.isConnected) return showToast(t('common.connectWalletFirst'), 'warning');
     const amount = document.getElementById('detail-amount')?.value;
     if (!amount || parseFloat(amount) < 0.001) return showToast('Minimum 0.001 BNB', 'error');
 
@@ -1448,29 +1448,29 @@ async function donateDetail(id) {
         campaignId: id, amount: ethers.parseEther(amount),
         button: document.getElementById('btn-donate-detail'),
         onSuccess: async () => {
-            showToast('Thank you for your donation!', 'success');
+            showToast(t('charity.toast.donationSuccess'), 'success');
             await loadData(); await loadDetail(id);
         },
         onError: (error) => {
-            if (!error.cancelled && error.type !== 'user_rejected') showToast(error.message?.slice(0, 80) || 'Failed', 'error');
+            if (!error.cancelled && error.type !== 'user_rejected') showToast(error.message?.slice(0, 80) || t('common.transactionFailed'), 'error');
         }
     });
 }
 
 async function closeCampaignAction(id) {
-    if (!State?.isConnected) return showToast('Connect wallet', 'warning');
+    if (!State?.isConnected) return showToast(t('common.connectWalletFirst'), 'warning');
     if (!confirm('Close this campaign? You can still withdraw raised funds.')) return;
 
     await CharityTx.closeCampaign({
         campaignId: id,
         button: document.getElementById('btn-close-campaign'),
-        onSuccess: async () => { showToast('Campaign closed', 'success'); await loadData(); render(); },
-        onError: (error) => { if (!error.cancelled && error.type !== 'user_rejected') showToast(error.message?.slice(0, 80) || 'Failed', 'error'); }
+        onSuccess: async () => { showToast(t('charity.toast.closeSuccess'), 'success'); await loadData(); render(); },
+        onError: (error) => { if (!error.cancelled && error.type !== 'user_rejected') showToast(error.message?.slice(0, 80) || t('common.transactionFailed'), 'error'); }
     });
 }
 
 async function withdrawAction(id) {
-    if (!State?.isConnected) return showToast('Connect wallet', 'warning');
+    if (!State?.isConnected) return showToast(t('common.connectWalletFirst'), 'warning');
     const c = CS.campaigns.find(x => x.id === id || x.id === String(id));
     if (!c) return;
     if (!confirm(`Withdraw ${fmt(c.raisedAmount)} BNB?`)) return;
@@ -1479,17 +1479,17 @@ async function withdrawAction(id) {
         campaignId: id,
         button: document.getElementById(`btn-withdraw-${id}`) || document.getElementById('btn-withdraw'),
         onSuccess: async () => {
-            showToast('Funds withdrawn successfully!', 'success');
+            showToast(t('charity.toast.withdrawSuccess'), 'success');
             closeModal('my');
             await loadData(); render();
             if (CS.currentCampaign?.id === id) await loadDetail(id);
         },
-        onError: (error) => { if (!error.cancelled && error.type !== 'user_rejected') showToast(error.message?.slice(0, 80) || 'Failed', 'error'); }
+        onError: (error) => { if (!error.cancelled && error.type !== 'user_rejected') showToast(error.message?.slice(0, 80) || t('common.transactionFailed'), 'error'); }
     });
 }
 
 async function confirmBoost() {
-    if (!State?.isConnected) return showToast('Connect wallet', 'warning');
+    if (!State?.isConnected) return showToast(t('common.connectWalletFirst'), 'warning');
     const id = CS.boostCampaignId;
     if (!id) return;
 
@@ -1497,13 +1497,13 @@ async function confirmBoost() {
         campaignId: id, days: CS.boostDays,
         button: document.getElementById('btn-boost'),
         onSuccess: async () => {
-            showToast(`Campaign boosted for ${CS.boostDays} days!`, 'success');
+            showToast(t('charity.toast.boostSuccess'), 'success');
             closeModal('boost');
             await loadData();
             if (CS.currentCampaign?.id === String(id)) await loadDetail(id);
             else render();
         },
-        onError: (error) => { if (!error.cancelled && error.type !== 'user_rejected') showToast(error.message?.slice(0, 80) || 'Failed', 'error'); }
+        onError: (error) => { if (!error.cancelled && error.type !== 'user_rejected') showToast(error.message?.slice(0, 80) || t('common.transactionFailed'), 'error'); }
     });
 }
 
@@ -1534,8 +1534,8 @@ function copyLink() {
     const c = CS.currentCampaign;
     if (!c) return;
     navigator.clipboard.writeText(getShareUrl(c.id))
-        .then(() => showToast('Referral link copied!', 'success'))
-        .catch(() => showToast('Copy failed', 'error'));
+        .then(() => showToast(t('common.copied'), 'success'))
+        .catch(() => showToast(t('common.error'), 'error'));
 }
 
 function quickShare(id) {
@@ -1545,8 +1545,8 @@ function quickShare(id) {
         navigator.share({ title: c?.title || 'Charity Campaign', url }).catch(() => {});
     } else {
         navigator.clipboard.writeText(url)
-            .then(() => showToast('Referral link copied!', 'success'))
-            .catch(() => showToast('Copy failed', 'error'));
+            .then(() => showToast(t('common.copied'), 'success'))
+            .catch(() => showToast(t('common.error'), 'error'));
     }
 }
 

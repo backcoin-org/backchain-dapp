@@ -19,6 +19,7 @@ const ethers = window.ethers;
 
 import { State } from '../state.js';
 import { DOMElements } from '../dom-elements.js';
+import { t } from '../modules/core/index.js';
 import {
     loadUserData,
     calculateUserTotalRewards,
@@ -147,7 +148,7 @@ const ACTIVITY_ICONS = {
 // HELPERS
 // ============================================================================
 function formatDate(timestamp) {
-    if (!timestamp) return 'Just now';
+    if (!timestamp) return t('common.justNow');
     try {
         const secs = timestamp.seconds || timestamp._seconds || (new Date(timestamp).getTime() / 1000);
         const date = new Date(secs * 1000);
@@ -156,12 +157,12 @@ function formatDate(timestamp) {
         const diffMins = Math.floor(diffMs / 60000);
         const diffHours = Math.floor(diffMs / 3600000);
         const diffDays = Math.floor(diffMs / 86400000);
-        if (diffMins < 1) return 'Just now';
-        if (diffMins < 60) return `${diffMins}m ago`;
-        if (diffHours < 24) return `${diffHours}h ago`;
-        if (diffDays < 7) return `${diffDays}d ago`;
+        if (diffMins < 1) return t('common.justNow');
+        if (diffMins < 60) return t('common.mAgo').replace('{m}', diffMins);
+        if (diffHours < 24) return t('common.hAgo').replace('{h}', diffHours);
+        if (diffDays < 7) return t('common.dAgo').replace('{d}', diffDays);
         return date.toLocaleDateString();
-    } catch (e) { return 'Recent'; }
+    } catch (e) { return t('common.recent'); }
 }
 
 function formatFullDateTime(timestamp) {
@@ -299,10 +300,10 @@ function animateClaimableRewards(targetNetValue) {
 // FAUCET FUNCTIONS
 // ============================================================================
 async function requestSmartFaucet(btnElement) {
-    if (!State.isConnected || !State.userAddress) return showToast("Conecte a wallet primeiro", "error");
+    if (!State.isConnected || !State.userAddress) return showToast(t('common.connectWalletFirst'), "error");
     const originalHTML = btnElement.innerHTML;
     btnElement.disabled = true;
-    btnElement.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Enviando...`;
+    btnElement.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> ${t('dashboard.faucet.sending')}`;
     DashboardState.faucet.isLoading = true;
 
     // Tentar API primeiro (relayer paga gas)
@@ -316,7 +317,7 @@ async function requestSmartFaucet(btnElement) {
         if (response.ok && data.success) {
             apiSuccess = true;
             const ethAmt = data.ethAmount || FAUCET_ETH_AMOUNT;
-            showToast(`Faucet: ${ethAmt} tBNB sent to your wallet!`, "success");
+            showToast(t('dashboard.faucet.successMsg').replace('{amount}', ethAmt), "success");
             DashboardState.faucet.canClaim = false;
             try { localStorage.setItem('bkc_faucet_' + State.userAddress.toLowerCase(), String(Date.now())); } catch(e) {}
             updateFaucetWidget();
@@ -333,13 +334,13 @@ async function requestSmartFaucet(btnElement) {
                 }
             }, 3000);
         } else {
-            const msg = data.error || data.message || "Faucet unavailable";
+            const msg = data.error || data.message || t('dashboard.faucet.unavailable');
             console.warn('[Faucet] API error:', msg);
             apiSuccess = true; // API responded — don't show generic error
 
             // Cooldown active
             if (data.alreadyClaimed || data.cooldownSeconds || msg.toLowerCase().includes("cooldown") || msg.toLowerCase().includes("already claimed")) {
-                showToast("Faucet on cooldown. Try again in 24h.", "warning");
+                showToast(t('dashboard.faucet.cooldownMsg'), "warning");
                 DashboardState.faucet.canClaim = false;
                 try { localStorage.setItem('bkc_faucet_' + State.userAddress.toLowerCase(), String(Date.now())); } catch(e) {}
                 updateFaucetWidget();
@@ -353,7 +354,7 @@ async function requestSmartFaucet(btnElement) {
 
     // Only show generic error if API was completely unreachable (network error)
     if (!apiSuccess) {
-        showToast("Faucet temporarily unavailable. Try again later.", "error");
+        showToast(t('dashboard.faucet.unavailable'), "error");
     }
 
     DashboardState.faucet.isLoading = false;
@@ -372,25 +373,25 @@ function updateFaucetWidget() {
 
     if (!State.isConnected) {
         widget.style.opacity = '0.5';
-        if (titleEl) titleEl.innerText = "Get Free Testnet Tokens";
-        if (descEl) descEl.innerText = "Connect your wallet to claim tBNB for gas";
+        if (titleEl) titleEl.innerText = t('dashboard.faucet.title');
+        if (descEl) descEl.innerText = t('dashboard.faucet.descConnect');
         if (statusEl) statusEl.classList.add('hidden');
-        if (btn) { btn.className = 'dash-btn-secondary'; btn.innerHTML = '<i class="fa-solid fa-wallet"></i> Connect Wallet'; btn.disabled = true; }
+        if (btn) { btn.className = 'dash-btn-secondary'; btn.innerHTML = `<i class="fa-solid fa-wallet"></i> ${t('dashboard.faucet.connectWallet')}`; btn.disabled = true; }
         return;
     }
     widget.style.opacity = '1';
 
     if (!DashboardState.faucet.canClaim) {
         // Claimed today — comes back in 24h
-        if (titleEl) titleEl.innerText = "Testnet Tokens Received";
-        if (descEl) descEl.innerText = `Already received ${FAUCET_ETH_AMOUNT} tBNB today — come back in 24h`;
-        if (statusEl) { statusEl.classList.remove('hidden'); statusEl.innerHTML = `<i class="fa-solid fa-circle-check" style="margin-right:4px;color:#4ade80"></i>Daily claim used`; }
-        if (btn) { btn.className = 'dash-btn-secondary'; btn.innerHTML = '<i class="fa-solid fa-check"></i> Claimed Today'; btn.disabled = true; }
+        if (titleEl) titleEl.innerText = t('dashboard.faucet.titleReceived');
+        if (descEl) descEl.innerText = t('dashboard.faucet.descReceived').replace('{amount}', FAUCET_ETH_AMOUNT);
+        if (statusEl) { statusEl.classList.remove('hidden'); statusEl.innerHTML = `<i class="fa-solid fa-circle-check" style="margin-right:4px;color:#4ade80"></i>${t('dashboard.faucet.dailyClaimUsed')}`; }
+        if (btn) { btn.className = 'dash-btn-secondary'; btn.innerHTML = `<i class="fa-solid fa-check"></i> ${t('dashboard.faucet.claimedToday')}`; btn.disabled = true; }
     } else {
-        if (titleEl) titleEl.innerText = "Get Free Testnet Tokens";
-        if (descEl) descEl.innerText = "Claim tBNB for gas — once per day";
+        if (titleEl) titleEl.innerText = t('dashboard.faucet.title');
+        if (descEl) descEl.innerText = t('dashboard.faucet.desc');
         if (statusEl) statusEl.classList.add('hidden');
-        if (btn) { btn.className = 'dash-btn-primary dash-btn-cyan'; btn.innerHTML = '<i class="fa-solid fa-faucet"></i> Claim Free Tokens'; btn.disabled = false; }
+        if (btn) { btn.className = 'dash-btn-primary dash-btn-cyan'; btn.innerHTML = `<i class="fa-solid fa-faucet"></i> ${t('dashboard.faucet.claimFreeTokens')}`; btn.disabled = false; }
     }
 }
 
@@ -455,8 +456,8 @@ async function updateTutorWidget() {
 
     if (!State.isConnected || !State.userAddress) {
         widget.style.opacity = '0.5';
-        if (titleEl) titleEl.innerText = "Become a Tutor";
-        if (descEl) descEl.innerText = "Connect your wallet to get your tutor link";
+        if (titleEl) titleEl.innerText = t('dashboard.tutor.becomeTutor');
+        if (descEl) descEl.innerText = t('dashboard.tutor.connectForLink');
         if (statsEl) statsEl.style.display = 'none';
         if (linkContainer) linkContainer.style.display = 'none';
         if (shareBtn) shareBtn.style.display = 'none';
@@ -483,11 +484,11 @@ async function updateTutorWidget() {
             tutorInfoEl.innerHTML = `
                 <span class="dash-referral-stat" style="color:#22d3ee">
                     <i class="fa-solid fa-graduation-cap" style="font-size:10px"></i>
-                    Tutor: ${truncateAddress(data.tutor)}
+                    ${t('nav.tutor')}: ${truncateAddress(data.tutor)}
                 </span>
-                <a href="#referral" class="dash-referral-stat" style="color:#f59e0b;cursor:pointer;text-decoration:none" title="Change your tutor">
+                <a href="#referral" class="dash-referral-stat" style="color:#f59e0b;cursor:pointer;text-decoration:none" title="${t('dashboard.tutor.change')}">
                     <i class="fa-solid fa-pen" style="font-size:9px"></i>
-                    Change
+                    ${t('dashboard.tutor.change')}
                 </a>
             `;
         }
@@ -496,22 +497,22 @@ async function updateTutorWidget() {
         tutorInfoEl.innerHTML = `
             <span class="dash-referral-stat" style="color:var(--dash-text-3)">
                 <i class="fa-solid fa-graduation-cap" style="font-size:10px"></i>
-                No tutor yet
+                ${t('dashboard.tutor.noTutorYet')}
             </span>
         `;
     }
 
     if (data.count > 0) {
-        if (titleEl) titleEl.innerText = `${data.count} Student${data.count > 1 ? 's' : ''} Earning for You`;
+        if (titleEl) titleEl.innerText = t('dashboard.tutor.studentsEarning').replace('{count}', data.count);
         if (data.pendingEth > 0n) {
             const pendingStr = Number(ethers.formatEther(data.pendingEth)).toFixed(6);
-            if (descEl) descEl.innerHTML = `Tutor earnings: <strong style="color:#f59e0b">${pendingStr} BNB</strong> available — <a href="#referral" style="color:#22d3ee;text-decoration:underline">withdraw</a>`;
+            if (descEl) descEl.innerHTML = t('dashboard.tutor.earnings').replace('{amount}', `<strong style="color:#f59e0b">${pendingStr}</strong>`) + ` — <a href="#referral" style="color:#22d3ee;text-decoration:underline">${t('common.withdraw')}</a>`;
         } else {
-            if (descEl) descEl.innerText = "You earn 10% BNB on all fees + 5% BKC on staking rewards. Keep sharing!";
+            if (descEl) descEl.innerText = t('dashboard.tutor.keepSharing');
         }
     } else {
-        if (titleEl) titleEl.innerText = "Be Someone's Tutor";
-        if (descEl) descEl.innerText = "Share your link. Earn 10% of all fees + 5% BKC from your students — forever.";
+        if (titleEl) titleEl.innerText = t('dashboard.tutor.becomeTutor');
+        if (descEl) descEl.innerText = t('dashboard.tutor.shareLink');
     }
 }
 
@@ -519,10 +520,10 @@ function copyTutorLink() {
     if (!State.userAddress) return;
     const link = `${window.location.origin}/#dashboard?ref=${State.userAddress}`;
     navigator.clipboard.writeText(link).then(() => {
-        showToast('Tutor link copied!', 'success');
+        showToast(t('dashboard.tutor.tutorLinkCopied'), 'success');
         const btn = document.getElementById('referral-copy-btn');
         if (btn) { btn.innerHTML = '<i class="fa-solid fa-check"></i>'; setTimeout(() => { btn.innerHTML = '<i class="fa-solid fa-copy"></i>'; }, 2000); }
-    }).catch(() => showToast('Failed to copy', 'error'));
+    }).catch(() => showToast(t('dashboard.tutor.failedToCopy'), 'error'));
 }
 
 function shareTutorLink() {
@@ -531,9 +532,9 @@ function shareTutorLink() {
     const text = `Join Backchain and earn crypto!\n\nStake BKC and earn daily rewards\nBe a tutor — earn 10% BNB + 5% BKC FOREVER\n\n${link}\n\n#Backchain #DeFi #opBNB #BNBChain #Web3`;
 
     if (navigator.share) {
-        navigator.share({ title: 'Backchain — Become a Tutor', text, url: link }).catch(() => {});
+        navigator.share({ title: t('dashboard.tutor.becomeTutor'), text, url: link }).catch(() => {});
     } else {
-        navigator.clipboard.writeText(text).then(() => showToast('Share text copied!', 'success')).catch(() => {});
+        navigator.clipboard.writeText(text).then(() => showToast(t('dashboard.tutor.shareTextCopied'), 'success')).catch(() => {});
     }
 }
 
@@ -1168,24 +1169,24 @@ function renderDashboardLayout() {
                 <img src="./assets/bkc_logo_3d.png" class="dash-hero-ghost" alt="">
                 <div class="dash-hero-inner">
                     <div class="dash-hero-left">
-                        <div class="dash-hero-label">You Will Receive</div>
+                        <div class="dash-hero-label">${t('dashboard.youWillReceive')}</div>
                         <div id="dash-user-rewards" class="dash-reward-value">--</div>
 
                         <div id="dash-user-gain-area" class="dash-gain-area">
                             <i class="fa-solid fa-rocket" style="margin-right:4px"></i>
-                            Earn +<span id="dash-user-potential-gain">0</span> BKC more with NFT!
+                            ${t('dashboard.earnMoreWithNft').replace('{amount}', '<span id="dash-user-potential-gain">0</span>')}
                         </div>
 
                         <button id="dashboardClaimBtn" class="dash-claim-btn" disabled>
-                            <i class="fa-solid fa-coins"></i> Claim Rewards
+                            <i class="fa-solid fa-coins"></i> ${t('dashboard.claimRewards')}
                         </button>
 
                         <div class="dash-hero-pstake">
                             <div>
-                                <div class="dash-hero-pstake-label">Your pStake</div>
+                                <div class="dash-hero-pstake-label">${t('dashboard.yourPStake')}</div>
                                 <div id="dash-user-pstake" class="dash-hero-pstake-value">--</div>
                             </div>
-                            <span class="dash-stake-link delegate-link"><i class="fa-solid fa-plus" style="margin-right:3px"></i> Stake More</span>
+                            <span class="dash-stake-link delegate-link"><i class="fa-solid fa-plus" style="margin-right:3px"></i> ${t('dashboard.stakeMore')}</span>
                         </div>
                     </div>
 
@@ -1193,7 +1194,7 @@ function renderDashboardLayout() {
                         <div id="dash-booster-area" style="min-height: 120px; display: flex; align-items: center; justify-content: center;">
                             <div style="text-align:center;">
                                 <img src="./assets/bkc_logo_3d.png" style="width:32px;height:32px;opacity:0.3;animation:dash-float 2s infinite" alt="">
-                                <p style="font-size:11px;color:var(--dash-text-3);margin-top:8px">Loading...</p>
+                                <p style="font-size:11px;color:var(--dash-text-3);margin-top:8px">${t('common.loading')}</p>
                             </div>
                         </div>
                     </div>
@@ -1206,8 +1207,8 @@ function renderDashboardLayout() {
                     <i class="fa-solid fa-droplet"></i>
                 </div>
                 <div class="dash-faucet-info">
-                    <h3 id="faucet-title">Get Free Testnet Tokens</h3>
-                    <p id="faucet-desc">Claim tBNB for gas — once per day</p>
+                    <h3 id="faucet-title">${t('dashboard.faucet.title')}</h3>
+                    <p id="faucet-desc">${t('dashboard.faucet.desc')}</p>
                     <div class="dash-faucet-amounts">
                         <span class="dash-faucet-badge" style="color:#4ade80">
                             <i class="fa-solid fa-coins" style="font-size:10px"></i>${FAUCET_ETH_AMOUNT} tBNB
@@ -1217,7 +1218,7 @@ function renderDashboardLayout() {
                 </div>
                 <div class="dash-faucet-actions">
                     <button id="faucet-action-btn" class="dash-btn-primary dash-btn-cyan">
-                        <i class="fa-solid fa-faucet"></i> Claim Free Tokens
+                        <i class="fa-solid fa-faucet"></i> ${t('dashboard.faucet.claimFreeTokens')}
                     </button>
                 </div>
             </div>
@@ -1228,22 +1229,22 @@ function renderDashboardLayout() {
                     <i class="fa-solid fa-hammer"></i>
                 </div>
                 <div class="dash-buyback-info">
-                    <h3 id="dash-buyback-title">Buyback Ready</h3>
-                    <p id="dash-buyback-desc">Execute buyback to earn 5% of pending BNB as staker rewards</p>
+                    <h3 id="dash-buyback-title">${t('dashboard.buyback.ready')}</h3>
+                    <p id="dash-buyback-desc">${t('dashboard.buyback.desc')}</p>
                     <div class="dash-buyback-amounts">
                         <span class="dash-buyback-badge" style="color:#f97316">
                             <i class="fa-brands fa-ethereum" style="font-size:10px"></i>
-                            <span id="dash-buyback-pending">0</span> BNB pending
+                            <span id="dash-buyback-pending">0</span> BNB ${t('dashboard.buyback.pending')}
                         </span>
                         <span class="dash-buyback-badge" style="color:#4ade80">
                             <i class="fa-solid fa-gift" style="font-size:10px"></i>
-                            Earn <span id="dash-buyback-reward">0</span> BNB
+                            ${t('dashboard.buyback.earnAmount').replace('{amount}', '<span id="dash-buyback-reward">0</span>')}
                         </span>
                     </div>
                 </div>
                 <div class="dash-buyback-actions">
                     <button id="dash-buyback-btn" class="dash-btn-primary dash-btn-orange">
-                        <i class="fa-solid fa-hammer"></i> Execute
+                        <i class="fa-solid fa-hammer"></i> ${t('dashboard.buyback.execute')}
                     </button>
                 </div>
             </div>
@@ -1254,12 +1255,12 @@ function renderDashboardLayout() {
                     <i class="fa-solid fa-graduation-cap"></i>
                 </div>
                 <div class="dash-referral-info">
-                    <h3 id="referral-title">Be Someone's Tutor</h3>
-                    <p id="referral-desc">Share your link. Earn 10% of all fees + 5% BKC from your students — forever.</p>
+                    <h3 id="referral-title">${t('dashboard.tutor.becomeTutor')}</h3>
+                    <p id="referral-desc">${t('dashboard.tutor.shareLink')}</p>
                     <div id="referral-stats" class="dash-referral-stats" style="display:none">
                         <span class="dash-referral-stat" style="color:#a78bfa">
                             <i class="fa-solid fa-users" style="font-size:10px"></i>
-                            <span id="referral-count">0</span> students
+                            <span id="referral-count">0</span>
                         </span>
                         <span class="dash-referral-stat" style="color:#4ade80">
                             <i class="fa-solid fa-coins" style="font-size:10px"></i>
@@ -1269,12 +1270,12 @@ function renderDashboardLayout() {
                     <div id="tutor-info-area" class="dash-referral-stats" style="display:none"></div>
                     <div id="referral-link-container" class="dash-referral-link-box" style="display:none">
                         <span id="referral-link-text"></span>
-                        <button id="referral-copy-btn" title="Copy link"><i class="fa-solid fa-copy"></i></button>
+                        <button id="referral-copy-btn" title="${t('common.copy')}"><i class="fa-solid fa-copy"></i></button>
                     </div>
                 </div>
                 <div class="dash-referral-actions">
                     <button id="referral-share-btn" class="dash-btn-primary dash-btn-purple" style="display:none">
-                        <i class="fa-solid fa-share-nodes"></i> Share
+                        <i class="fa-solid fa-share-nodes"></i> ${t('common.share')}
                     </button>
                 </div>
             </div>
@@ -1286,8 +1287,8 @@ function renderDashboardLayout() {
                         <i class="fa-solid fa-comment-dots"></i>
                     </div>
                     <div class="dash-action-text">
-                        <h4>Agora</h4>
-                        <p>Post & discuss on-chain</p>
+                        <h4>${t('dashboard.actions.agoraTitle')}</h4>
+                        <p>${t('dashboard.actions.agoraDesc')}</p>
                     </div>
                     <i class="fa-solid fa-chevron-right dash-action-arrow"></i>
                 </div>
@@ -1297,8 +1298,8 @@ function renderDashboardLayout() {
                         <i class="fa-solid fa-lock"></i>
                     </div>
                     <div class="dash-action-text">
-                        <h4>Stake BKC</h4>
-                        <p>Earn while you sleep</p>
+                        <h4>${t('dashboard.actions.stakeBkcTitle')}</h4>
+                        <p>${t('dashboard.actions.stakeBkcDesc')}</p>
                     </div>
                     <i class="fa-solid fa-chevron-right dash-action-arrow"></i>
                 </div>
@@ -1308,8 +1309,8 @@ function renderDashboardLayout() {
                         <i class="fa-solid fa-paw"></i>
                     </div>
                     <div class="dash-action-text">
-                        <h4>Fortune Pool</h4>
-                        <p id="dash-fortune-prize-text">Win up to 100x</p>
+                        <h4>${t('dashboard.actions.fortunePoolTitle')}</h4>
+                        <p id="dash-fortune-prize-text">${t('dashboard.actions.fortunePoolDesc')}</p>
                     </div>
                     <i class="fa-solid fa-chevron-right dash-action-arrow"></i>
                 </div>
@@ -1319,8 +1320,8 @@ function renderDashboardLayout() {
                         <i class="fa-solid fa-stamp"></i>
                     </div>
                     <div class="dash-action-text">
-                        <h4>Notarize</h4>
-                        <p id="dash-notary-count-text">Certify on blockchain</p>
+                        <h4>${t('dashboard.actions.notarizeTitle')}</h4>
+                        <p id="dash-notary-count-text">${t('dashboard.actions.notarizeDesc')}</p>
                     </div>
                     <i class="fa-solid fa-chevron-right dash-action-arrow"></i>
                 </div>
@@ -1330,8 +1331,8 @@ function renderDashboardLayout() {
                         <i class="fa-solid fa-heart"></i>
                     </div>
                     <div class="dash-action-text">
-                        <h4>Charity Pool</h4>
-                        <p>Donate & burn tokens</p>
+                        <h4>${t('dashboard.actions.charityPoolTitle')}</h4>
+                        <p>${t('dashboard.actions.charityPoolDesc')}</p>
                     </div>
                     <i class="fa-solid fa-chevron-right dash-action-arrow"></i>
                 </div>
@@ -1341,8 +1342,8 @@ function renderDashboardLayout() {
                         <i class="fa-solid fa-gem"></i>
                     </div>
                     <div class="dash-action-text">
-                        <h4>NFT Market</h4>
-                        <p>2x your rewards</p>
+                        <h4>${t('dashboard.actions.nftMarketTitle')}</h4>
+                        <p>${t('dashboard.actions.nftMarketDesc')}</p>
                     </div>
                     <i class="fa-solid fa-chevron-right dash-action-arrow"></i>
                 </div>
@@ -1352,8 +1353,8 @@ function renderDashboardLayout() {
                         <i class="fa-solid fa-arrow-right-arrow-left"></i>
                     </div>
                     <div class="dash-action-text">
-                        <h4>Trade BKC</h4>
-                        <p>Swap on Uniswap V3</p>
+                        <h4>${t('dashboard.actions.tradeBkcTitle')}</h4>
+                        <p>${t('dashboard.actions.tradeBkcDesc')}</p>
                     </div>
                     <i class="fa-solid fa-chevron-right dash-action-arrow"></i>
                 </div>
@@ -1362,31 +1363,31 @@ function renderDashboardLayout() {
             <!-- METRICS BAR -->
             <div class="dash-metrics-bar" style="margin-bottom: 16px;">
                 <div class="dash-metric-pill" title="Total BKC tokens in circulation">
-                    <div class="dash-metric-pill-label"><i class="fa-solid fa-coins" style="color:#f59e0b"></i> Supply</div>
+                    <div class="dash-metric-pill-label"><i class="fa-solid fa-coins" style="color:#f59e0b"></i> ${t('dashboard.metrics.supply')}</div>
                     <div id="dash-metric-supply" class="dash-metric-pill-value">--</div>
                 </div>
                 <div class="dash-metric-pill" title="Total staking power on network">
-                    <div class="dash-metric-pill-label"><i class="fa-solid fa-layer-group" style="color:#a78bfa"></i> pStake</div>
+                    <div class="dash-metric-pill-label"><i class="fa-solid fa-layer-group" style="color:#a78bfa"></i> ${t('dashboard.metrics.pstake')}</div>
                     <div id="dash-metric-pstake" class="dash-metric-pill-value">--</div>
                 </div>
                 <div class="dash-metric-pill" title="BKC permanently removed from supply">
-                    <div class="dash-metric-pill-label"><i class="fa-solid fa-fire" style="color:#ef4444"></i> Burned</div>
+                    <div class="dash-metric-pill-label"><i class="fa-solid fa-fire" style="color:#ef4444"></i> ${t('dashboard.metrics.burned')}</div>
                     <div id="dash-metric-burned" class="dash-metric-pill-value">--</div>
                 </div>
                 <div class="dash-metric-pill" title="Total BNB fees collected by ecosystem">
-                    <div class="dash-metric-pill-label"><i class="fa-brands fa-ethereum" style="color:#fb923c"></i> Fees</div>
+                    <div class="dash-metric-pill-label"><i class="fa-brands fa-ethereum" style="color:#fb923c"></i> ${t('dashboard.metrics.fees')}</div>
                     <div id="dash-metric-fees" class="dash-metric-pill-value">--</div>
                 </div>
                 <div class="dash-metric-pill" title="BKC locked in protocol contracts (staking, pools, etc)">
-                    <div class="dash-metric-pill-label"><i class="fa-solid fa-vault" style="color:#60a5fa"></i> Locked</div>
+                    <div class="dash-metric-pill-label"><i class="fa-solid fa-vault" style="color:#60a5fa"></i> ${t('dashboard.metrics.locked')}</div>
                     <div id="dash-metric-locked" class="dash-metric-pill-value">--</div>
                 </div>
                 <div class="dash-metric-pill" title="BKC market price (via Uniswap V3 + CoinGecko)" style="border-color: rgba(34,197,94,0.2);">
-                    <div class="dash-metric-pill-label"><i class="fa-solid fa-chart-line" style="color:#22c55e"></i> BKC Price</div>
+                    <div class="dash-metric-pill-label"><i class="fa-solid fa-chart-line" style="color:#22c55e"></i> ${t('dashboard.metrics.bkcPrice')}</div>
                     <div id="dash-metric-bkcprice" class="dash-metric-pill-value" style="color:#22c55e">--</div>
                 </div>
                 <div class="dash-metric-pill" title="Your BKC balance" style="border-color: rgba(245,158,11,0.2);">
-                    <div class="dash-metric-pill-label"><i class="fa-solid fa-wallet" style="color:#f59e0b"></i> Balance</div>
+                    <div class="dash-metric-pill-label"><i class="fa-solid fa-wallet" style="color:#f59e0b"></i> ${t('dashboard.metrics.balance')}</div>
                     <div id="dash-metric-balance" class="dash-metric-pill-value" style="color:#f59e0b">--</div>
                     <div id="dash-metric-balance-usd" style="font-size:10px;color:var(--dash-text-3);margin-top:-1px"></div>
                 </div>
@@ -1397,42 +1398,42 @@ function renderDashboardLayout() {
                 <div class="dash-activity-header">
                     <div class="dash-activity-title">
                         <i class="fa-solid fa-bolt" style="color:var(--dash-accent)"></i>
-                        <span id="activity-title">Activity</span>
+                        <span id="activity-title">${t('dashboard.activity.title')}</span>
                         <span id="activity-count" style="font-size:9px;color:var(--dash-text-3);background:var(--dash-surface-2);padding:2px 6px;border-radius:10px;font-weight:600;display:none">0</span>
                     </div>
                     <div style="display:flex; gap:6px; align-items:center;">
-                        <button id="manual-refresh-btn" class="dash-sort-btn" title="Refresh activity">
+                        <button id="manual-refresh-btn" class="dash-sort-btn" title="${t('common.refresh')}">
                             <i class="fa-solid fa-rotate"></i>
                         </button>
-                        <button id="activity-sort-toggle" class="dash-sort-btn" title="Toggle sort order">
+                        <button id="activity-sort-toggle" class="dash-sort-btn" title="${t('common.sort')}">
                             <i class="fa-solid fa-arrow-down-wide-short"></i>
                         </button>
                     </div>
                 </div>
 
                 <div class="dash-filter-chips">
-                    <button class="dash-chip active" data-filter="ALL"><i class="fa-solid fa-layer-group" style="margin-right:3px;font-size:9px"></i>All</button>
-                    <button class="dash-chip" data-filter="STAKE"><i class="fa-solid fa-lock" style="margin-right:3px;font-size:9px"></i>Staking</button>
-                    <button class="dash-chip" data-filter="CLAIM"><i class="fa-solid fa-coins" style="margin-right:3px;font-size:9px"></i>Claims</button>
-                    <button class="dash-chip" data-filter="NFT"><i class="fa-solid fa-gem" style="margin-right:3px;font-size:9px"></i>NFT</button>
-                    <button class="dash-chip" data-filter="GAME"><i class="fa-solid fa-dice" style="margin-right:3px;font-size:9px"></i>Fortune</button>
-                    <button class="dash-chip" data-filter="CHARITY"><i class="fa-solid fa-heart" style="margin-right:3px;font-size:9px"></i>Charity</button>
-                    <button class="dash-chip" data-filter="NOTARY"><i class="fa-solid fa-stamp" style="margin-right:3px;font-size:9px"></i>Notary</button>
-                    <button class="dash-chip" data-filter="BACKCHAT"><i class="fa-solid fa-comments" style="margin-right:3px;font-size:9px"></i>Agora</button>
-                    <button class="dash-chip" data-filter="FAUCET"><i class="fa-solid fa-droplet" style="margin-right:3px;font-size:9px"></i>Faucet</button>
+                    <button class="dash-chip active" data-filter="ALL"><i class="fa-solid fa-layer-group" style="margin-right:3px;font-size:9px"></i>${t('dashboard.activity.filterAll')}</button>
+                    <button class="dash-chip" data-filter="STAKE"><i class="fa-solid fa-lock" style="margin-right:3px;font-size:9px"></i>${t('dashboard.activity.filterStaking')}</button>
+                    <button class="dash-chip" data-filter="CLAIM"><i class="fa-solid fa-coins" style="margin-right:3px;font-size:9px"></i>${t('dashboard.activity.filterClaims')}</button>
+                    <button class="dash-chip" data-filter="NFT"><i class="fa-solid fa-gem" style="margin-right:3px;font-size:9px"></i>${t('dashboard.activity.filterNft')}</button>
+                    <button class="dash-chip" data-filter="GAME"><i class="fa-solid fa-dice" style="margin-right:3px;font-size:9px"></i>${t('dashboard.activity.filterFortune')}</button>
+                    <button class="dash-chip" data-filter="CHARITY"><i class="fa-solid fa-heart" style="margin-right:3px;font-size:9px"></i>${t('dashboard.activity.filterCharity')}</button>
+                    <button class="dash-chip" data-filter="NOTARY"><i class="fa-solid fa-stamp" style="margin-right:3px;font-size:9px"></i>${t('dashboard.activity.filterNotary')}</button>
+                    <button class="dash-chip" data-filter="BACKCHAT"><i class="fa-solid fa-comments" style="margin-right:3px;font-size:9px"></i>${t('dashboard.activity.filterAgora')}</button>
+                    <button class="dash-chip" data-filter="FAUCET"><i class="fa-solid fa-droplet" style="margin-right:3px;font-size:9px"></i>${t('dashboard.activity.filterFaucet')}</button>
                 </div>
 
                 <div id="dash-activity-list" class="dash-activity-list">
                     <div class="dash-loading">
                         <img src="./assets/bkc_logo_3d.png" class="dash-loading-logo" alt="">
-                        <span class="dash-loading-text">Loading activity...</span>
+                        <span class="dash-loading-text">${t('dashboard.activity.loadingActivity')}</span>
                     </div>
                 </div>
 
                 <div id="dash-pagination-controls" class="dash-pagination" style="display:none">
-                    <button class="dash-page-btn" id="page-prev"><i class="fa-solid fa-chevron-left" style="margin-right:4px"></i>Prev</button>
+                    <button class="dash-page-btn" id="page-prev"><i class="fa-solid fa-chevron-left" style="margin-right:4px"></i>${t('common.prev')}</button>
                     <span class="dash-page-indicator" id="page-indicator">1/1</span>
-                    <button class="dash-page-btn" id="page-next">Next<i class="fa-solid fa-chevron-right" style="margin-left:4px"></i></button>
+                    <button class="dash-page-btn" id="page-next">${t('common.next')}<i class="fa-solid fa-chevron-right" style="margin-left:4px"></i></button>
                 </div>
             </div>
         </div>
@@ -1456,8 +1457,8 @@ function renderBoosterModal() {
                     <div style="display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;background:rgba(245,158,11,0.15);border-radius:50%;margin-bottom:8px">
                         <i class="fa-solid fa-rocket" style="font-size:22px;color:var(--dash-accent)"></i>
                     </div>
-                    <h3 style="font-size:18px;font-weight:700;color:var(--dash-text);margin:0">Boost Efficiency</h3>
-                    <p style="font-size:11px;color:var(--dash-text-2);margin-top:4px">NFT holders earn up to 2x more</p>
+                    <h3 style="font-size:18px;font-weight:700;color:var(--dash-text);margin:0">${t('dashboard.modals.boostEfficiency')}</h3>
+                    <p style="font-size:11px;color:var(--dash-text-2);margin-top:4px">${t('dashboard.modals.nftHoldersEarnMore')}</p>
                 </div>
                 <div style="background:var(--dash-surface-2);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:6px">
                     <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--dash-text-2)">No NFT:</span><span style="color:var(--dash-text-3);font-weight:700">50%</span></div>
@@ -1465,8 +1466,8 @@ function renderBoosterModal() {
                     <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--dash-accent)">Diamond:</span><span style="color:var(--dash-green);font-weight:700">100%</span></div>
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px">
-                    <button class="dash-modal-action-btn go-to-store" style="background:linear-gradient(135deg,#d97706,#b45309)">Buy NFT</button>
-                    <button class="dash-modal-action-btn go-to-rental" style="background:linear-gradient(135deg,#06b6d4,#0891b2)">Rent NFT</button>
+                    <button class="dash-modal-action-btn go-to-store" style="background:linear-gradient(135deg,#d97706,#b45309)">${t('dashboard.booster.buyNft')}</button>
+                    <button class="dash-modal-action-btn go-to-rental" style="background:linear-gradient(135deg,#06b6d4,#0891b2)">${t('dashboard.booster.rentNft')}</button>
                 </div>
             </div>
         </div>
@@ -1480,12 +1481,12 @@ function renderGasModal() {
                 <div style="width:48px;height:48px;background:rgba(239,68,68,0.1);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;border:1px solid rgba(239,68,68,0.2)">
                     <i class="fa-solid fa-gas-pump" style="font-size:18px;color:#ef4444"></i>
                 </div>
-                <h3 style="font-size:16px;font-weight:700;color:var(--dash-text);margin:0 0 4px">No Gas</h3>
-                <p style="font-size:11px;color:var(--dash-text-2);margin-bottom:14px">You need tBNB for gas</p>
+                <h3 style="font-size:16px;font-weight:700;color:var(--dash-text);margin:0 0 4px">${t('dashboard.modals.noGas')}</h3>
+                <p style="font-size:11px;color:var(--dash-text-2);margin-bottom:14px">${t('dashboard.modals.needGasTokens')}</p>
                 <button id="emergency-faucet-btn" class="dash-btn-primary dash-btn-green" style="width:100%;justify-content:center;margin-bottom:10px">
-                    <i class="fa-solid fa-hand-holding-medical"></i> Get Free Gas + BKC
+                    <i class="fa-solid fa-hand-holding-medical"></i> ${t('dashboard.modals.getFreeGas')}
                 </button>
-                <button id="close-gas-modal-dash" style="background:none;border:none;color:var(--dash-text-3);cursor:pointer;font-size:11px">Close</button>
+                <button id="close-gas-modal-dash" style="background:none;border:none;color:var(--dash-text-3);cursor:pointer;font-size:11px">${t('common.close')}</button>
             </div>
         </div>
     `;
@@ -1583,10 +1584,10 @@ async function updateGlobalMetrics() {
         updateBkcPriceMetric();
 
         const fortuneText = document.getElementById('dash-fortune-prize-text');
-        if (fortuneText) fortuneText.innerText = fortunePrize > 0 ? `Prize: ${formatCompact(fortunePrize)} BKC` : 'Play to win';
+        if (fortuneText) fortuneText.innerText = fortunePrize > 0 ? t('dashboard.fortune.prize').replace('{amount}', formatCompact(fortunePrize)) : t('dashboard.fortune.playToWin');
 
         const notaryText = document.getElementById('dash-notary-count-text');
-        if (notaryText) notaryText.innerText = notaryCount > 0 ? `${notaryCount} docs certified` : 'Certify documents';
+        if (notaryText) notaryText.innerText = notaryCount > 0 ? t('dashboard.notary.docsCertified').replace('{count}', notaryCount) : t('dashboard.notary.certifyDocs');
 
         DashboardState.metricsCache = { supply: supplyNum, burned: burnedNum, fees: ethFeesNum, timestamp: Date.now() };
 
@@ -1626,10 +1627,10 @@ async function loadDashBuybackData() {
         const descEl = document.getElementById('dash-buyback-desc');
         if (pendingEl) pendingEl.textContent = pendingStr;
         if (rewardEl) rewardEl.textContent = rewardStr;
-        if (titleEl) titleEl.textContent = `Buyback Ready — ${pendingStr} BNB`;
+        if (titleEl) titleEl.textContent = t('dashboard.buyback.title').replace('{amount}', pendingStr);
         if (descEl) descEl.textContent = fee > 0n
-            ? `Pay ${feeStr} BNB fee, earn ${rewardStr} BNB (5%). Fee amplifies buyback.`
-            : `Execute buyback to earn 5% of pending BNB as staker rewards`;
+            ? t('dashboard.buyback.descWithFee').replace('{fee}', feeStr).replace('{reward}', rewardStr)
+            : t('dashboard.buyback.desc');
     } catch (e) {
         console.error('Dashboard buyback load error:', e);
     }
@@ -1637,24 +1638,24 @@ async function loadDashBuybackData() {
 
 async function handleDashBuyback(btn) {
     btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Executing...';
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('dashboard.buyback.executing')}`;
     try {
         await BuybackTx.executeBuyback({
             button: btn,
             onSuccess: async () => {
-                showToast('Buyback executed! You earned 5% BNB reward', 'success');
+                showToast(t('dashboard.buyback.successMsg'), 'success');
                 loadDashBuybackData();
             },
             onError: (error) => {
-                if (!error.cancelled) showToast('Buyback failed: ' + (error.reason || error.message || 'Unknown error'), 'error');
+                if (!error.cancelled) showToast(t('dashboard.buyback.failedMsg').replace('{error}', error.reason || error.message || t('common.unknownError')), 'error');
                 btn.disabled = false;
-                btn.innerHTML = '<i class="fa-solid fa-hammer"></i> Execute';
+                btn.innerHTML = `<i class="fa-solid fa-hammer"></i> ${t('dashboard.buyback.execute')}`;
             }
         });
     } catch (e) {
-        showToast('Buyback failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
+        showToast(t('dashboard.buyback.failedMsg').replace('{error}', e.reason || e.message || t('common.unknownError')), 'error');
         btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-hammer"></i> Execute';
+        btn.innerHTML = `<i class="fa-solid fa-hammer"></i> ${t('dashboard.buyback.execute')}`;
     }
 }
 
@@ -1702,7 +1703,7 @@ function updateBalanceCard() {
     if (!balanceEl) return;
     const balance = State.currentUserBalance || State.bkcBalance || 0n;
     if (!State.isConnected) {
-        balanceEl.innerHTML = `<span style="font-size:11px;color:var(--dash-text-3)">Connect Wallet</span>`;
+        balanceEl.innerHTML = `<span style="font-size:11px;color:var(--dash-text-3)">${t('common.connectWallet')}</span>`;
         return;
     }
     if (balance === 0n) {
@@ -1729,8 +1730,8 @@ async function updateUserHub(forceRefresh = false) {
         if (boosterArea) {
             boosterArea.innerHTML = `
                 <div style="text-align:center">
-                    <p style="font-size:11px;color:var(--dash-text-3);margin-bottom:8px">Connect wallet to view</p>
-                    <button onclick="window.openConnectModal()" class="dash-btn-secondary" style="font-size:11px">Connect</button>
+                    <p style="font-size:11px;color:var(--dash-text-3);margin-bottom:8px">${t('common.connectWalletToView')}</p>
+                    <button onclick="window.openConnectModal()" class="dash-btn-secondary" style="font-size:11px">${t('common.connect')}</button>
                 </div>`;
         }
         return;
@@ -1808,11 +1809,11 @@ function updateBoosterDisplay(data, claimDetails) {
                     </div>
                 </div>
 
-                <p style="font-size:11px;font-weight:700;color:var(--dash-text-3);margin:0 0 6px;text-transform:uppercase;letter-spacing:0.05em">No Booster NFT</p>
+                <p style="font-size:11px;font-weight:700;color:var(--dash-text-3);margin:0 0 6px;text-transform:uppercase;letter-spacing:0.05em">${t('dashboard.booster.noBoosterNft')}</p>
 
                 <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:8px">
                     <span style="font-size:20px;font-weight:800;color:var(--dash-accent)">${keepRate}%</span>
-                    <span style="font-size:10px;color:var(--dash-text-3);text-align:left;line-height:1.2">you<br>keep</span>
+                    <span style="font-size:10px;color:var(--dash-text-3);text-align:left;line-height:1.2">${t('dashboard.booster.youKeep')}</span>
                 </div>
 
                 <div style="width:100%;background:var(--dash-surface-2);border-radius:20px;height:6px;overflow:hidden;margin-bottom:10px">
@@ -1821,21 +1822,21 @@ function updateBoosterDisplay(data, claimDetails) {
 
                 ${grossReward > 0n && potentialBonus > 0n ? `
                 <p style="font-size:10px;color:var(--dash-text-2);margin:0 0 10px">
-                    <i class="fa-solid fa-arrow-up" style="color:var(--dash-green);margin-right:3px"></i>Get up to <span style="color:var(--dash-green);font-weight:700">+${formatBigNumber(potentialBonus).toFixed(2)} BKC</span> with NFT
+                    <i class="fa-solid fa-arrow-up" style="color:var(--dash-green);margin-right:3px"></i>${t('dashboard.booster.getUpToMore').replace('{amount}', `<span style="color:var(--dash-green);font-weight:700">+${formatBigNumber(potentialBonus).toFixed(2)}</span>`)}
                 </p>` : `
                 <p style="font-size:10px;color:var(--dash-text-3);margin:0 0 10px">
-                    <i class="fa-solid fa-recycle" style="color:var(--dash-accent);margin-right:3px"></i>50% recycled to stakers. <span style="color:var(--dash-green);font-weight:700">Diamond: keep 100%</span>
+                    <i class="fa-solid fa-recycle" style="color:var(--dash-accent);margin-right:3px"></i>${t('dashboard.booster.recycledToStakers')} <span style="color:var(--dash-green);font-weight:700">${t('dashboard.booster.diamondKeep100')}</span>
                 </p>`}
 
                 <div style="display:flex;gap:6px;justify-content:center">
                     <button class="dash-btn-primary go-to-store" style="background:linear-gradient(135deg,#d97706,#b45309);font-size:11px;padding:7px 14px;flex:1">
-                        <i class="fa-solid fa-gem" style="margin-right:3px"></i>Buy NFT
+                        <i class="fa-solid fa-gem" style="margin-right:3px"></i>${t('dashboard.booster.buyNft')}
                     </button>
                     <button class="dash-btn-primary go-to-rental" style="background:linear-gradient(135deg,#06b6d4,#0891b2);font-size:11px;padding:7px 14px;flex:1">
-                        <i class="fa-solid fa-clock" style="margin-right:3px"></i>Rent NFT
+                        <i class="fa-solid fa-clock" style="margin-right:3px"></i>${t('dashboard.booster.rentNft')}
                     </button>
                 </div>
-                <button id="open-booster-info" style="font-size:10px;color:var(--dash-text-3);background:none;border:none;cursor:pointer;margin-top:6px"><i class="fa-solid fa-circle-info" style="margin-right:3px"></i>How it works</button>
+                <button id="open-booster-info" style="font-size:10px;color:var(--dash-text-3);background:none;border:none;cursor:pointer;margin-top:6px"><i class="fa-solid fa-circle-info" style="margin-right:3px"></i>${t('dashboard.booster.howItWorks')}</button>
             </div>
         `;
         return;
@@ -1852,8 +1853,8 @@ function updateBoosterDisplay(data, claimDetails) {
     const statusColor = isRented ? '#22d3ee' : '#4ade80';
     const statusBg = isRented ? 'rgba(6,182,212,0.12)' : 'rgba(74,222,128,0.12)';
     const statusBorder = isRented ? 'rgba(6,182,212,0.3)' : 'rgba(74,222,128,0.3)';
-    const statusText = isRented ? 'RENTED' : 'OWNED';
-    const statusDesc = isRented ? 'Active rental' : 'In your wallet';
+    const statusText = isRented ? t('dashboard.booster.rented') : t('dashboard.booster.owned');
+    const statusDesc = isRented ? t('dashboard.booster.activeRental') : t('dashboard.booster.inYourWallet');
 
     container.innerHTML = `
         <div class="nft-clickable-image" data-tokenid="${data.tokenId}" data-tier="${tierName}" style="width:100%;cursor:pointer;transition:all 0.2s">
@@ -1874,23 +1875,23 @@ function updateBoosterDisplay(data, claimDetails) {
                 </div>
                 <div style="text-align:right;flex-shrink:0">
                     <div style="font-size:18px;font-weight:800;color:var(--dash-green)">${keepRate}%</div>
-                    <div style="font-size:8px;color:var(--dash-text-3);text-transform:uppercase;letter-spacing:0.05em">you keep</div>
+                    <div style="font-size:8px;color:var(--dash-text-3);text-transform:uppercase;letter-spacing:0.05em">${t('dashboard.booster.youKeep')}</div>
                 </div>
             </div>
             ${grossReward > 0n ? `
             <div style="display:flex;gap:6px">
                 <div style="flex:1;background:var(--dash-surface-2);border-radius:8px;padding:6px 8px;text-align:center">
-                    <div style="font-size:9px;color:var(--dash-text-3);text-transform:uppercase;margin-bottom:2px">Net Reward</div>
+                    <div style="font-size:9px;color:var(--dash-text-3);text-transform:uppercase;margin-bottom:2px">${t('dashboard.booster.netReward')}</div>
                     <div style="font-size:12px;font-weight:700;color:var(--dash-green)">${formatBigNumber(netReward).toFixed(4)} <span style="font-size:9px;color:var(--dash-text-3)">BKC</span></div>
                 </div>
                 ${bonusGained > 0n ? `
                 <div style="flex:1;background:var(--dash-surface-2);border-radius:8px;padding:6px 8px;text-align:center">
-                    <div style="font-size:9px;color:var(--dash-text-3);text-transform:uppercase;margin-bottom:2px">NFT Bonus</div>
+                    <div style="font-size:9px;color:var(--dash-text-3);text-transform:uppercase;margin-bottom:2px">${t('dashboard.booster.nftBonus')}</div>
                     <div style="font-size:12px;font-weight:700;color:#34d399">+${formatBigNumber(bonusGained).toFixed(2)} <span style="font-size:9px;color:var(--dash-text-3)">BKC</span></div>
                 </div>` : ''}
             </div>` : ''}
             ${keepRate < 100 ? `
-            <p style="font-size:9px;color:var(--dash-accent);margin:6px 0 0;text-align:center"><i class="fa-solid fa-arrow-up" style="margin-right:2px"></i>Upgrade to Diamond for 100%</p>` : ''}
+            <p style="font-size:9px;color:var(--dash-accent);margin:6px 0 0;text-align:center"><i class="fa-solid fa-arrow-up" style="margin-right:2px"></i>${t('dashboard.booster.upgradeToMax')}</p>` : ''}
         </div>
     `;
 }
@@ -1905,21 +1906,21 @@ async function fetchAndProcessActivities() {
     try {
         if (State.isConnected) {
             if (DashboardState.activities.length === 0) {
-                if (listEl) listEl.innerHTML = `<div class="dash-loading"><img src="./assets/bkc_logo_3d.png" class="dash-loading-logo" alt=""><span class="dash-loading-text">Loading your activity...</span></div>`;
+                if (listEl) listEl.innerHTML = `<div class="dash-loading"><img src="./assets/bkc_logo_3d.png" class="dash-loading-logo" alt=""><span class="dash-loading-text">${t('dashboard.activity.loadingYourActivity')}</span></div>`;
                 const response = await fetch(`${API_ENDPOINTS.getHistory}/${State.userAddress}`);
                 if (response.ok) DashboardState.activities = await response.json();
             }
             if (DashboardState.activities.length > 0) {
-                if (titleEl) titleEl.textContent = 'Your Activity';
+                if (titleEl) titleEl.textContent = t('dashboard.activity.yourActivity');
                 applyFiltersAndRender();
                 return;
             }
         }
-        if (titleEl) titleEl.textContent = 'Network Activity';
+        if (titleEl) titleEl.textContent = t('dashboard.activity.networkActivity');
         await fetchNetworkActivity();
     } catch (e) {
         console.error("Activity fetch error:", e);
-        if (titleEl) titleEl.textContent = 'Network Activity';
+        if (titleEl) titleEl.textContent = t('dashboard.activity.networkActivity');
         await fetchNetworkActivity();
     }
 }
@@ -1931,7 +1932,7 @@ async function fetchNetworkActivity() {
     const cacheAge = Date.now() - DashboardState.networkActivitiesTimestamp;
     if (DashboardState.networkActivities.length > 0 && cacheAge < 300000) { renderNetworkActivityList(); return; }
     DashboardState.isLoadingNetworkActivity = true;
-    listEl.innerHTML = `<div class="dash-loading"><img src="./assets/bkc_logo_3d.png" class="dash-loading-logo" alt=""><span class="dash-loading-text">Loading network activity...</span></div>`;
+    listEl.innerHTML = `<div class="dash-loading"><img src="./assets/bkc_logo_3d.png" class="dash-loading-logo" alt=""><span class="dash-loading-text">${t('dashboard.activity.loadingNetworkActivity')}</span></div>`;
     try {
         const response = await fetch(`${NETWORK_ACTIVITY_API}?limit=30`);
         if (response.ok) {
@@ -1953,8 +1954,8 @@ function renderNetworkActivityList() {
                 <div style="width:48px;height:48px;border-radius:50%;background:rgba(245,158,11,0.08);border:1px dashed rgba(245,158,11,0.2);display:flex;align-items:center;justify-content:center;margin:0 auto 12px">
                     <i class="fa-solid fa-bolt" style="font-size:18px;color:rgba(245,158,11,0.3)"></i>
                 </div>
-                <p style="font-size:12px;color:var(--dash-text-3);margin:0 0 4px">No network activity yet</p>
-                <p style="font-size:10px;color:var(--dash-text-3);margin:0">Be the first to stake, trade or play!</p>
+                <p style="font-size:12px;color:var(--dash-text-3);margin:0 0 4px">${t('dashboard.activity.noNetworkActivity')}</p>
+                <p style="font-size:10px;color:var(--dash-text-3);margin:0">${t('dashboard.activity.beFirst')}</p>
             </div>`;
         if (controlsEl) controlsEl.style.display = 'none';
         return;
@@ -2012,8 +2013,8 @@ function renderActivityPage() {
                 <div style="width:48px;height:48px;border-radius:50%;background:rgba(167,139,250,0.08);border:1px dashed rgba(167,139,250,0.2);display:flex;align-items:center;justify-content:center;margin:0 auto 12px">
                     <i class="fa-solid ${isFiltered ? 'fa-filter' : 'fa-rocket'}" style="font-size:18px;color:rgba(167,139,250,0.3)"></i>
                 </div>
-                <p style="font-size:12px;color:var(--dash-text-3);margin:0 0 4px">${isFiltered ? 'No matching activity' : 'No activity yet'}</p>
-                <p style="font-size:10px;color:var(--dash-text-3);margin:0">${isFiltered ? 'Try a different filter' : 'Start staking, trading or playing!'}</p>
+                <p style="font-size:12px;color:var(--dash-text-3);margin:0 0 4px">${isFiltered ? t('dashboard.activity.noMatch') : t('dashboard.activity.noActivity')}</p>
+                <p style="font-size:10px;color:var(--dash-text-3);margin:0">${isFiltered ? t('dashboard.activity.tryFilter') : t('dashboard.activity.startMsg')}</p>
             </div>`;
         if (controlsEl) controlsEl.style.display = 'none';
         const countEl = document.getElementById('activity-count');
@@ -2045,22 +2046,22 @@ function renderActivityItem(item, showAddress = false) {
     const truncAddr = truncateAddress(address);
     const style = getActivityStyle(item.type, item.details);
     let extraInfo = '';
-    const t = (item.type || '').toUpperCase().trim();
+    const actType = (item.type || '').toUpperCase().trim();
     const details = item.details || {};
 
     // Fortune — special layout
-    const isFortune = t.includes('GAME') || t.includes('FORTUNE') || t.includes('REQUEST') || t.includes('FULFILLED') || t.includes('RESULT');
+    const isFortune = actType.includes('GAME') || actType.includes('FORTUNE') || actType.includes('REQUEST') || actType.includes('FULFILLED') || actType.includes('RESULT');
     if (isFortune) {
         const rolls = details.rolls || item.rolls || [];
         const guesses = details.guesses || item.guesses || [];
         const isWin = details.isWin || (details.prizeWon && BigInt(details.prizeWon || 0) > 0n);
         const isCumulative = details.isCumulative !== undefined ? details.isCumulative : guesses.length > 1;
-        const gameType = isCumulative ? 'Combo' : 'Jackpot';
+        const gameType = isCumulative ? t('dashboard.activityLabels.comboMode') : t('dashboard.activityLabels.jackpotMode');
         const badgeStyle = isCumulative ? 'background:rgba(168,85,247,0.15);color:#c084fc' : 'background:rgba(245,158,11,0.15);color:#fbbf24';
         const wager = details.wagerAmount || details.amount;
         const prize = details.prizeWon;
         const wagerNum = wager ? formatBigNumber(BigInt(wager)).toFixed(0) : '0';
-        let resultText = '<span style="color:var(--dash-text-3)">No win</span>';
+        let resultText = `<span style="color:var(--dash-text-3)">${t('dashboard.activityLabels.noLuck')}</span>`;
         if (isWin && prize && BigInt(prize) > 0n) resultText = `<span style="color:var(--dash-green);font-weight:700">+${formatBigNumber(BigInt(prize)).toFixed(0)} BKC</span>`;
         let rollsHtml = '';
         if (rolls.length > 0) {
@@ -2076,7 +2077,7 @@ function renderActivityItem(item, showAddress = false) {
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
                     <div style="display:flex;align-items:center;gap:8px">
                         <div style="width:28px;height:28px;border-radius:6px;background:var(--dash-surface-3);display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-dice" style="color:var(--dash-text-3);font-size:11px"></i></div>
-                        <span style="color:var(--dash-text);font-size:12px;font-weight:600">${showAddress ? truncAddr : 'You'}</span>
+                        <span style="color:var(--dash-text);font-size:12px;font-weight:600">${showAddress ? truncAddr : t('dashboard.activity.you')}</span>
                         <span style="font-size:9px;font-weight:700;${badgeStyle};padding:1px 6px;border-radius:4px">${gameType}</span>
                     </div>
                     <div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--dash-text-3)">
@@ -2085,7 +2086,7 @@ function renderActivityItem(item, showAddress = false) {
                     </div>
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between">
-                    <div style="font-size:11px"><span style="color:var(--dash-text-3)">Bet: ${wagerNum}</span><span style="margin:0 6px;color:var(--dash-text-3)">→</span>${resultText}</div>
+                    <div style="font-size:11px"><span style="color:var(--dash-text-3)">${t('dashboard.fortune.bet')}: ${wagerNum}</span><span style="margin:0 6px;color:var(--dash-text-3)">→</span>${resultText}</div>
                     ${rollsHtml}
                 </div>
             </a>
@@ -2093,20 +2094,20 @@ function renderActivityItem(item, showAddress = false) {
     }
 
     // Extra info per type
-    if (t.includes('NOTARY')) { const ipfsCid = details.ipfsCid; if (ipfsCid) extraInfo = `<span style="margin-left:4px;font-size:9px;color:#818cf8;font-family:monospace">${ipfsCid.replace('ipfs://','').slice(0,12)}...</span>`; }
-    if (t.includes('STAKING') || t.includes('DELEGAT')) { const pStake = details.pStakeGenerated; if (pStake) extraInfo = `<span style="font-size:10px;color:var(--dash-purple)">+${formatBigNumber(BigInt(pStake)).toFixed(0)} pStake</span>`; }
-    if (t.includes('DONATION') || t.includes('CHARITY')) {
+    if (actType.includes('NOTARY')) { const ipfsCid = details.ipfsCid; if (ipfsCid) extraInfo = `<span style="margin-left:4px;font-size:9px;color:#818cf8;font-family:monospace">${ipfsCid.replace('ipfs://','').slice(0,12)}...</span>`; }
+    if (actType.includes('STAKING') || actType.includes('DELEGAT')) { const pStake = details.pStakeGenerated; if (pStake) extraInfo = `<span style="font-size:10px;color:var(--dash-purple)">+${formatBigNumber(BigInt(pStake)).toFixed(0)} pStake</span>`; }
+    if (actType.includes('DONATION') || actType.includes('CHARITY')) {
         const netAmount = details.netAmount || details.amount;
         const campaignId = details.campaignId;
         if (netAmount && BigInt(netAmount) > 0n) { extraInfo = `<span style="color:#ec4899;font-weight:700">${formatBigNumber(BigInt(netAmount)).toFixed(2)} BKC</span>`; if (campaignId) extraInfo += `<span style="margin-left:4px;font-size:9px;color:var(--dash-text-3)">Campaign #${campaignId}</span>`; }
     }
-    if (t.includes('CLAIM') || t.includes('REWARD')) {
+    if (actType.includes('CLAIM') || actType.includes('REWARD')) {
         const amount = details.amount || item.amount;
         if (amount) extraInfo = `<span style="color:var(--dash-accent);font-weight:700">+${formatBigNumber(BigInt(amount)).toFixed(2)} BKC</span>`;
         const feePaid = details.feePaid;
         if (feePaid && BigInt(feePaid) > 0n) extraInfo += `<span style="margin-left:4px;font-size:9px;color:var(--dash-text-3)">(fee: ${formatBigNumber(BigInt(feePaid)).toFixed(2)})</span>`;
     }
-    const isPromote = t.includes('PROMOT') || t.includes('ADS') || t.includes('ADVERTIS');
+    const isPromote = actType.includes('PROMOT') || actType.includes('ADS') || actType.includes('ADVERTIS');
     if (isPromote) {
         const promoAmount = details.promotionFee || details.amount || item.amount;
         if (promoAmount && BigInt(promoAmount) > 0n) extraInfo = `<span style="color:#fbbf24;font-weight:700">${parseFloat(ethers.formatEther(BigInt(promoAmount))).toFixed(4)} BNB</span>`;
@@ -2220,17 +2221,17 @@ function attachDashboardListeners() {
                 claimBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
                 claimBtn.disabled = true;
                 const hasGas = await checkGasAndWarn();
-                if (!hasGas) { claimBtn.innerHTML = '<i class="fa-solid fa-coins" style="margin-right:6px"></i> Claim Rewards'; claimBtn.disabled = false; return; }
+                if (!hasGas) { claimBtn.innerHTML = `<i class="fa-solid fa-coins" style="margin-right:6px"></i> ${t('dashboard.claimRewards')}`; claimBtn.disabled = false; return; }
                 const { stakingRewards, minerRewards } = await calculateUserTotalRewards();
                 if (stakingRewards > 0n || minerRewards > 0n) {
                     await StakingTx.claimRewards({
                         button: claimBtn,
-                        onSuccess: async () => { showToast("Rewards claimed!", "success"); await updateUserHub(true); DashboardState.activities = []; fetchAndProcessActivities(); },
-                        onError: (error) => { if (!error.cancelled) showToast("Claim failed", "error"); }
+                        onSuccess: async () => { showToast(t('dashboard.claim.success'), "success"); await updateUserHub(true); DashboardState.activities = []; fetchAndProcessActivities(); },
+                        onError: (error) => { if (!error.cancelled) showToast(t('dashboard.claim.failed'), "error"); }
                     });
                 }
-            } catch (err) { showToast("Claim failed", "error"); } finally {
-                claimBtn.innerHTML = '<i class="fa-solid fa-coins" style="margin-right:6px"></i> Claim Rewards';
+            } catch (err) { showToast(t('dashboard.claim.failed'), "error"); } finally {
+                claimBtn.innerHTML = `<i class="fa-solid fa-coins" style="margin-right:6px"></i> ${t('dashboard.claimRewards')}`;
                 claimBtn.disabled = false;
             }
         }

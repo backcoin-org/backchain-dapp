@@ -1,6 +1,8 @@
 // js/pages/SocialMedia.js
 // ✅ Página de Redes Sociais com Destaque para Telegram
 
+import { t } from '../modules/core/index.js';
+
 export const SocialMediaPage = {
     render: async (isNewPage) => {
         const container = document.getElementById('socials');
@@ -29,10 +31,10 @@ export const SocialMediaPage = {
                 
                 <div class="text-center mb-10">
                     <h1 class="text-3xl md:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-yellow-200 mb-4">
-                        Join the Backcoin Community
+                        ${t('social.title')}
                     </h1>
                     <p class="text-zinc-400 text-lg max-w-2xl mx-auto">
-                        Connect with thousands of holders, stay updated on the Mainnet launch, and participate in exclusive airdrops.
+                        ${t('social.subtitle')}
                     </p>
                 </div>
 
@@ -45,13 +47,13 @@ export const SocialMediaPage = {
                                 <i class="fa-brands fa-telegram text-5xl text-white"></i>
                             </div>
                             <div class="text-center md:text-left">
-                                <h2 class="text-2xl font-bold text-white mb-1">Official Telegram Group</h2>
-                                <p class="text-sky-100 text-sm font-medium">Chat with the team & community • 24/7 Support</p>
+                                <h2 class="text-2xl font-bold text-white mb-1">${t('social.telegramTitle')}</h2>
+                                <p class="text-sky-100 text-sm font-medium">${t('social.telegramDesc')}</p>
                             </div>
                         </div>
 
                         <div class="bg-white text-blue-600 font-extrabold py-3 px-8 rounded-full shadow-lg group-hover:scale-105 transition-transform flex items-center gap-2 whitespace-nowrap">
-                            JOIN NOW <i class="fa-solid fa-arrow-right"></i>
+                            ${t('social.joinNow')} <i class="fa-solid fa-arrow-right"></i>
                         </div>
                     </a>
                 </div>
@@ -65,8 +67,8 @@ export const SocialMediaPage = {
                             <i class="fa-brands fa-x-twitter text-3xl text-white"></i>
                             <i class="fa-solid fa-external-link-alt text-zinc-500 text-sm group-hover:text-white"></i>
                         </div>
-                        <h3 class="text-xl font-bold text-white mb-1">X (Twitter)</h3>
-                        <p class="text-zinc-400 text-sm">Latest news & announcements</p>
+                        <h3 class="text-xl font-bold text-white mb-1">${t('social.twitter')}</h3>
+                        <p class="text-zinc-400 text-sm">${t('social.twitterDesc')}</p>
                     </a>
 
                     <a href="https://www.youtube.com/@Backcoin" target="_blank" class="group bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700 hover:border-red-500/50 rounded-xl p-6 transition-all duration-300 hover:-translate-y-1">
@@ -74,8 +76,8 @@ export const SocialMediaPage = {
                             <i class="fa-brands fa-youtube text-3xl text-red-500"></i>
                             <i class="fa-solid fa-external-link-alt text-zinc-500 text-sm group-hover:text-white"></i>
                         </div>
-                        <h3 class="text-xl font-bold text-white mb-1">YouTube</h3>
-                        <p class="text-zinc-400 text-sm">Video tutorials & AMAs</p>
+                        <h3 class="text-xl font-bold text-white mb-1">${t('social.youtube')}</h3>
+                        <p class="text-zinc-400 text-sm">${t('social.youtubeDesc')}</p>
                     </a>
 
                     <a href="https://www.instagram.com/backcoin.bkc/" target="_blank" class="group bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700 hover:border-pink-500/50 rounded-xl p-6 transition-all duration-300 hover:-translate-y-1">
@@ -83,8 +85,8 @@ export const SocialMediaPage = {
                             <i class="fa-brands fa-instagram text-3xl text-pink-500"></i>
                             <i class="fa-solid fa-external-link-alt text-zinc-500 text-sm group-hover:text-white"></i>
                         </div>
-                        <h3 class="text-xl font-bold text-white mb-1">Instagram</h3>
-                        <p class="text-zinc-400 text-sm">Visual updates & stories</p>
+                        <h3 class="text-xl font-bold text-white mb-1">${t('social.instagram')}</h3>
+                        <p class="text-zinc-400 text-sm">${t('social.instagramDesc')}</p>
                     </a>
 
                     <a href="https://www.tiktok.com/@backcoin.org" target="_blank" class="group bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700 hover:border-cyan-400/50 rounded-xl p-6 transition-all duration-300 hover:-translate-y-1">
@@ -92,8 +94,8 @@ export const SocialMediaPage = {
                             <i class="fa-brands fa-tiktok text-3xl text-cyan-400"></i>
                             <i class="fa-solid fa-external-link-alt text-zinc-500 text-sm group-hover:text-white"></i>
                         </div>
-                        <h3 class="text-xl font-bold text-white mb-1">TikTok</h3>
-                        <p class="text-zinc-400 text-sm">Short clips & viral content</p>
+                        <h3 class="text-xl font-bold text-white mb-1">${t('social.tiktok')}</h3>
+                        <p class="text-zinc-400 text-sm">${t('social.tiktokDesc')}</p>
                     </a>
 
                     <a href="https://www.facebook.com/profile.php?id=61584248964781" target="_blank" class="group bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700 hover:border-blue-600/50 rounded-xl p-6 transition-all duration-300 hover:-translate-y-1">
@@ -101,14 +103,14 @@ export const SocialMediaPage = {
                             <i class="fa-brands fa-facebook text-3xl text-blue-600"></i>
                             <i class="fa-solid fa-external-link-alt text-zinc-500 text-sm group-hover:text-white"></i>
                         </div>
-                        <h3 class="text-xl font-bold text-white mb-1">Facebook</h3>
-                        <p class="text-zinc-400 text-sm">Community discussions</p>
+                        <h3 class="text-xl font-bold text-white mb-1">${t('social.facebook')}</h3>
+                        <p class="text-zinc-400 text-sm">${t('social.facebookDesc')}</p>
                     </a>
 
                 </div>
 
                 <div class="mt-12 text-center text-zinc-500 text-sm">
-                    <p>Always verify links. Official admins will never DM you first asking for funds.</p>
+                    <p>${t('social.verifyLinks')}</p>
                 </div>
             </div>
         `;

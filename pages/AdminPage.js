@@ -6,6 +6,7 @@ import { showToast } from '../ui-feedback.js';
 import { renderPaginatedList, renderPaginationControls, renderNoData, formatAddress, renderLoading, renderError } from '../utils.js';
 import { State } from '../state.js';
 import * as db from '../modules/firebase-auth-service.js';
+import { t } from '../modules/core/index.js';
 
 // ============================================
 // ADMIN CONFIGURATION (via Environment Variables)
@@ -48,11 +49,11 @@ function isAdminWallet() {
 
 // Mapeamento de Status para UI (Cores Tailwind e Ícones Font Awesome) - Reutilizado do AirdropPage
 const statusUI = {
-    pending: { text: 'Pending Review', color: 'text-amber-400', bgColor: 'bg-amber-900/50', icon: 'fa-clock' },
-    auditing: { text: 'Auditing', color: 'text-blue-400', bgColor: 'bg-blue-900/50', icon: 'fa-magnifying-glass' },
-    approved: { text: 'Approved', color: 'text-green-400', bgColor: 'bg-green-900/50', icon: 'fa-check-circle' },
-    rejected: { text: 'Rejected', color: 'text-red-400', bgColor: 'bg-red-900/50', icon: 'fa-times-circle' },
-    flagged_suspicious: { text: 'Flagged', color: 'text-red-300', bgColor: 'bg-red-800/60', icon: 'fa-flag' },
+    pending: { get text() { return t('admin.status.pending'); }, color: 'text-amber-400', bgColor: 'bg-amber-900/50', icon: 'fa-clock' },
+    auditing: { get text() { return t('admin.status.auditing'); }, color: 'text-blue-400', bgColor: 'bg-blue-900/50', icon: 'fa-magnifying-glass' },
+    approved: { get text() { return t('admin.status.approved'); }, color: 'text-green-400', bgColor: 'bg-green-900/50', icon: 'fa-check-circle' },
+    rejected: { get text() { return t('admin.status.rejected'); }, color: 'text-red-400', bgColor: 'bg-red-900/50', icon: 'fa-times-circle' },
+    flagged_suspicious: { get text() { return t('admin.status.flagged'); }, color: 'text-red-300', bgColor: 'bg-red-800/60', icon: 'fa-flag' },
 };
 
 // Default Platform Usage Config
@@ -206,7 +207,7 @@ const loadAdminData = async () => {
 
         // Se estava editando, atualiza os dados da tarefa sendo editada
         if (adminState.editingTask) {
-             adminState.editingTask = tasks.find(t => t.id === adminState.editingTask.id) || null;
+             adminState.editingTask = tasks.find(tk => tk.id === adminState.editingTask.id) || null;
         }
 
         renderAdminPanel(); // Renderiza a UI com os dados carregados
@@ -218,7 +219,7 @@ const loadAdminData = async () => {
             renderError(tempErrorDiv, `Failed to load admin data: ${error.message}`);
             adminContent.innerHTML = tempErrorDiv.innerHTML;
         } else {
-             showToast("Failed to load admin data.", "error");
+             showToast(t('admin.toast.loadFailed'), "error");
         }
     }
 };
@@ -278,7 +279,7 @@ const renderFaucetCard = () => {
 
     container.innerHTML = `
         <div class="flex items-center justify-between mb-3">
-            <h3 class="text-lg font-bold text-white"><i class="fa-solid fa-faucet-drip mr-2 text-sky-400"></i>Faucet Status</h3>
+            <h3 class="text-lg font-bold text-white"><i class="fa-solid fa-faucet-drip mr-2 text-sky-400"></i>${t('admin.faucet.status')}</h3>
             <span class="flex items-center gap-2 text-sm font-semibold ${statusColor}">
                 <span class="w-2.5 h-2.5 rounded-full ${statusDot} animate-pulse"></span>${statusText}
             </span>
@@ -341,9 +342,9 @@ const handleToggleFaucetPause = async () => {
         const faucetContract = State.faucetContract;
         if (!faucetContract) throw new Error("Faucet signer contract not available.");
         const tx = await faucetContract.setPaused(newPaused);
-        showToast("Transaction sent...", "info");
+        showToast(t('admin.toast.txSent'), "info");
         await tx.wait();
-        showToast(`Faucet ${newPaused ? 'PAUSED' : 'UNPAUSED'} successfully!`, "success");
+        showToast(newPaused ? t('admin.toast.faucetPaused') : t('admin.toast.faucetUnpaused'), "success");
         await loadFaucetStatus();
     } catch (error) {
         console.error("Error toggling faucet pause:", error);
@@ -370,17 +371,17 @@ const renderOverviewPanel = () => {
             <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-4 text-center">
                 <i class="fa-solid fa-users text-2xl text-blue-400 mb-2"></i>
                 <span class="block text-2xl font-bold text-white">${totalUsers.toLocaleString()}</span>
-                <span class="text-xs text-zinc-500">Total Users</span>
+                <span class="text-xs text-zinc-500">${t('admin.overview.totalUsers')}</span>
             </div>
             <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-4 text-center cursor-pointer hover:border-amber-500/50 transition-colors" id="overview-go-submissions">
                 <i class="fa-solid fa-clock text-2xl text-amber-400 mb-2"></i>
                 <span class="block text-2xl font-bold text-white">${pendingCount.toLocaleString()}</span>
-                <span class="text-xs text-zinc-500">Pending Submissions</span>
+                <span class="text-xs text-zinc-500">${t('admin.overview.pendingReview')}</span>
             </div>
             <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-4 text-center">
                 <i class="fa-solid fa-star text-2xl text-yellow-400 mb-2"></i>
                 <span class="block text-2xl font-bold text-white">${totalPoints >= 1000000 ? (totalPoints / 1000000).toFixed(1) + 'M' : totalPoints >= 1000 ? (totalPoints / 1000).toFixed(1) + 'K' : totalPoints.toLocaleString()}</span>
-                <span class="text-xs text-zinc-500">Total Points</span>
+                <span class="text-xs text-zinc-500">${t('admin.overview.totalPoints')}</span>
             </div>
             <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-4 text-center">
                 <i class="fa-solid fa-ban text-2xl text-red-400 mb-2"></i>
@@ -396,16 +397,16 @@ const renderOverviewPanel = () => {
 
         <!-- Quick Actions -->
         <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-5">
-            <h3 class="text-lg font-bold text-white mb-4"><i class="fa-solid fa-bolt mr-2 text-amber-400"></i>Quick Actions</h3>
+            <h3 class="text-lg font-bold text-white mb-4"><i class="fa-solid fa-bolt mr-2 text-amber-400"></i>${t('admin.quickActions')}</h3>
             <div class="flex flex-wrap gap-3">
                 <button id="overview-go-submissions-btn" class="bg-amber-600 hover:bg-amber-500 text-white text-sm font-bold py-2 px-4 rounded-lg transition-colors">
                     <i class="fa-solid fa-list-check mr-2"></i>Review Submissions ${pendingCount > 0 ? `(${pendingCount})` : ''}
                 </button>
                 <button id="overview-export-users-btn" class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold py-2 px-4 rounded-lg transition-colors">
-                    <i class="fa-solid fa-file-csv mr-2"></i>Export Users CSV
+                    <i class="fa-solid fa-file-csv mr-2"></i>${t('admin.exportCsv')}
                 </button>
                 <button id="overview-reload-btn" class="bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-bold py-2 px-4 rounded-lg transition-colors">
-                    <i class="fa-solid fa-rotate mr-2"></i>Reload Data
+                    <i class="fa-solid fa-rotate mr-2"></i>${t('admin.reloadData')}
                 </button>
             </div>
         </div>
@@ -423,7 +424,7 @@ const renderOverviewPanel = () => {
     document.getElementById('overview-go-submissions-btn')?.addEventListener('click', () => goToTab('review-submissions'));
     document.getElementById('overview-export-users-btn')?.addEventListener('click', handleExportUsersCSV);
     document.getElementById('overview-reload-btn')?.addEventListener('click', () => {
-        showToast("Reloading data...", "info");
+        showToast(t('admin.toast.reloading'), "info");
         loadAdminData();
     });
 };
@@ -434,7 +435,7 @@ const renderOverviewPanel = () => {
 const handleExportUsersCSV = () => {
     const users = adminState.allUsers;
     if (!users || users.length === 0) {
-        showToast("No users to export.", "info");
+        showToast(t('admin.toast.noUsersExport'), "info");
         return;
     }
     const headers = [
@@ -446,13 +447,13 @@ const handleExportUsersCSV = () => {
         { key: 'hasPendingAppeal', label: 'Appealing' },
     ];
     exportCSV(users, headers, `backchain-users-${new Date().toISOString().split('T')[0]}.csv`);
-    showToast(`Exported ${users.length} users.`, "success");
+    showToast(t('admin.toast.exportedUsers', { count: users.length }), "success");
 };
 
 const handleExportSubmissionsCSV = () => {
     const subs = adminState.allSubmissions;
     if (!subs || subs.length === 0) {
-        showToast("No submissions to export.", "info");
+        showToast(t('admin.toast.noSubmissionsExport'), "info");
         return;
     }
     const headers = [
@@ -463,7 +464,7 @@ const handleExportSubmissionsCSV = () => {
         { key: 'basePoints', label: 'Base Points' },
     ];
     exportCSV(subs, headers, `backchain-submissions-${new Date().toISOString().split('T')[0]}.csv`);
-    showToast(`Exported ${subs.length} submissions.`, "success");
+    showToast(t('admin.toast.exportedSubmissions', { count: subs.length }), "success");
 };
 
 // --- BULK ACTIONS ---
@@ -595,7 +596,7 @@ const handleAdminAction = async (e) => {
         // A função updateSubmissionStatus já espera 'approved' ou 'rejected'
         if (action === 'approved' || action === 'rejected') { 
             await db.updateSubmissionStatus(userId, submissionId, action); //
-            showToast(`Submission ${action === 'approved' ? 'APPROVED' : 'REJECTED'}!`, 'success');
+            showToast(action === 'approved' ? t('admin.toast.submissionApproved') : t('admin.toast.submissionRejected'), 'success');
 
             // Atualiza o estado LOCAL
             adminState.allSubmissions = adminState.allSubmissions.filter(
@@ -640,7 +641,7 @@ const handleBanUser = async (e) => {
 
     try {
         await db.setBanStatus(userId, newBanStatus); //
-        showToast(`User ${newBanStatus ? 'BANNED' : 'UNBANNED'}.`, 'success');
+        showToast(newBanStatus ? t('admin.toast.userBanned') : t('admin.toast.userUnbanned'), 'success');
 
         // Atualiza o estado local
         const userIndex = adminState.allUsers.findIndex(u => u.id === userId);
@@ -968,7 +969,7 @@ const handleUgcPointsSubmit = async (e) => {
 
 
 const handleEditTask = (taskId) => {
-    const task = adminState.dailyTasks.find(t => t.id === taskId);
+    const task = adminState.dailyTasks.find(tk => tk.id === taskId);
     if (!task) return;
     adminState.editingTask = task;
     renderManageTasksPanel();
@@ -1544,11 +1545,11 @@ const renderManageTasksPanel = () => {
     
     const paginatedTasks = sortedTasks.slice(start, end);
     
-    const tasksListHtml = paginatedTasks.length > 0 ? paginatedTasks.map(t => {
+    const tasksListHtml = paginatedTasks.length > 0 ? paginatedTasks.map(task => {
         const now = new Date();
-        const startDate = t.startDate?.toDate ? t.startDate.toDate() : (t.startDate ? new Date(t.startDate) : null);
-        const endDate = t.endDate?.toDate ? t.endDate.toDate() : (t.endDate ? new Date(t.endDate) : null);
-        
+        const startDate = task.startDate?.toDate ? task.startDate.toDate() : (task.startDate ? new Date(task.startDate) : null);
+        const endDate = task.endDate?.toDate ? task.endDate.toDate() : (task.endDate ? new Date(task.endDate) : null);
+
         let statusColor = "text-zinc-500";
         if (startDate && endDate) {
             if (now >= startDate && now <= endDate) statusColor = "text-green-400";
@@ -1558,18 +1559,18 @@ const renderManageTasksPanel = () => {
         return `
         <div class="bg-zinc-800 p-4 rounded-lg border border-border-color flex justify-between items-center flex-wrap gap-3">
             <div class="flex-1 min-w-[250px]">
-                <p class="font-semibold text-white">${t.title || 'No Title'}</p>
-                 <p class="text-xs text-zinc-400 mt-0.5">${t.description || 'No Description'}</p>
+                <p class="font-semibold text-white">${task.title || 'No Title'}</p>
+                 <p class="text-xs text-zinc-400 mt-0.5">${task.description || 'No Description'}</p>
                 <p class="text-xs ${statusColor} mt-1">
-                   <span class="font-medium text-amber-400">${t.points || 0} Pts</span> |
-                   <span class="text-blue-400">${t.cooldownHours || 0}h CD</span> |
-                   Active: ${formatDate(t.startDate)} to ${formatDate(t.endDate)}
+                   <span class="font-medium text-amber-400">${task.points || 0} Pts</span> |
+                   <span class="text-blue-400">${task.cooldownHours || 0}h CD</span> |
+                   Active: ${formatDate(task.startDate)} to ${formatDate(task.endDate)}
                 </p>
-                ${t.url ? `<a href="${t.url}" target="_blank" rel="noopener noreferrer" class="text-xs text-blue-400 hover:underline break-all block mt-1">${t.url}</a>` : ''}
+                ${task.url ? `<a href="${task.url}" target="_blank" rel="noopener noreferrer" class="text-xs text-blue-400 hover:underline break-all block mt-1">${task.url}</a>` : ''}
             </div>
             <div class="flex gap-2 shrink-0">
-                <button data-id="${t.id}" data-action="edit" class="edit-task-btn bg-amber-600 hover:bg-amber-700 text-black text-xs font-bold py-1 px-3 rounded-md transition-colors"><i class="fa-solid fa-pencil mr-1"></i>Edit</button>
-                <button data-id="${t.id}" data-action="delete" class="delete-task-btn bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-3 rounded-md transition-colors"><i class="fa-solid fa-trash mr-1"></i>Delete</button>
+                <button data-id="${task.id}" data-action="edit" class="edit-task-btn bg-amber-600 hover:bg-amber-700 text-black text-xs font-bold py-1 px-3 rounded-md transition-colors"><i class="fa-solid fa-pencil mr-1"></i>Edit</button>
+                <button data-id="${task.id}" data-action="delete" class="delete-task-btn bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-3 rounded-md transition-colors"><i class="fa-solid fa-trash mr-1"></i>Delete</button>
             </div>
         </div>
     `}).join('') :
@@ -2024,21 +2025,21 @@ const renderAdminPanel = () => {
     const tab = adminState.activeTab;
 
     adminContent.innerHTML = `
-        <h1 class="text-3xl font-bold mb-6">Admin Panel</h1>
+        <h1 class="text-3xl font-bold mb-6">${t('admin.title')}</h1>
 
         <div class="border-b border-border-color mb-6">
             <nav id="admin-tabs" class="-mb-px flex flex-wrap gap-x-6 gap-y-2">
                 <button class="tab-btn ${tab === 'overview' ? 'active' : ''}" data-target="overview">
-                    <i class="fa-solid fa-gauge-high mr-1.5"></i>Overview
+                    <i class="fa-solid fa-gauge-high mr-1.5"></i>${t('admin.tabs.overview')}
                 </button>
                 <button class="tab-btn ${tab === 'review-submissions' ? 'active' : ''}" data-target="review-submissions">
-                    <i class="fa-solid fa-list-check mr-1.5"></i>Submissions${pendingCount > 0 ? ` <span class="ml-1 text-xs bg-amber-600 text-white px-1.5 py-0.5 rounded-full">${pendingCount}</span>` : ''}
+                    <i class="fa-solid fa-list-check mr-1.5"></i>${t('admin.tabs.submissions')}${pendingCount > 0 ? ` <span class="ml-1 text-xs bg-amber-600 text-white px-1.5 py-0.5 rounded-full">${pendingCount}</span>` : ''}
                 </button>
                 <button class="tab-btn ${tab === 'manage-users' ? 'active' : ''}" data-target="manage-users">
-                    <i class="fa-solid fa-users mr-1.5"></i>Users
+                    <i class="fa-solid fa-users mr-1.5"></i>${t('admin.tabs.users')}
                 </button>
                 <button class="tab-btn ${tab === 'settings' ? 'active' : ''}" data-target="settings">
-                    <i class="fa-solid fa-gear mr-1.5"></i>Settings
+                    <i class="fa-solid fa-gear mr-1.5"></i>${t('admin.tabs.settings')}
                 </button>
             </nav>
         </div>
@@ -2112,7 +2113,7 @@ export const AdminPage = {
 
         // Verifica se a carteira é admin (usando variável de ambiente)
         if (!isAdminWallet()) {
-            adminContainer.innerHTML = `<div class="text-center text-red-400 p-8 bg-sidebar border border-red-500/50 rounded-lg">Access Denied. This page is restricted to administrators.</div>`;
+            adminContainer.innerHTML = `<div class="text-center text-red-400 p-8 bg-sidebar border border-red-500/50 rounded-lg">${t('admin.accessDenied')}. ${t('admin.restrictedMsg')}</div>`;
             return;
         }
 
@@ -2131,8 +2132,8 @@ export const AdminPage = {
                         <div class="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
                             <i class="fa-solid fa-shield-halved text-3xl text-yellow-400"></i>
                         </div>
-                        <h2 class="text-2xl font-bold text-white mb-2">Admin Access</h2>
-                        <p class="text-zinc-400 text-sm">Enter the admin key to continue</p>
+                        <h2 class="text-2xl font-bold text-white mb-2">${t('admin.title')}</h2>
+                        <p class="text-zinc-400 text-sm">${t('admin.enterPassword')}</p>
                     </div>
                     
                     <div class="space-y-4">
@@ -2146,7 +2147,7 @@ export const AdminPage = {
                         
                         <button id="admin-login-btn"
                                 class="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-3 px-4 rounded-xl transition-colors">
-                            <i class="fa-solid fa-unlock mr-2"></i>Access Admin Panel
+                            <i class="fa-solid fa-unlock mr-2"></i>${t('admin.login')}
                         </button>
                         
                         <p id="admin-login-error" class="text-red-400 text-sm text-center hidden">

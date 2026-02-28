@@ -4,7 +4,7 @@
 import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
 import { addresses, ecosystemManagerABI } from '../config.js';
-import { NetworkManager } from '../modules/core/index.js';
+import { NetworkManager, t } from '../modules/core/index.js';
 import { formatAddress } from '../utils.js';
 
 const ethers = window.ethers;
@@ -105,14 +105,13 @@ function render(isActive) {
         <div class="text-center py-8 sm:py-12">
             <div class="tutor-hero-badge inline-flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 rounded-full px-5 py-2 mb-5">
                 <i class="fa-solid fa-graduation-cap text-amber-400 text-sm"></i>
-                <span class="text-amber-400 text-sm font-bold">Tutor System</span>
+                <span class="text-amber-400 text-sm font-bold">${t('referral.title')}</span>
             </div>
             <h1 class="text-3xl sm:text-4xl font-extrabold text-white mb-4 leading-tight">
-                Invite Friends,<br class="sm:hidden"> <span class="text-amber-400">Earn Forever</span>
+                ${t('referral.heroTitle')}<br class="sm:hidden"> <span class="text-amber-400">${t('referral.heroHighlight')}</span>
             </h1>
             <p class="text-zinc-400 text-sm sm:text-base max-w-xl mx-auto leading-relaxed">
-                Every user has one <strong class="text-white">tutor</strong>. When your friend uses the protocol,
-                you automatically earn a cut of their fees — <strong class="text-amber-400">forever</strong>, enforced by smart contracts.
+                ${t('referral.heroDesc')}
             </p>
         </div>
 
@@ -120,7 +119,7 @@ function render(isActive) {
         <div class="mb-8">
             <div class="bg-zinc-800/50 border border-zinc-700/50 rounded-2xl p-5 sm:p-6">
                 <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                    <i class="fa-solid fa-link text-amber-400"></i> Your Tutor Link
+                    <i class="fa-solid fa-link text-amber-400"></i> ${t('referral.yourTutorLink')}
                 </h2>
                 ${isConnected ? `
                     <div class="tutor-link-box flex items-center gap-2 rounded-xl px-4 py-3 mb-4">
@@ -146,7 +145,7 @@ function render(isActive) {
                 ` : `
                     <div class="text-center py-6">
                         <i class="fa-solid fa-wallet text-4xl text-zinc-600 mb-3"></i>
-                        <p class="text-zinc-400">Connect your wallet to get your tutor link</p>
+                        <p class="text-zinc-400">${t('referral.connectForLink')}</p>
                     </div>
                 `}
             </div>
@@ -156,11 +155,11 @@ function render(isActive) {
         <div class="grid grid-cols-3 gap-3 mb-8">
             <div class="tutor-stat-card rounded-2xl p-4 text-center">
                 <div class="text-2xl font-extrabold text-amber-400 mb-1" id="tutor-count">${TS.tutorCount}</div>
-                <div class="text-xs text-zinc-400">Tutters</div>
+                <div class="text-xs text-zinc-400">${t('referral.tutters')}</div>
             </div>
             <div class="tutor-stat-card rounded-2xl p-4 text-center">
-                <div class="text-sm font-bold text-white mb-1 truncate" id="tutor-current">${TS.tutor ? formatAddress(TS.tutor) : 'None yet'}</div>
-                <div class="text-xs text-zinc-400">Your Tutor</div>
+                <div class="text-sm font-bold text-white mb-1 truncate" id="tutor-current">${TS.tutor ? formatAddress(TS.tutor) : t('referral.noneYet')}</div>
+                <div class="text-xs text-zinc-400">${t('referral.yourTutor')}</div>
             </div>
             <div class="tutor-stat-card rounded-2xl p-4 text-center">
                 <div class="text-sm font-bold mb-1 ${TS.tutor ? 'text-green-400' : 'text-zinc-500'}">${TS.tutor ? 'Active' : 'No Tutor'}</div>
@@ -173,12 +172,12 @@ function render(isActive) {
         <div class="mb-8">
             <div class="bg-gradient-to-r from-amber-900/20 to-zinc-800/40 border border-amber-500/30 rounded-2xl p-5 sm:p-6">
                 <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                    <i class="fa-solid fa-wallet text-amber-400"></i> Your Earnings
+                    <i class="fa-solid fa-wallet text-amber-400"></i> ${t('referral.yourEarnings')}
                 </h2>
                 <div class="flex items-center justify-between mb-4">
                     <div>
                         <div class="text-3xl font-extrabold text-amber-400 mb-1" id="tutor-pending-eth">${ethers.formatEther(TS.pendingEth)} BNB</div>
-                        <div class="text-xs text-zinc-400">Accumulated from tutter activity</div>
+                        <div class="text-xs text-zinc-400">${t('referral.accumulated')}</div>
                     </div>
                     <button id="tutor-withdraw-btn" class="shrink-0 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl px-5 py-3 text-sm hover:shadow-lg hover:shadow-amber-500/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                         ${TS.pendingEth === 0n ? 'disabled' : ''}>
@@ -188,12 +187,12 @@ function render(isActive) {
                 ${TS.pendingEth === 0n && TS.tutorCount === 0 ? `
                 <div class="bg-black/20 rounded-xl p-3 flex items-start gap-2">
                     <i class="fa-solid fa-circle-info text-zinc-500 mt-0.5 text-xs"></i>
-                    <p class="text-zinc-500 text-xs">Share your tutor link to start earning. You'll receive a cut of every fee your tutters pay.</p>
+                    <p class="text-zinc-500 text-xs">${t('referral.shareToStart')}</p>
                 </div>
                 ` : TS.pendingEth === 0n ? `
                 <div class="bg-black/20 rounded-xl p-3 flex items-start gap-2">
                     <i class="fa-solid fa-circle-info text-zinc-500 mt-0.5 text-xs"></i>
-                    <p class="text-zinc-500 text-xs">Your tutters haven't generated fees yet. Earnings appear here automatically as they use the protocol.</p>
+                    <p class="text-zinc-500 text-xs">${t('referral.noFeesYet')}</p>
                 </div>
                 ` : ''}
             </div>
@@ -203,7 +202,7 @@ function render(isActive) {
         <!-- ====== HOW IT WORKS — Visual Steps ====== -->
         <div class="mb-8">
             <h2 class="text-lg font-bold text-white mb-5 flex items-center gap-2">
-                <i class="fa-solid fa-route text-purple-400"></i> How It Works
+                <i class="fa-solid fa-route text-purple-400"></i> ${t('referral.howItWorks.title')}
             </h2>
             <div class="space-y-3">
                 <div class="flex items-start gap-4 bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4">
@@ -211,8 +210,8 @@ function render(isActive) {
                         <span class="text-amber-400 font-black text-sm">1</span>
                     </div>
                     <div>
-                        <h3 class="text-white font-bold text-sm mb-1">Share your link</h3>
-                        <p class="text-zinc-400 text-xs leading-relaxed">Send your unique URL to friends via social media, DMs, or anywhere. Your wallet address is embedded in the link.</p>
+                        <h3 class="text-white font-bold text-sm mb-1">${t('referral.howItWorks.step1Title')}</h3>
+                        <p class="text-zinc-400 text-xs leading-relaxed">${t('referral.howItWorks.step1Desc')}</p>
                     </div>
                 </div>
                 <div class="flex items-start gap-4 bg-zinc-800/40 border border-zinc-700/40 rounded-xl p-4">
@@ -410,7 +409,7 @@ function render(isActive) {
         <div class="mb-8">
             <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-2xl p-5 sm:p-6">
                 <h3 class="text-lg font-bold text-white mb-3 flex items-center gap-2">
-                    <i class="fa-solid fa-pen text-amber-400"></i> ${TS.tutor ? 'Change Tutor' : 'Set Your Tutor'}
+                    <i class="fa-solid fa-pen text-amber-400"></i> ${TS.tutor ? t('referral.changeTutor.title') : t('referral.changeTutor.title')}
                 </h3>
                 <p class="text-zinc-400 text-sm mb-4">
                     ${TS.tutor
@@ -418,7 +417,7 @@ function render(isActive) {
                         : `Enter a tutor address or ask someone for their tutor link. First-time fee: 0.00002 BNB.`}
                 </p>
                 <div class="flex gap-2">
-                    <input id="tutor-address-input" type="text" placeholder="0x... tutor address"
+                    <input id="tutor-address-input" type="text" placeholder="${t('referral.changeTutor.placeholder')}"
                         class="flex-1 bg-zinc-900/50 border border-zinc-700/50 rounded-xl px-4 py-2.5 text-sm text-zinc-300 font-mono placeholder-zinc-600 focus:border-amber-500/50 focus:outline-none">
                     <button id="tutor-set-btn" class="shrink-0 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl px-5 py-2.5 text-sm hover:shadow-lg hover:shadow-amber-500/30 transition-all">
                         <i class="fa-solid fa-graduation-cap mr-1"></i> Set
@@ -544,7 +543,7 @@ function updateStats() {
     const countEl = document.getElementById('tutor-count');
     const tutorEl = document.getElementById('tutor-current');
     if (countEl) countEl.textContent = TS.tutorCount;
-    if (tutorEl) tutorEl.textContent = TS.tutor ? formatAddress(TS.tutor) : 'None yet';
+    if (tutorEl) tutorEl.textContent = TS.tutor ? formatAddress(TS.tutor) : t('referral.noneYet');
 }
 
 // ============================================================================
@@ -578,12 +577,12 @@ async function handleSetTutor() {
     const tutorAddr = input.value.trim();
     if (!tutorAddr || !ethers.isAddress(tutorAddr)) {
         statusEl.style.display = '';
-        statusEl.innerHTML = '<span class="text-red-400">Invalid address</span>';
+        statusEl.innerHTML = `<span class="text-red-400">${t('referral.toast.invalidAddress')}</span>`;
         return;
     }
     if (tutorAddr.toLowerCase() === State.userAddress.toLowerCase()) {
         statusEl.style.display = '';
-        statusEl.innerHTML = '<span class="text-red-400">Cannot tutor yourself</span>';
+        statusEl.innerHTML = `<span class="text-red-400">${t('referral.toast.cannotBeSelf')}</span>`;
         return;
     }
 
@@ -610,7 +609,7 @@ async function handleSetTutor() {
         updateStats();
         statusEl.innerHTML = `<span class="text-green-400"><i class="fa-solid fa-check mr-1"></i>Tutor ${isFirstTime ? 'set' : 'changed'} successfully!</span>`;
         input.value = '';
-        showToast(`Tutor ${isFirstTime ? 'set' : 'changed'} on-chain!`, 'success');
+        showToast(t('referral.toast.changeTutorSuccess'), 'success');
     } catch (e) {
         console.error('[Tutor] Set failed:', e);
         const msg = e.reason || e.message || 'Transaction failed';
@@ -625,7 +624,7 @@ async function handleSetTutor() {
 // WITHDRAW BNB EARNINGS
 // ============================================================================
 async function handleWithdrawEth() {
-    if (TS.pendingEth === 0n) { showToast('No earnings to withdraw', 'info'); return; }
+    if (TS.pendingEth === 0n) { showToast(t('referral.noFeesYet'), 'info'); return; }
     if (TS.isWithdrawing) return;
 
     const btn = document.getElementById('tutor-withdraw-btn');
@@ -643,7 +642,7 @@ async function handleWithdrawEth() {
 
         const amount = ethers.formatEther(TS.pendingEth);
         TS.pendingEth = 0n;
-        showToast(`Withdrew ${amount} BNB!`, 'success');
+        showToast(t('referral.toast.withdrawSuccess'), 'success');
 
         const pendingEl = document.getElementById('tutor-pending-eth');
         if (pendingEl) pendingEl.textContent = '0.0 BNB';
@@ -651,7 +650,7 @@ async function handleWithdrawEth() {
     } catch (e) {
         console.error('[Tutor] Withdraw failed:', e);
         const msg = e.reason || e.message || 'Withdraw failed';
-        showToast(msg.includes('user rejected') ? 'Transaction cancelled' : msg, 'error');
+        showToast(msg.includes('user rejected') ? t('common.txCancelled') : t('referral.toast.withdrawFailed', { error: msg }), 'error');
         if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-arrow-right-from-bracket mr-1"></i> Withdraw'; }
     }
 
@@ -674,7 +673,7 @@ function copyLink() {
     const link = getLink();
     if (!link) return;
     navigator.clipboard.writeText(link).then(() => {
-        showToast('Tutor link copied!', 'success');
+        showToast(t('referral.toast.linkCopied'), 'success');
         const btn = document.getElementById('tutor-copy-btn');
         if (btn) {
             btn.innerHTML = '<i class="fa-solid fa-check text-lg tutor-copy-feedback"></i>';

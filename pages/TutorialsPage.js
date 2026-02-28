@@ -2,6 +2,8 @@
 // Complete Video Tutorials covering ALL ecosystem features
 // PT/EN language support
 
+import { t, getLang, setLang } from '../modules/core/index.js';
+
 const YOUTUBE_CHANNEL = 'https://www.youtube.com/@Backcoin';
 
 // ============================================================================
@@ -586,49 +588,8 @@ const categories = [
 ];
 
 // ============================================================================
-// TRANSLATIONS
-// ============================================================================
-const translations = {
-    en: {
-        heroTitle: 'Master the Backcoin Ecosystem',
-        heroSubtitle: 'Complete video tutorials covering every feature — from your first BKC to building your own operator business',
-        videoCount: 'Videos',
-        languages: '2 Languages',
-        allCategories: 'All Categories',
-        tagBeginner: 'Beginner',
-        tagIntermediate: 'Intermediate',
-        tagAdvanced: 'Advanced',
-        comingSoon: 'Video coming soon',
-        watchNow: 'Watch',
-        subscribe: 'Subscribe on YouTube',
-        filterAll: 'All',
-        filterBeginner: 'Beginner',
-        filterIntermediate: 'Intermediate',
-        filterAdvanced: 'Advanced'
-    },
-    pt: {
-        heroTitle: 'Domine o Ecossistema Backcoin',
-        heroSubtitle: 'Tutoriais completos em vídeo cobrindo cada recurso — do seu primeiro BKC a construir seu próprio negócio de operador',
-        videoCount: 'Vídeos',
-        languages: '2 Idiomas',
-        allCategories: 'Todas as Categorias',
-        tagBeginner: 'Iniciante',
-        tagIntermediate: 'Intermediário',
-        tagAdvanced: 'Avançado',
-        comingSoon: 'Vídeo em breve',
-        watchNow: 'Assistir',
-        subscribe: 'Inscreva-se no YouTube',
-        filterAll: 'Todos',
-        filterBeginner: 'Iniciante',
-        filterIntermediate: 'Intermediário',
-        filterAdvanced: 'Avançado'
-    }
-};
-
-// ============================================================================
 // STATE
 // ============================================================================
-let currentLang = localStorage.getItem('backcoin-tutorials-lang') || 'pt';
 let currentFilter = 'all'; // all, beginner, intermediate, advanced
 
 // ============================================================================
@@ -659,9 +620,9 @@ function getTagStyle(tag) {
 }
 
 function createVideoCard(video, globalIndex) {
-    const data = video[currentLang];
+    const data = video[getLang()];
     const tagStyle = getTagStyle(video.tag);
-    const tagText = translations[currentLang][`tag${video.tag.charAt(0).toUpperCase() + video.tag.slice(1)}`];
+    const tagText = t(`tutorials.tags.${video.tag}`);
     const isPlaceholder = !data.url || data.url === YOUTUBE_CHANNEL;
     const url = isPlaceholder ? YOUTUBE_CHANNEL : data.url;
 
@@ -701,7 +662,7 @@ function createVideoCard(video, globalIndex) {
 }
 
 function createCategorySection(cat, videoList, startIndex) {
-    const t = cat[currentLang];
+    const catData = cat[getLang()];
     const c = getColorClasses(cat.color);
 
     // Filter videos if filter is active
@@ -724,8 +685,8 @@ function createCategorySection(cat, videoList, startIndex) {
                     <i class="fa-solid fa-${cat.icon}" style="color:${c.text};font-size:16px"></i>
                 </div>
                 <div>
-                    <h2 style="font-size:17px;font-weight:700;color:#fff;margin:0">${t.title}</h2>
-                    <p style="font-size:11px;color:rgba(255,255,255,0.35);margin:2px 0 0">${t.desc}</p>
+                    <h2 style="font-size:17px;font-weight:700;color:#fff;margin:0">${catData.title}</h2>
+                    <p style="font-size:11px;color:rgba(255,255,255,0.35);margin:2px 0 0">${catData.desc}</p>
                 </div>
             </div>
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px">
@@ -738,8 +699,8 @@ function createCategorySection(cat, videoList, startIndex) {
 }
 
 function setLanguage(lang) {
-    currentLang = lang;
-    localStorage.setItem('backcoin-tutorials-lang', lang);
+    // Use global i18n system — setLang handles localStorage, re-render, etc.
+    setLang(lang);
 
     document.querySelectorAll('.tutorials-lang-btn').forEach(btn => {
         const isActive = btn.dataset.lang === lang;
@@ -767,7 +728,6 @@ function renderContent() {
     const container = document.getElementById('tutorials-content');
     if (!container) return;
 
-    const t = translations[currentLang];
     const totalVideos = getTotalVideoCount();
 
     let html = `
@@ -775,24 +735,24 @@ function renderContent() {
         <div style="text-align:center;margin-bottom:32px">
             <h1 style="font-size:28px;font-weight:800;margin:0 0 8px">
                 <span style="background:linear-gradient(135deg,#f59e0b,#fbbf24,#f59e0b);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">
-                    ${t.heroTitle}
+                    ${t('tutorials.heroTitle')}
                 </span>
             </h1>
-            <p style="color:rgba(255,255,255,0.45);max-width:600px;margin:0 auto 16px;font-size:13px;line-height:1.5">${t.heroSubtitle}</p>
+            <p style="color:rgba(255,255,255,0.45);max-width:600px;margin:0 auto 16px;font-size:13px;line-height:1.5">${t('tutorials.heroSubtitle')}</p>
             <div style="display:flex;align-items:center;justify-content:center;gap:16px">
                 <div style="display:flex;align-items:center;gap:6px;font-size:13px;color:rgba(255,255,255,0.4)">
                     <i class="fa-solid fa-video" style="color:#f59e0b"></i>
-                    <span>${totalVideos} ${t.videoCount}</span>
+                    <span>${totalVideos} ${t('tutorials.videoCount')}</span>
                 </div>
                 <div style="width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,0.15)"></div>
                 <div style="display:flex;align-items:center;gap:6px;font-size:13px;color:rgba(255,255,255,0.4)">
                     <i class="fa-solid fa-language" style="color:#34d399"></i>
-                    <span>${t.languages}</span>
+                    <span>${t('tutorials.languages')}</span>
                 </div>
                 <div style="width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,0.15)"></div>
                 <div style="display:flex;align-items:center;gap:6px;font-size:13px;color:rgba(255,255,255,0.4)">
                     <i class="fa-solid fa-layer-group" style="color:#a855f7"></i>
-                    <span>8 ${currentLang === 'pt' ? 'Categorias' : 'Categories'}</span>
+                    <span>8 ${t('tutorials.categoriesLabel')}</span>
                 </div>
             </div>
         </div>
@@ -801,19 +761,19 @@ function renderContent() {
         <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:28px;flex-wrap:wrap">
             <button class="tutorials-filter-btn" data-filter="all" onclick="TutorialsPage.setFilter('all')"
                     style="padding:6px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ${currentFilter === 'all' ? 'rgba(245,158,11,0.3)' : 'rgba(255,255,255,0.08)'};background:${currentFilter === 'all' ? 'rgba(245,158,11,0.15)' : 'transparent'};color:${currentFilter === 'all' ? '#f59e0b' : 'rgba(255,255,255,0.4)'};transition:all 0.2s">
-                ${t.filterAll} (${totalVideos})
+                ${t('tutorials.filterAll')} (${totalVideos})
             </button>
             <button class="tutorials-filter-btn" data-filter="beginner" onclick="TutorialsPage.setFilter('beginner')"
                     style="padding:6px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ${currentFilter === 'beginner' ? 'rgba(52,211,153,0.3)' : 'rgba(255,255,255,0.08)'};background:${currentFilter === 'beginner' ? 'rgba(52,211,153,0.15)' : 'transparent'};color:${currentFilter === 'beginner' ? '#34d399' : 'rgba(255,255,255,0.4)'};transition:all 0.2s">
-                ${t.filterBeginner}
+                ${t('tutorials.tags.beginner')}
             </button>
             <button class="tutorials-filter-btn" data-filter="intermediate" onclick="TutorialsPage.setFilter('intermediate')"
                     style="padding:6px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ${currentFilter === 'intermediate' ? 'rgba(245,158,11,0.3)' : 'rgba(255,255,255,0.08)'};background:${currentFilter === 'intermediate' ? 'rgba(245,158,11,0.15)' : 'transparent'};color:${currentFilter === 'intermediate' ? '#f59e0b' : 'rgba(255,255,255,0.4)'};transition:all 0.2s">
-                ${t.filterIntermediate}
+                ${t('tutorials.tags.intermediate')}
             </button>
             <button class="tutorials-filter-btn" data-filter="advanced" onclick="TutorialsPage.setFilter('advanced')"
                     style="padding:6px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ${currentFilter === 'advanced' ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.08)'};background:${currentFilter === 'advanced' ? 'rgba(239,68,68,0.15)' : 'transparent'};color:${currentFilter === 'advanced' ? '#ef4444' : 'rgba(255,255,255,0.4)'};transition:all 0.2s">
-                ${t.filterAdvanced}
+                ${t('tutorials.tags.advanced')}
             </button>
         </div>
     `;
@@ -832,13 +792,13 @@ function renderContent() {
     html += `
         <div style="text-align:center;padding:32px 20px;margin-top:20px;background:linear-gradient(135deg,rgba(245,158,11,0.08),rgba(239,68,68,0.05));border:1px solid rgba(245,158,11,0.15);border-radius:16px">
             <i class="fa-brands fa-youtube" style="font-size:36px;color:#ef4444;margin-bottom:12px"></i>
-            <h3 style="font-size:16px;font-weight:700;color:#fff;margin:0 0 6px">${t.subscribe}</h3>
-            <p style="font-size:12px;color:rgba(255,255,255,0.4);margin:0 0 16px">${currentLang === 'pt' ? 'Fique por dentro de novos tutoriais e atualizações' : 'Stay updated with new tutorials and updates'}</p>
+            <h3 style="font-size:16px;font-weight:700;color:#fff;margin:0 0 6px">${t('tutorials.subscribe')}</h3>
+            <p style="font-size:12px;color:rgba(255,255,255,0.4);margin:0 0 16px">${t('tutorials.subscribeDesc')}</p>
             <a href="${YOUTUBE_CHANNEL}" target="_blank" rel="noopener noreferrer"
                style="display:inline-flex;align-items:center;gap:8px;background:#ef4444;color:#fff;padding:10px 24px;border-radius:10px;font-size:13px;font-weight:700;text-decoration:none;transition:all 0.2s;border:none"
                onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">
                 <i class="fa-brands fa-youtube"></i>
-                ${currentLang === 'pt' ? 'Inscrever-se' : 'Subscribe'}
+                ${t('tutorials.subscribeBtn')}
             </a>
         </div>
     `;
@@ -864,20 +824,20 @@ export const TutorialsPage = {
                                 <i class="fa-solid fa-play-circle" style="color:#22d3ee;font-size:20px"></i>
                             </div>
                             <div>
-                                <h1 style="font-size:20px;font-weight:800;color:#fff;margin:0">Video Tutorials</h1>
-                                <p style="font-size:11px;color:rgba(255,255,255,0.35);margin:2px 0 0">${getTotalVideoCount()} videos — ${currentLang === 'pt' ? 'Todas as funções do ecossistema' : 'Every ecosystem feature'}</p>
+                                <h1 style="font-size:20px;font-weight:800;color:#fff;margin:0">${t('tutorials.title')}</h1>
+                                <p style="font-size:11px;color:rgba(255,255,255,0.35);margin:2px 0 0">${getTotalVideoCount()} ${t('tutorials.videoCount')} — ${t('tutorials.everyFeature')}</p>
                             </div>
                         </div>
 
                         <!-- Language Switcher -->
                         <div style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,0.04);padding:4px;border-radius:10px;border:1px solid rgba(255,255,255,0.06)">
                             <button class="tutorials-lang-btn" data-lang="en" onclick="TutorialsPage.setLang('en')"
-                                    style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:none;transition:all 0.2s;${currentLang === 'en' ? 'background:#f59e0b;color:#000' : 'background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.6)'}">
+                                    style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:none;transition:all 0.2s;${getLang() === 'en' ? 'background:#f59e0b;color:#000' : 'background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.6)'}">
                                 <img src="./assets/en.png" alt="EN" style="width:18px;height:18px;border-radius:50%" onerror="this.style.display='none'">
                                 EN
                             </button>
                             <button class="tutorials-lang-btn" data-lang="pt" onclick="TutorialsPage.setLang('pt')"
-                                    style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:none;transition:all 0.2s;${currentLang === 'pt' ? 'background:#f59e0b;color:#000' : 'background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.6)'}">
+                                    style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:none;transition:all 0.2s;${getLang() === 'pt' ? 'background:#f59e0b;color:#000' : 'background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.6)'}">
                                 <img src="./assets/pt.png" alt="PT" style="width:18px;height:18px;border-radius:50%" onerror="this.style.display='none'">
                                 PT
                             </button>

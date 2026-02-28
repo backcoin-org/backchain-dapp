@@ -18,7 +18,7 @@ import { formatBigNumber } from '../utils.js';
 import { showToast, openModal, closeModal } from '../ui-feedback.js';
 import { addresses } from '../config.js';
 import { FortuneTx } from '../modules/transactions/index.js';
-import { calculateFeeClientSide } from '../modules/core/index.js';
+import { calculateFeeClientSide, t } from '../modules/core/index.js';
 
 // ============================================================================
 // CONSTANTS
@@ -84,13 +84,13 @@ const TIERS = [
 ];
 
 // Derived constants from TIERS (not hardcoded)
-const COMBO_MAX_MULTIPLIER = TIERS.reduce((sum, t) => sum + t.multiplier, 0); // 99.2
+const COMBO_MAX_MULTIPLIER = TIERS.reduce((sum, tr) => sum + tr.multiplier, 0); // 99.2
 const JACKPOT_MULTIPLIER = TIERS[2].multiplier; // 80
 const JACKPOT_RANGE = TIERS[2].range; // 100
 
 // Combo win probability: chance of matching at least 1 tier
 // = 1 - (1-0.25) × (1-0.05) × (1-0.01) ≈ 29.5%
-const COMBO_WIN_CHANCE = 1 - TIERS.reduce((miss, t) => miss * (1 - 1 / t.range), 1);
+const COMBO_WIN_CHANCE = 1 - TIERS.reduce((miss, tr) => miss * (1 - 1 / tr.range), 1);
 const COMBO_WIN_PCT = (COMBO_WIN_CHANCE * 100).toFixed(0); // "29"
 const COMBO_BOOST_VS_EASY = Math.round(((COMBO_WIN_CHANCE - 1 / TIERS[0].range) / (1 / TIERS[0].range)) * 100); // ~18
 
@@ -511,10 +511,10 @@ function renderIntro(container) {
         <div id="intro-splash" class="flex flex-col items-center justify-center min-h-[65vh] text-center cursor-pointer">
             <img src="./assets/fortune.png" alt="Fortune Pool" class="w-40 h-40 object-contain mb-4 intro-pop drop-shadow-[0_0_30px_rgba(245,158,11,0.3)]"
                  onerror="this.outerHTML='<div class=\\'text-7xl mb-5 intro-pop\\'>🐯</div>'">
-            <p class="text-zinc-500 text-xs uppercase tracking-[0.3em] mb-2 intro-fade">Accumulated Prize</p>
+            <p class="text-zinc-500 text-xs uppercase tracking-[0.3em] mb-2 intro-fade">${t('fortune.prizePool')}</p>
             <p class="text-4xl font-black text-amber-400 intro-fade intro-pulse" id="intro-prize">${prizeText}</p>
             <p class="text-zinc-400 text-sm mt-3 intro-fade">Win up to <span class="text-amber-400 font-bold">${JACKPOT_MULTIPLIER}x</span> your bet</p>
-            <div class="mt-8 text-zinc-600 text-xs animate-pulse intro-fade">Tap to play</div>
+            <div class="mt-8 text-zinc-600 text-xs animate-pulse intro-fade">${t('fortune.playToWin')}</div>
         </div>
     `;
 
@@ -535,20 +535,20 @@ function renderTierSelect(container) {
     container.innerHTML = `
         <div class="space-y-3">
             <div class="flex items-center justify-between px-1 mb-1">
-                <p class="text-white font-bold text-lg">Choose Your Game</p>
+                <p class="text-white font-bold text-lg">${t('fortune.selectBet')}</p>
                 <span class="text-xs text-zinc-500">Step 1 of 3</span>
             </div>
 
             <div class="space-y-2.5">
-                ${TIERS.map(t => `
-                    <button class="tier-card w-full flex items-center gap-4 p-4 bg-gradient-to-r ${t.bgFrom} ${t.bgTo} border ${t.borderColor} rounded-2xl hover:scale-[1.02] active:scale-[0.98] transition-all text-left" data-mode="${t.name.toLowerCase()}">
-                        <div class="text-3xl flex-shrink-0">${t.emoji}</div>
+                ${TIERS.map(tr => `
+                    <button class="tier-card w-full flex items-center gap-4 p-4 bg-gradient-to-r ${tr.bgFrom} ${tr.bgTo} border ${tr.borderColor} rounded-2xl hover:scale-[1.02] active:scale-[0.98] transition-all text-left" data-mode="${tr.name.toLowerCase()}">
+                        <div class="text-3xl flex-shrink-0">${tr.emoji}</div>
                         <div class="flex-1 min-w-0">
-                            <p class="${t.textColor} font-bold">${t.name}</p>
-                            <p class="text-zinc-400 text-xs">Pick 1–${t.range} &bull; ${t.chance} chance</p>
+                            <p class="${tr.textColor} font-bold">${tr.name}</p>
+                            <p class="text-zinc-400 text-xs">Pick 1–${tr.range} &bull; ${tr.chance} chance</p>
                         </div>
                         <div class="text-right flex-shrink-0">
-                            <p class="${t.textColor} font-black text-2xl">${t.multiplier}x</p>
+                            <p class="${tr.textColor} font-black text-2xl">${tr.multiplier}x</p>
                         </div>
                     </button>
                 `).join('')}
@@ -611,7 +611,7 @@ function renderNumberStep(container) {
         <div class="space-y-3">
             <div class="flex items-center justify-between px-1">
                 <button id="btn-back-tier" class="flex items-center gap-1.5 text-zinc-400 hover:text-white transition-colors text-sm">
-                    <i class="fa-solid fa-arrow-left text-xs"></i> Back
+                    <i class="fa-solid fa-arrow-left text-xs"></i> ${t('common.back')}
                 </button>
                 <span class="text-xs text-zinc-500">Step 2 of 3</span>
             </div>
@@ -625,15 +625,15 @@ function renderNumberStep(container) {
 
             ${isCombo ? `
                 <div class="flex items-center justify-center gap-2">
-                    ${TIERS.map((t, i) => `
+                    ${TIERS.map((tr, i) => `
                         <div class="w-9 h-9 rounded-full flex items-center justify-center text-sm ${i === Game.comboStep
-                            ? `bg-gradient-to-br ${t.bgFrom} ${t.bgTo} border-2 ${t.borderColor}`
+                            ? `bg-gradient-to-br ${tr.bgFrom} ${tr.bgTo} border-2 ${tr.borderColor}`
                             : i < Game.comboStep
                                 ? 'bg-emerald-500/20 border-2 border-emerald-500/50'
                                 : 'bg-zinc-800 border-2 border-zinc-700'}">
                             ${i < Game.comboStep
                                 ? '<i class="fa-solid fa-check text-emerald-400 text-xs"></i>'
-                                : `<span class="${i === Game.comboStep ? t.textColor : 'text-zinc-500'} font-bold">${t.emoji}</span>`}
+                                : `<span class="${i === Game.comboStep ? tr.textColor : 'text-zinc-500'} font-bold">${tr.emoji}</span>`}
                         </div>
                     `).join('<div class="w-4 h-px bg-zinc-700"></div>')}
                 </div>
@@ -646,15 +646,15 @@ function renderNumberStep(container) {
             ${isCombo ? `
                 <div class="flex gap-2">
                     <button id="btn-combo-prev" class="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl transition-colors text-sm ${Game.comboStep === 0 ? 'opacity-30 pointer-events-none' : ''}">
-                        <i class="fa-solid fa-arrow-left mr-1"></i>Prev
+                        <i class="fa-solid fa-arrow-left mr-1"></i>${t('common.prev')}
                     </button>
                     <button id="btn-combo-next" class="flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl transition-all text-sm">
-                        ${Game.comboStep < 2 ? 'Next <i class="fa-solid fa-arrow-right ml-1"></i>' : 'Set Wager <i class="fa-solid fa-arrow-right ml-1"></i>'}
+                        ${Game.comboStep < 2 ? `${t('common.next')} <i class="fa-solid fa-arrow-right ml-1"></i>` : `${t('fortune.selectBet')} <i class="fa-solid fa-arrow-right ml-1"></i>`}
                     </button>
                 </div>
             ` : `
                 <button id="btn-next-wager" class="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl transition-all text-base">
-                    Next — Set Wager <i class="fa-solid fa-arrow-right ml-1"></i>
+                    ${t('common.next')} <i class="fa-solid fa-arrow-right ml-1"></i>
                 </button>
             `}
         </div>
@@ -727,18 +727,18 @@ function renderWagerStep(container) {
         <div class="space-y-3">
             <div class="flex items-center justify-between px-1">
                 <button id="btn-back-numbers" class="flex items-center gap-1.5 text-zinc-400 hover:text-white transition-colors text-sm">
-                    <i class="fa-solid fa-arrow-left text-xs"></i> Back
+                    <i class="fa-solid fa-arrow-left text-xs"></i> ${t('common.back')}
                 </button>
                 <span class="text-xs text-zinc-500">Step 3 of 3</span>
             </div>
 
             <!-- Summary of picks -->
             <div class="flex items-center justify-center gap-3 py-2">
-                ${tiersToShow.map((t, i) => `
+                ${tiersToShow.map((tr, i) => `
                     <div class="text-center">
-                        <p class="text-[10px] ${t.textColor} mb-1">${t.emoji}</p>
-                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br ${t.bgFrom} ${t.bgTo} border ${t.borderColor} flex items-center justify-center">
-                            <span class="text-base font-black ${t.textColor}">${picks[i]}</span>
+                        <p class="text-[10px] ${tr.textColor} mb-1">${tr.emoji}</p>
+                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br ${tr.bgFrom} ${tr.bgTo} border ${tr.borderColor} flex items-center justify-center">
+                            <span class="text-base font-black ${tr.textColor}">${picks[i]}</span>
                         </div>
                     </div>
                 `).join('')}
@@ -747,7 +747,7 @@ function renderWagerStep(container) {
             <!-- Wager controls -->
             <div class="bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-4">
                 <div class="flex items-center justify-between mb-2">
-                    <label class="text-sm text-zinc-400 font-bold"><i class="fa-solid fa-coins text-amber-400 mr-1.5"></i>Wager</label>
+                    <label class="text-sm text-zinc-400 font-bold"><i class="fa-solid fa-coins text-amber-400 mr-1.5"></i>${t('fortune.selectBet')}</label>
                     <span class="text-xs text-zinc-500">Bal: <span class="text-amber-400 font-bold">${balanceNum.toFixed(0)}</span> BKC</span>
                 </div>
 
@@ -784,7 +784,7 @@ function renderWagerStep(container) {
                     <i class="fa-solid fa-play mr-2"></i>Play &mdash; ${Game.wager.toLocaleString()} BKC
                 </button>
 
-                ${!State.isConnected ? '<p class="text-center text-zinc-500 text-xs mt-2">Connect wallet to play</p>' : ''}
+                ${!State.isConnected ? `<p class="text-center text-zinc-500 text-xs mt-2">${t('common.connectWalletFirst')}</p>` : ''}
                 ${State.isConnected && !hasBalance ? `
                     <button id="btn-faucet" class="w-full mt-2 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-sm font-bold hover:bg-amber-500/20 transition-colors">
                         <i class="fa-solid fa-faucet mr-1"></i>Get Test Tokens
@@ -973,7 +973,7 @@ function setupWagerEvents(maxMulti, balanceNum) {
 
     // Play
     document.getElementById('btn-play')?.addEventListener('click', () => {
-        if (!State.isConnected) return showToast('Connect wallet first', 'warning');
+        if (!State.isConnected) return showToast(t('common.connectWalletFirst'), 'warning');
         if (Game.wager < 1) return showToast('Min: 1 BKC', 'warning');
         commitGame();
     });
@@ -1676,11 +1676,11 @@ function renderResult(container) {
             <div class="text-center mb-4">
                 ${isWin ? `
                     <div class="text-5xl mb-2">🎉</div>
-                    <h2 class="text-2xl font-black text-emerald-400 mb-1">YOU WON!</h2>
+                    <h2 class="text-2xl font-black text-emerald-400 mb-1">${t('fortune.youWon')}</h2>
                     <p class="text-3xl font-black text-white">${displayPrizeFormatted} BKC</p>
                 ` : `
                     <div class="text-5xl mb-2">😔</div>
-                    <h2 class="text-xl font-bold text-zinc-400 mb-1">No Match</h2>
+                    <h2 class="text-xl font-bold text-zinc-400 mb-1">${t('fortune.youLost')}</h2>
                     <p class="text-zinc-500 text-sm">Better luck next time!</p>
                 `}
             </div>
@@ -1722,7 +1722,7 @@ function renderResult(container) {
             ${Game.txHash ? `
                 <div class="text-center mb-3">
                     <a href="${EXPLORER_TX}${Game.txHash}" target="_blank" class="inline-flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-400">
-                        <i class="fa-solid fa-external-link"></i> View Transaction
+                        <i class="fa-solid fa-external-link"></i> ${t('common.viewOnExplorer')}
                     </a>
                 </div>
             ` : ''}
@@ -1734,7 +1734,7 @@ function renderResult(container) {
                         <i class="fa-solid fa-gift ${isWin ? 'text-amber-400' : 'text-zinc-400'}"></i>
                     </div>
                     <div>
-                        <p class="text-white font-bold text-sm">${isWin ? 'Share Your Win!' : 'Share & Try Again!'}</p>
+                        <p class="text-white font-bold text-sm">${isWin ? t('fortune.shareWin') : t('fortune.shareWin')}</p>
                         <p class="text-amber-400 text-xs font-medium">+${SHARE_POINTS} Airdrop Points</p>
                     </div>
                 </div>
@@ -1744,7 +1744,7 @@ function renderResult(container) {
             </div>
 
             <button id="btn-new-game" class="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl transition-all">
-                <i class="fa-solid fa-paw mr-2"></i>Play Again
+                <i class="fa-solid fa-paw mr-2"></i>${t('fortune.playToWin')}
             </button>
             <button id="btn-change-game" class="w-full mt-2 py-2 text-zinc-500 hover:text-zinc-300 text-sm transition-colors">
                 <i class="fa-solid fa-shuffle mr-1"></i>Change Game Mode
@@ -1756,14 +1756,14 @@ function renderResult(container) {
             <div class="flex items-center justify-between p-3 border-b border-zinc-800/50">
                 <span class="text-sm font-bold text-white flex items-center gap-2">
                     <i class="fa-solid fa-clock-rotate-left text-orange-500 text-xs"></i>
-                    Recent Games
+                    ${t('fortune.yourHistory')}
                 </span>
                 <span id="win-rate" class="text-xs text-zinc-500"></span>
             </div>
             <div id="history-list" class="max-h-[200px] overflow-y-auto p-2">
                 <div class="p-3 text-center text-zinc-600 text-sm">
                     <i class="fa-solid fa-spinner fa-spin text-zinc-600 mb-1"></i>
-                    <p class="text-xs">Loading...</p>
+                    <p class="text-xs">${t('common.loading')}</p>
                 </div>
             </div>
         </div>

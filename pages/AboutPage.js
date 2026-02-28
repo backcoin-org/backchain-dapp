@@ -2,6 +2,7 @@
 // ✅ PRODUCTION V5.1 — Complete ecosystem overview — modular architecture
 
 import { showToast } from '../ui-feedback.js';
+import { t } from '../modules/core/index.js';
 
 // ==========================================================
 //  1. STYLES INJECTION
@@ -175,27 +176,25 @@ function renderHeroSection() {
             </div>
 
             <h1 class="text-3xl md:text-4xl font-black text-white mb-3">
-                The <span class="ab-gradient-text">Backchain</span> Ecosystem
+                ${t('about.heroTitle')}
             </h1>
 
             <p class="text-zinc-400 text-sm max-w-lg mx-auto leading-relaxed mb-5">
-                An unstoppable, permissionless DeFi ecosystem on <span class="text-yellow-400 font-medium">opBNB</span>.
-                No admin keys. No blacklists.
-                A <span class="text-amber-400 font-medium">modular smart contract ecosystem</span> working together to create a self-sustaining digital economy.
+                ${t('about.heroSubtitle')}
             </p>
 
             <div class="flex items-center justify-center gap-3 flex-wrap">
                 <span class="ab-badge bg-amber-500/20 text-amber-400">
-                    <i class="fa-solid fa-users mr-1"></i>Community-Owned
+                    <i class="fa-solid fa-users mr-1"></i>${t('about.badgeCommunity')}
                 </span>
                 <span class="ab-badge bg-emerald-500/20 text-emerald-400">
-                    <i class="fa-solid fa-infinity mr-1"></i>Self-Sustaining
+                    <i class="fa-solid fa-infinity mr-1"></i>${t('about.badgeSustaining')}
                 </span>
                 <span class="ab-badge bg-blue-500/20 text-blue-400">
-                    <i class="fa-solid fa-shield-halved mr-1"></i>Unstoppable
+                    <i class="fa-solid fa-shield-halved mr-1"></i>${t('about.badgeUnstoppable')}
                 </span>
                 <span class="ab-badge bg-purple-500/20 text-purple-400">
-                    <i class="fa-solid fa-code mr-1"></i>Open Source
+                    <i class="fa-solid fa-code mr-1"></i>${t('about.badgeOpenSource')}
                 </span>
             </div>
         </div>
@@ -212,13 +211,13 @@ function renderPhilosophySection() {
                     <i class="fa-solid fa-scroll text-amber-400"></i>
                 </div>
                 <div>
-                    <h2 class="text-white font-bold text-xl">The Philosophy</h2>
-                    <p class="text-zinc-500 text-xs">Why Backchain exists</p>
+                    <h2 class="text-white font-bold text-xl">${t('about.philosophy')}</h2>
+                    <p class="text-zinc-500 text-xs">${t('about.philosophySub')}</p>
                 </div>
             </div>
 
             <p class="text-zinc-400 text-sm leading-relaxed mb-4">
-                Most DeFi protocols are controlled by teams that can pause contracts, blacklist wallets, or change the rules. Backchain was built with a different philosophy: <strong class="text-white">once deployed, the code runs forever</strong> — no admin can stop it, no company can shut it down, and no government can censor it.
+                ${t('about.philosophyText')}
             </p>
 
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -226,22 +225,22 @@ function renderPhilosophySection() {
                     <div class="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-2">
                         <i class="fa-solid fa-key text-red-400"></i>
                     </div>
-                    <h3 class="text-white font-bold text-sm mb-1">No Admin Keys</h3>
-                    <p class="text-zinc-500 text-[11px]">No one can modify contracts after deployment. Rules are enforced by code, not people.</p>
+                    <h3 class="text-white font-bold text-sm mb-1">${t('about.keyFeatures.noAdmin')}</h3>
+                    <p class="text-zinc-500 text-[11px]">${t('about.keyFeatures.noAdminDesc')}</p>
                 </div>
                 <div class="ab-card text-center p-4">
                     <div class="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto mb-2">
                         <i class="fa-solid fa-ban text-amber-400"></i>
                     </div>
-                    <h3 class="text-white font-bold text-sm mb-1">No Blacklists</h3>
-                    <p class="text-zinc-500 text-[11px]">Every wallet has equal access. No addresses can be blocked or restricted.</p>
+                    <h3 class="text-white font-bold text-sm mb-1">${t('about.noBlacklists')}</h3>
+                    <p class="text-zinc-500 text-[11px]">${t('about.noBlacklistsDesc')}</p>
                 </div>
                 <div class="ab-card text-center p-4">
                     <div class="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto mb-2">
                         <i class="fa-solid fa-shield-halved text-emerald-400"></i>
                     </div>
-                    <h3 class="text-white font-bold text-sm mb-1">Immutable Core</h3>
-                    <p class="text-zinc-500 text-[11px]">Core contracts are immutable. Modules can be added or removed without changing existing code.</p>
+                    <h3 class="text-white font-bold text-sm mb-1">${t('about.immutableCore')}</h3>
+                    <p class="text-zinc-500 text-[11px]">${t('about.immutableCoreDesc')}</p>
                 </div>
             </div>
         </div>
@@ -258,41 +257,39 @@ function renderHubSpokeSection() {
                     <i class="fa-solid fa-sitemap text-amber-400"></i>
                 </div>
                 <div>
-                    <h2 class="text-white font-bold text-xl">Hub & Spoke Architecture</h2>
-                    <p class="text-zinc-500 text-xs">Modular design for infinite scalability</p>
+                    <h2 class="text-white font-bold text-xl">${t('about.architecture.title')}</h2>
+                    <p class="text-zinc-500 text-xs">${t('about.architecture.subtitle')}</p>
                 </div>
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
                 <div>
                     <p class="text-zinc-400 text-sm leading-relaxed mb-4">
-                        Backchain uses a <strong class="text-white">modular architecture</strong>.
-                        The <span class="text-amber-400 font-medium">Hub</span> (BackchainEcosystem) is the immutable core — it manages all fees, reward distribution, operator commissions, and tutor referrals.
-                        The <span class="text-emerald-400 font-medium">Spokes</span> are independent services that plug into the Hub. New spokes can be added anytime without changing existing contracts.
+                        ${t('about.hubSpokeText')}
                     </p>
 
                     <div class="ab-card bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/30 mb-3">
                         <div class="flex items-center gap-2 mb-2">
                             <i class="fa-solid fa-brain text-amber-400"></i>
-                            <span class="text-white font-bold text-sm">The Hub (BackchainEcosystem)</span>
+                            <span class="text-white font-bold text-sm">${t('about.hubTitle')}</span>
                         </div>
                         <ul class="text-zinc-400 text-xs space-y-1">
-                            <li><i class="fa-solid fa-check text-amber-500/60 mr-1.5"></i>Fee collection & per-module distribution</li>
-                            <li><i class="fa-solid fa-check text-amber-500/60 mr-1.5"></i>Operator commissions (10-20% to builders)</li>
-                            <li><i class="fa-solid fa-check text-amber-500/60 mr-1.5"></i>Tutor referral system (10% BNB + 5% BKC)</li>
-                            <li><i class="fa-solid fa-check text-amber-500/60 mr-1.5"></i>Buyback & Burn engine (deflationary)</li>
+                            <li><i class="fa-solid fa-check text-amber-500/60 mr-1.5"></i>${t('about.hubFeature1')}</li>
+                            <li><i class="fa-solid fa-check text-amber-500/60 mr-1.5"></i>${t('about.hubFeature2')}</li>
+                            <li><i class="fa-solid fa-check text-amber-500/60 mr-1.5"></i>${t('about.hubFeature3')}</li>
+                            <li><i class="fa-solid fa-check text-amber-500/60 mr-1.5"></i>${t('about.hubFeature4')}</li>
                         </ul>
                     </div>
 
                     <div class="ab-card bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border-emerald-500/30">
                         <div class="flex items-center gap-2 mb-2">
                             <i class="fa-solid fa-puzzle-piece text-emerald-400"></i>
-                            <span class="text-white font-bold text-sm">The Spokes (Service Modules)</span>
+                            <span class="text-white font-bold text-sm">${t('about.spokesTitle')}</span>
                         </div>
                         <ul class="text-zinc-400 text-xs space-y-1">
-                            <li><i class="fa-solid fa-check text-emerald-500/60 mr-1.5"></i>Each spoke generates fees for the ecosystem</li>
-                            <li><i class="fa-solid fa-check text-emerald-500/60 mr-1.5"></i>Independent deployment & upgradability</li>
-                            <li><i class="fa-solid fa-check text-emerald-500/60 mr-1.5"></i>More spokes = more revenue = higher rewards</li>
+                            <li><i class="fa-solid fa-check text-emerald-500/60 mr-1.5"></i>${t('about.spokeFeature1')}</li>
+                            <li><i class="fa-solid fa-check text-emerald-500/60 mr-1.5"></i>${t('about.spokeFeature2')}</li>
+                            <li><i class="fa-solid fa-check text-emerald-500/60 mr-1.5"></i>${t('about.spokeFeature3')}</li>
                         </ul>
                     </div>
                 </div>
@@ -350,139 +347,139 @@ function renderAllModulesSection() {
                     <i class="fa-solid fa-cubes text-purple-400"></i>
                 </div>
                 <div>
-                    <h2 class="text-white font-bold text-xl">The Ecosystem Map</h2>
-                    <p class="text-zinc-500 text-xs">Modular smart contracts, one interconnected economy</p>
+                    <h2 class="text-white font-bold text-xl">${t('tokenomics.ecosystemModules')}</h2>
+                    <p class="text-zinc-500 text-xs">${t('about.architecture.subtitle')}</p>
                 </div>
             </div>
 
             <!-- DeFi Core -->
-            <p class="text-zinc-500 text-[10px] uppercase font-bold mb-3 tracking-wider">DeFi Core</p>
+            <p class="text-zinc-500 text-[10px] uppercase font-bold mb-3 tracking-wider">${t('about.defiCore')}</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-5">
                 <div class="ab-module-pill bg-amber-500/5 border border-amber-500/20" onclick="window.navigateTo&&window.navigateTo('tokenomics')">
                     <div class="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-coins text-amber-400 text-sm"></i></div>
                     <div class="flex-1 min-w-0">
-                        <p class="text-white text-sm font-medium">BKC Token</p>
-                        <p class="text-zinc-500 text-[10px]">ERC-20 with activity-based minting. 200M cap.</p>
+                        <p class="text-white text-sm font-medium">${t('about.mod.bkcToken')}</p>
+                        <p class="text-zinc-500 text-[10px]">${t('about.mod.bkcTokenDesc')}</p>
                     </div>
                 </div>
                 <div class="ab-module-pill bg-blue-500/5 border border-blue-500/20" onclick="window.navigateTo&&window.navigateTo('tokenomics')">
                     <div class="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-water text-blue-400 text-sm"></i></div>
                     <div class="flex-1 min-w-0">
-                        <p class="text-white text-sm font-medium">Liquidity Pool</p>
-                        <p class="text-zinc-500 text-[10px]">Constant-product AMM for BNB/BKC trading.</p>
+                        <p class="text-white text-sm font-medium">${t('about.modules.liquidity')}</p>
+                        <p class="text-zinc-500 text-[10px]">${t('about.modules.liquidityDesc')}</p>
                     </div>
                 </div>
                 <div class="ab-module-pill bg-purple-500/5 border border-purple-500/20" onclick="window.navigateTo&&window.navigateTo('staking')">
                     <div class="w-8 h-8 rounded-lg bg-purple-500/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-layer-group text-purple-400 text-sm"></i></div>
                     <div class="flex-1 min-w-0">
-                        <p class="text-white text-sm font-medium">Staking Pool</p>
-                        <p class="text-zinc-500 text-[10px]">Delegate BKC with time-locks. Earn BNB + BKC rewards.</p>
+                        <p class="text-white text-sm font-medium">${t('about.modules.staking')}</p>
+                        <p class="text-zinc-500 text-[10px]">${t('about.modules.stakingDesc')}</p>
                     </div>
                 </div>
                 <div class="ab-module-pill bg-orange-500/5 border border-orange-500/20">
                     <div class="w-8 h-8 rounded-lg bg-orange-500/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-fire text-orange-400 text-sm"></i></div>
                     <div class="flex-1 min-w-0">
-                        <p class="text-white text-sm font-medium">Buyback Miner</p>
-                        <p class="text-zinc-500 text-[10px]">Converts BNB fees into BKC via scarcity curve mining.</p>
+                        <p class="text-white text-sm font-medium">${t('about.mod.buybackMiner')}</p>
+                        <p class="text-zinc-500 text-[10px]">${t('about.mod.buybackMinerDesc')}</p>
                     </div>
                 </div>
             </div>
 
             <!-- NFT Ecosystem -->
-            <p class="text-zinc-500 text-[10px] uppercase font-bold mb-3 tracking-wider">NFT Ecosystem</p>
+            <p class="text-zinc-500 text-[10px] uppercase font-bold mb-3 tracking-wider">${t('about.nftEcosystem')}</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-5">
                 <div class="ab-module-pill bg-pink-500/5 border border-pink-500/20" onclick="window.navigateTo&&window.navigateTo('store')">
                     <div class="w-8 h-8 rounded-lg bg-pink-500/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-gem text-pink-400 text-sm"></i></div>
                     <div class="flex-1 min-w-0">
-                        <p class="text-white text-sm font-medium">RewardBooster NFTs</p>
-                        <p class="text-zinc-500 text-[10px]">4-tier NFTs (Diamond/Gold/Silver/Bronze) that reduce staking burn rate.</p>
+                        <p class="text-white text-sm font-medium">${t('about.mod.rewardBooster')}</p>
+                        <p class="text-zinc-500 text-[10px]">${t('about.mod.rewardBoosterDesc')}</p>
                     </div>
                 </div>
                 <div class="ab-module-pill bg-pink-500/5 border border-pink-500/20" onclick="window.navigateTo&&window.navigateTo('store')">
                     <div class="w-8 h-8 rounded-lg bg-pink-500/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-store text-pink-400 text-sm"></i></div>
                     <div class="flex-1 min-w-0">
-                        <p class="text-white text-sm font-medium">NFT Pool</p>
-                        <p class="text-zinc-500 text-[10px]">Bonding curve marketplace. Buy low, sell high.</p>
+                        <p class="text-white text-sm font-medium">${t('about.modules.nftMarket')}</p>
+                        <p class="text-zinc-500 text-[10px]">${t('about.modules.nftMarketDesc')}</p>
                     </div>
                 </div>
                 <div class="ab-module-pill bg-violet-500/5 border border-violet-500/20" onclick="window.navigateTo&&window.navigateTo('store')">
                     <div class="w-8 h-8 rounded-lg bg-violet-500/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-wand-magic-sparkles text-violet-400 text-sm"></i></div>
                     <div class="flex-1 min-w-0">
-                        <p class="text-white text-sm font-medium">NFT Fusion</p>
-                        <p class="text-zinc-500 text-[10px]">Fuse 2 same-tier NFTs into 1 higher tier, or split down.</p>
+                        <p class="text-white text-sm font-medium">${t('about.mod.nftFusion')}</p>
+                        <p class="text-zinc-500 text-[10px]">${t('about.mod.nftFusionDesc')}</p>
                     </div>
                 </div>
                 <div class="ab-module-pill bg-teal-500/5 border border-teal-500/20" onclick="window.navigateTo&&window.navigateTo('rental')">
                     <div class="w-8 h-8 rounded-lg bg-teal-500/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-rocket text-teal-400 text-sm"></i></div>
                     <div class="flex-1 min-w-0">
-                        <p class="text-white text-sm font-medium">Rental Manager</p>
-                        <p class="text-zinc-500 text-[10px]">Rent NFT boosts from other users. AirBNFT marketplace.</p>
+                        <p class="text-white text-sm font-medium">${t('about.modules.rental')}</p>
+                        <p class="text-zinc-500 text-[10px]">${t('about.modules.rentalDesc')}</p>
                     </div>
                 </div>
             </div>
 
             <!-- Community & Services -->
-            <p class="text-zinc-500 text-[10px] uppercase font-bold mb-3 tracking-wider">Community & Services</p>
+            <p class="text-zinc-500 text-[10px] uppercase font-bold mb-3 tracking-wider">${t('about.communityServices')}</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-5">
                 <div class="ab-module-pill bg-green-500/5 border border-green-500/20" onclick="window.navigateTo&&window.navigateTo('fortune')">
                     <div class="w-8 h-8 rounded-lg bg-green-500/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-dice text-green-400 text-sm"></i></div>
                     <div class="flex-1 min-w-0">
-                        <p class="text-white text-sm font-medium">Fortune Pool</p>
-                        <p class="text-zinc-500 text-[10px]">3-tier commit-reveal game. Win up to 4.5x your entry.</p>
+                        <p class="text-white text-sm font-medium">${t('about.modules.fortune')}</p>
+                        <p class="text-zinc-500 text-[10px]">${t('about.modules.fortuneDesc')}</p>
                     </div>
                 </div>
                 <div class="ab-module-pill bg-cyan-500/5 border border-cyan-500/20" onclick="window.navigateTo&&window.navigateTo('agora')">
                     <div class="w-8 h-8 rounded-lg bg-cyan-500/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-landmark text-cyan-400 text-sm"></i></div>
                     <div class="flex-1 min-w-0">
-                        <p class="text-white text-sm font-medium">Agora</p>
-                        <p class="text-zinc-500 text-[10px]">Decentralized social protocol. Posts, likes, follows on-chain.</p>
+                        <p class="text-white text-sm font-medium">${t('about.modules.agora')}</p>
+                        <p class="text-zinc-500 text-[10px]">${t('about.modules.agoraDesc')}</p>
                     </div>
                 </div>
                 <div class="ab-module-pill bg-slate-500/5 border border-slate-500/20" onclick="window.navigateTo&&window.navigateTo('notary')">
                     <div class="w-8 h-8 rounded-lg bg-slate-500/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-stamp text-slate-400 text-sm"></i></div>
                     <div class="flex-1 min-w-0">
-                        <p class="text-white text-sm font-medium">Notary</p>
-                        <p class="text-zinc-500 text-[10px]">Certify documents on-chain. Immutable proof of existence.</p>
+                        <p class="text-white text-sm font-medium">${t('about.modules.notary')}</p>
+                        <p class="text-zinc-500 text-[10px]">${t('about.modules.notaryDesc')}</p>
                     </div>
                 </div>
                 <div class="ab-module-pill bg-red-500/5 border border-red-500/20" onclick="window.navigateTo&&window.navigateTo('charity')">
                     <div class="w-8 h-8 rounded-lg bg-red-500/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-hand-holding-heart text-red-400 text-sm"></i></div>
                     <div class="flex-1 min-w-0">
-                        <p class="text-white text-sm font-medium">Charity Pool</p>
-                        <p class="text-zinc-500 text-[10px]">Transparent fundraising. On-chain donation tracking.</p>
+                        <p class="text-white text-sm font-medium">${t('about.modules.charity')}</p>
+                        <p class="text-zinc-500 text-[10px]">${t('about.modules.charityDesc')}</p>
                     </div>
                 </div>
             </div>
 
             <!-- Infrastructure -->
-            <p class="text-zinc-500 text-[10px] uppercase font-bold mb-3 tracking-wider">Infrastructure & Governance</p>
+            <p class="text-zinc-500 text-[10px] uppercase font-bold mb-3 tracking-wider">${t('about.infraGovernance')}</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div class="ab-module-pill bg-amber-500/5 border border-amber-500/20">
                     <div class="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-brain text-amber-400 text-sm"></i></div>
                     <div class="flex-1 min-w-0">
-                        <p class="text-white text-sm font-medium">BackchainEcosystem</p>
-                        <p class="text-zinc-500 text-[10px]">Master hub — fees, operators, tutors, reward splits.</p>
+                        <p class="text-white text-sm font-medium">${t('about.mod.ecosystem')}</p>
+                        <p class="text-zinc-500 text-[10px]">${t('about.mod.ecosystemDesc')}</p>
                     </div>
                 </div>
                 <div class="ab-module-pill bg-indigo-500/5 border border-indigo-500/20">
                     <div class="w-8 h-8 rounded-lg bg-indigo-500/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-landmark-dome text-indigo-400 text-sm"></i></div>
                     <div class="flex-1 min-w-0">
-                        <p class="text-white text-sm font-medium">Governance</p>
-                        <p class="text-zinc-500 text-[10px]">Progressive decentralization: Admin → Multisig → Timelock → DAO.</p>
+                        <p class="text-white text-sm font-medium">${t('about.mod.governance')}</p>
+                        <p class="text-zinc-500 text-[10px]">${t('about.mod.governanceDesc')}</p>
                     </div>
                 </div>
                 <div class="ab-module-pill bg-sky-500/5 border border-sky-500/20">
                     <div class="w-8 h-8 rounded-lg bg-sky-500/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-faucet-drip text-sky-400 text-sm"></i></div>
                     <div class="flex-1 min-w-0">
-                        <p class="text-white text-sm font-medium">Testnet Faucet</p>
-                        <p class="text-zinc-500 text-[10px]">Free BKC for testing on opBNB testnet.</p>
+                        <p class="text-white text-sm font-medium">${t('about.mod.faucet')}</p>
+                        <p class="text-zinc-500 text-[10px]">${t('about.mod.faucetDesc')}</p>
                     </div>
                 </div>
                 <div class="ab-module-pill bg-zinc-500/5 border border-zinc-500/20">
                     <div class="w-8 h-8 rounded-lg bg-zinc-500/15 flex items-center justify-center shrink-0"><i class="fa-solid fa-file-code text-zinc-400 text-sm"></i></div>
                     <div class="flex-1 min-w-0">
-                        <p class="text-white text-sm font-medium">IBackchain</p>
-                        <p class="text-zinc-500 text-[10px]">Shared interfaces for all contract interactions.</p>
+                        <p class="text-white text-sm font-medium">${t('about.mod.ibackchain')}</p>
+                        <p class="text-zinc-500 text-[10px]">${t('about.mod.ibackchainDesc')}</p>
                     </div>
                 </div>
             </div>
@@ -500,50 +497,50 @@ function renderFeeSystemSection() {
                     <i class="fa-solid fa-arrows-split-up-and-left text-cyan-400"></i>
                 </div>
                 <div>
-                    <h2 class="text-white font-bold text-xl">The Fee System</h2>
-                    <p class="text-zinc-500 text-xs">How every action creates value for everyone</p>
+                    <h2 class="text-white font-bold text-xl">${t('tokenomics.feeFlow')}</h2>
+                    <p class="text-zinc-500 text-xs">${t('tokenomics.feeFlowDesc')}</p>
                 </div>
             </div>
 
             <p class="text-zinc-400 text-sm leading-relaxed mb-5">
-                Every protocol action generates a small BNB fee. The smart contract automatically splits this fee among multiple beneficiaries — creating aligned incentives for users, builders, referrers, and the protocol.
+                ${t('about.feeSystemText')}
             </p>
 
             <!-- Fee Flow -->
             <div class="ab-card bg-zinc-900/50 mb-5">
-                <p class="text-zinc-500 text-[10px] uppercase font-bold mb-4 tracking-wider">Where Your Fees Go</p>
+                <p class="text-zinc-500 text-[10px] uppercase font-bold mb-4 tracking-wider">${t('about.whereFeesGo')}</p>
                 <div class="flex items-center gap-3 mb-4">
                     <div class="w-10 h-10 rounded-xl bg-zinc-700/50 flex items-center justify-center shrink-0">
                         <i class="fa-solid fa-user text-zinc-300 text-sm"></i>
                     </div>
-                    <div class="flex-1 text-sm text-white font-medium">User pays fee (BNB)</div>
+                    <div class="flex-1 text-sm text-white font-medium">${t('about.userPaysFee')}</div>
                 </div>
                 <div class="ml-5 border-l-2 border-zinc-700 pl-4 py-1 text-[11px] text-zinc-500 mb-4">
-                    <i class="fa-solid fa-arrow-down mr-1"></i> BackchainEcosystem splits automatically
+                    <i class="fa-solid fa-arrow-down mr-1"></i> ${t('about.ecosystemSplits')}
                 </div>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-center">
                         <p class="text-amber-400 text-lg font-extrabold">10%</p>
-                        <p class="text-amber-400/80 text-[10px] font-bold uppercase">Tutor</p>
-                        <p class="text-zinc-500 text-[10px]">Who referred you</p>
+                        <p class="text-amber-400/80 text-[10px] font-bold uppercase">${t('about.feeTutor')}</p>
+                        <p class="text-zinc-500 text-[10px]">${t('about.feeTutorDesc')}</p>
                     </div>
                     <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-center">
                         <p class="text-emerald-400 text-lg font-extrabold">10-20%</p>
-                        <p class="text-emerald-400/80 text-[10px] font-bold uppercase">Operator</p>
-                        <p class="text-zinc-500 text-[10px]">App builder</p>
+                        <p class="text-emerald-400/80 text-[10px] font-bold uppercase">${t('about.feeOperator')}</p>
+                        <p class="text-zinc-500 text-[10px]">${t('about.feeOperatorDesc')}</p>
                     </div>
                     <div class="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 text-center">
                         <p class="text-orange-400 text-lg font-extrabold">30-50%</p>
-                        <p class="text-orange-400/80 text-[10px] font-bold uppercase">Buyback</p>
-                        <p class="text-zinc-500 text-[10px]">Buy + burn BKC</p>
+                        <p class="text-orange-400/80 text-[10px] font-bold uppercase">${t('about.feeBuyback')}</p>
+                        <p class="text-zinc-500 text-[10px]">${t('about.feeBuybackDesc')}</p>
                     </div>
                     <div class="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-center">
                         <p class="text-blue-400 text-lg font-extrabold">10-30%</p>
-                        <p class="text-blue-400/80 text-[10px] font-bold uppercase">Treasury</p>
-                        <p class="text-zinc-500 text-[10px]">Protocol growth</p>
+                        <p class="text-blue-400/80 text-[10px] font-bold uppercase">${t('about.feeTreasury')}</p>
+                        <p class="text-zinc-500 text-[10px]">${t('about.feeTreasuryDesc')}</p>
                     </div>
                 </div>
-                <p class="text-zinc-600 text-[10px] text-center mt-3">Exact split varies by module. All percentages are immutable on-chain.</p>
+                <p class="text-zinc-600 text-[10px] text-center mt-3">${t('about.feeDisclaimer')}</p>
             </div>
 
             <!-- Key Insight -->
@@ -551,9 +548,9 @@ function renderFeeSystemSection() {
                 <div class="flex items-start gap-3">
                     <i class="fa-solid fa-lightbulb text-amber-400 mt-0.5"></i>
                     <div>
-                        <p class="text-amber-400 font-bold text-sm">Everyone Wins</p>
+                        <p class="text-amber-400 font-bold text-sm">${t('about.everyoneWins')}</p>
                         <p class="text-zinc-400 text-xs leading-relaxed">
-                            No tutor? → 10% is burned instead. No operator? → Operator share is burned. Every scenario either rewards a participant or makes BKC more scarce. The system has no leaks.
+                            ${t('about.everyoneWinsDesc')}
                         </p>
                     </div>
                 </div>
@@ -572,19 +569,18 @@ function renderMiningSection() {
                     <i class="fa-solid fa-hammer text-emerald-400"></i>
                 </div>
                 <div>
-                    <h2 class="text-white font-bold text-xl">Mining by Purchase</h2>
-                    <p class="text-zinc-500 text-xs">Proof-of-Purchase: Using = Mining</p>
+                    <h2 class="text-white font-bold text-xl">${t('about.miningTitle')}</h2>
+                    <p class="text-zinc-500 text-xs">${t('about.miningSub')}</p>
                 </div>
             </div>
 
             <p class="text-zinc-400 text-sm leading-relaxed mb-5">
-                In Backchain, <strong class="text-white">using the platform IS mining</strong>. When you buy an NFT Booster,
-                the BuybackMiner converts the BNB spent into newly minted BKC tokens via a scarcity curve — the more that's been mined, the harder it gets, just like Bitcoin.
+                ${t('about.miningText')}
             </p>
 
             <!-- Mining Flow -->
             <div class="ab-card mb-5">
-                <p class="text-zinc-500 text-[10px] uppercase font-bold mb-4 tracking-wider">How Mining Works</p>
+                <p class="text-zinc-500 text-[10px] uppercase font-bold mb-4 tracking-wider">${t('about.howMiningWorks')}</p>
 
                 <div class="space-y-4">
                     <div class="flex items-start gap-4">
@@ -592,8 +588,8 @@ function renderMiningSection() {
                             <span class="text-blue-400 font-bold">1</span>
                         </div>
                         <div class="flex-1">
-                            <p class="text-white font-medium text-sm">You Buy an NFT Booster</p>
-                            <p class="text-zinc-500 text-xs">From the bonding curve pool (Diamond, Gold, Silver, Bronze)</p>
+                            <p class="text-white font-medium text-sm">${t('about.miningStep1')}</p>
+                            <p class="text-zinc-500 text-xs">${t('about.miningStep1Desc')}</p>
                         </div>
                     </div>
 
@@ -604,8 +600,8 @@ function renderMiningSection() {
                             <span class="text-emerald-400 font-bold">2</span>
                         </div>
                         <div class="flex-1">
-                            <p class="text-white font-medium text-sm">BuybackMiner Converts BNB → BKC</p>
-                            <p class="text-zinc-500 text-xs">Scarcity curve: earlier miners get more BKC per BNB</p>
+                            <p class="text-white font-medium text-sm">${t('about.miningStep2')}</p>
+                            <p class="text-zinc-500 text-xs">${t('about.miningStep2Desc')}</p>
                         </div>
                     </div>
 
@@ -616,8 +612,8 @@ function renderMiningSection() {
                             <span class="text-purple-400 font-bold">3</span>
                         </div>
                         <div class="flex-1">
-                            <p class="text-white font-medium text-sm">Rewards Distributed</p>
-                            <p class="text-zinc-500 text-xs">70% to stakers (proportional to pStake), 30% to treasury</p>
+                            <p class="text-white font-medium text-sm">${t('about.miningStep3')}</p>
+                            <p class="text-zinc-500 text-xs">${t('about.miningStep3Desc')}</p>
                         </div>
                     </div>
                 </div>
@@ -627,13 +623,13 @@ function renderMiningSection() {
             <div class="grid grid-cols-2 gap-3">
                 <div class="ab-card text-center bg-gradient-to-br from-purple-500/10 to-violet-500/10 border-purple-500/30 p-4">
                     <div class="text-3xl font-black text-purple-400 mb-1">70%</div>
-                    <p class="text-white font-bold text-sm">Staker Rewards</p>
-                    <p class="text-zinc-500 text-[10px]">Distributed based on pStake weight</p>
+                    <p class="text-white font-bold text-sm">${t('about.stakerRewards')}</p>
+                    <p class="text-zinc-500 text-[10px]">${t('about.stakerRewardsDesc')}</p>
                 </div>
                 <div class="ab-card text-center bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border-blue-500/30 p-4">
                     <div class="text-3xl font-black text-blue-400 mb-1">30%</div>
-                    <p class="text-white font-bold text-sm">Treasury</p>
-                    <p class="text-zinc-500 text-[10px]">Funds ecosystem development</p>
+                    <p class="text-white font-bold text-sm">${t('tokenomics.treasury')}</p>
+                    <p class="text-zinc-500 text-[10px]">${t('about.treasuryDesc')}</p>
                 </div>
             </div>
         </div>
@@ -648,8 +644,8 @@ function renderGrowthPrograms() {
                     <i class="fa-solid fa-rocket text-violet-400"></i>
                 </div>
                 <div>
-                    <h2 class="text-white font-bold text-xl">Growth Programs</h2>
-                    <p class="text-zinc-500 text-xs">Two systems to grow the ecosystem</p>
+                    <h2 class="text-white font-bold text-xl">${t('about.growthTitle')}</h2>
+                    <p class="text-zinc-500 text-xs">${t('about.growthSub')}</p>
                 </div>
             </div>
 
@@ -661,12 +657,12 @@ function renderGrowthPrograms() {
                             <i class="fa-solid fa-graduation-cap text-amber-400 text-sm"></i>
                         </div>
                         <div>
-                            <p class="text-white font-bold text-sm">Tutor System</p>
-                            <p class="text-zinc-500 text-[10px]">Tutor new users, earn forever</p>
+                            <p class="text-white font-bold text-sm">${t('about.tutorSystem')}</p>
+                            <p class="text-zinc-500 text-[10px]">${t('about.tutorSystemSub')}</p>
                         </div>
                     </div>
                     <p class="text-zinc-400 text-xs leading-relaxed mb-3">
-                        Share your tutor link. When someone joins through it, they become your Tutter and you earn <strong class="text-white">10% of their BNB fees</strong> + <strong class="text-white">5% of their BKC claims</strong> — forever.
+                        ${t('about.tutorDesc')}
                     </p>
                     <div class="flex items-center gap-2">
                         <span class="ab-badge bg-amber-500/20 text-amber-400"><i class="fa-solid fa-percentage mr-1"></i>10% BNB</span>
@@ -674,7 +670,7 @@ function renderGrowthPrograms() {
                         <span class="ab-badge bg-zinc-700/50 text-zinc-400"><i class="fa-solid fa-infinity mr-1"></i>Forever</span>
                     </div>
                     <button onclick="window.navigateTo&&window.navigateTo('referral')" class="w-full mt-3 text-center text-xs text-amber-400 hover:text-amber-300 font-medium py-2 bg-amber-500/10 rounded-lg transition-colors">
-                        Learn More <i class="fa-solid fa-arrow-right ml-1"></i>
+                        ${t('about.learnMore')} <i class="fa-solid fa-arrow-right ml-1"></i>
                     </button>
                 </div>
 
@@ -685,19 +681,19 @@ function renderGrowthPrograms() {
                             <i class="fa-solid fa-code text-emerald-400 text-sm"></i>
                         </div>
                         <div>
-                            <p class="text-white font-bold text-sm">Operator System</p>
-                            <p class="text-zinc-500 text-[10px]">Build an app, earn commissions</p>
+                            <p class="text-white font-bold text-sm">${t('about.operatorSystem')}</p>
+                            <p class="text-zinc-500 text-[10px]">${t('about.operatorSystemSub')}</p>
                         </div>
                     </div>
                     <p class="text-zinc-400 text-xs leading-relaxed mb-3">
-                        Build your own frontend, bot, or integration. Set your wallet as the <strong class="text-white">operator</strong> and earn <strong class="text-white">10-20% of every fee</strong> generated through your app. No registration needed.
+                        ${t('about.operatorDesc')}
                     </p>
                     <div class="flex items-center gap-2">
                         <span class="ab-badge bg-emerald-500/20 text-emerald-400"><i class="fa-solid fa-percentage mr-1"></i>10-20%</span>
                         <span class="ab-badge bg-zinc-700/50 text-zinc-400"><i class="fa-solid fa-lock-open mr-1"></i>Permissionless</span>
                     </div>
                     <button onclick="window.navigateTo&&window.navigateTo('operator')" class="w-full mt-3 text-center text-xs text-emerald-400 hover:text-emerald-300 font-medium py-2 bg-emerald-500/10 rounded-lg transition-colors">
-                        Learn More <i class="fa-solid fa-arrow-right ml-1"></i>
+                        ${t('about.learnMore')} <i class="fa-solid fa-arrow-right ml-1"></i>
                     </button>
                 </div>
             </div>
@@ -713,8 +709,8 @@ function renderWhyBackcoinSection() {
                     <i class="fa-solid fa-star text-amber-400"></i>
                 </div>
                 <div>
-                    <h2 class="text-white font-bold text-xl">Why Backchain?</h2>
-                    <p class="text-zinc-500 text-xs">What makes this different</p>
+                    <h2 class="text-white font-bold text-xl">${t('about.keyFeatures.title')}</h2>
+                    <p class="text-zinc-500 text-xs">${t('about.heroSubtitle')}</p>
                 </div>
             </div>
 
@@ -724,8 +720,8 @@ function renderWhyBackcoinSection() {
                         <i class="fa-solid fa-users-slash text-amber-400"></i>
                     </div>
                     <div>
-                        <h3 class="text-white font-bold text-sm mb-1">No VCs, No Pre-mine, No Insiders</h3>
-                        <p class="text-zinc-500 text-xs leading-relaxed">35% of TGE (14M BKC) goes directly to the community via airdrop. 65% goes to the liquidity pool. No investors dumping tokens on you. The team earns the same way you do — by using the protocol.</p>
+                        <h3 class="text-white font-bold text-sm mb-1">${t('about.noVCs')}</h3>
+                        <p class="text-zinc-500 text-xs leading-relaxed">${t('about.noVCsDesc')}</p>
                     </div>
                 </div>
                 <div class="ab-card flex gap-4 items-start">
@@ -733,8 +729,8 @@ function renderWhyBackcoinSection() {
                         <i class="fa-solid fa-bolt text-emerald-400"></i>
                     </div>
                     <div>
-                        <h3 class="text-white font-bold text-sm mb-1">Real Utility, Not Vapor</h3>
-                        <p class="text-zinc-500 text-xs leading-relaxed">Notarize legal documents. Play verifiably fair games. Trade NFTs on bonding curves. Rent boost power. Post on a censorship-resistant social network. Donate to transparent charities. These aren't promises — they're live contracts on opBNB.</p>
+                        <h3 class="text-white font-bold text-sm mb-1">${t('about.keyFeatures.realYield')}</h3>
+                        <p class="text-zinc-500 text-xs leading-relaxed">${t('about.realUtilityDesc')}</p>
                     </div>
                 </div>
                 <div class="ab-card flex gap-4 items-start">
@@ -742,8 +738,8 @@ function renderWhyBackcoinSection() {
                         <i class="fa-solid fa-chart-line text-purple-400"></i>
                     </div>
                     <div>
-                        <h3 class="text-white font-bold text-sm mb-1">Sustainable Yield, Not Inflation</h3>
-                        <p class="text-zinc-500 text-xs leading-relaxed">Staking rewards come from real protocol fees (BNB) and mining activity — not from printing tokens. The more the ecosystem is used, the higher the real yield. No ponzinomics.</p>
+                        <h3 class="text-white font-bold text-sm mb-1">${t('about.sustainableYield')}</h3>
+                        <p class="text-zinc-500 text-xs leading-relaxed">${t('about.sustainableYieldDesc')}</p>
                     </div>
                 </div>
                 <div class="ab-card flex gap-4 items-start">
@@ -751,8 +747,8 @@ function renderWhyBackcoinSection() {
                         <i class="fa-solid fa-scale-balanced text-blue-400"></i>
                     </div>
                     <div>
-                        <h3 class="text-white font-bold text-sm mb-1">Aligned Incentives at Every Level</h3>
-                        <p class="text-zinc-500 text-xs leading-relaxed">Users earn by staking. Tutors earn by inviting. Operators earn by building. The protocol earns by growing. No participant is extracting value from another — everyone benefits from usage growth.</p>
+                        <h3 class="text-white font-bold text-sm mb-1">${t('about.alignedIncentives')}</h3>
+                        <p class="text-zinc-500 text-xs leading-relaxed">${t('about.alignedIncentivesDesc')}</p>
                     </div>
                 </div>
             </div>
@@ -768,8 +764,8 @@ function renderTechStackSection() {
                     <i class="fa-solid fa-microchip text-blue-400"></i>
                 </div>
                 <div>
-                    <h2 class="text-white font-bold text-xl">Technology Stack</h2>
-                    <p class="text-zinc-500 text-xs">Built on battle-tested infrastructure</p>
+                    <h2 class="text-white font-bold text-xl">${t('about.techStack')}</h2>
+                    <p class="text-zinc-500 text-xs">${t('about.techStackSub')}</p>
                 </div>
             </div>
 
@@ -824,23 +820,23 @@ function renderCTASection() {
         <div class="ab-section ab-fade-up text-center bg-gradient-to-b from-amber-500/5 to-transparent" style="animation-delay: 0.45s">
             <img src="./assets/bkc_logo_3d.png" class="w-16 h-16 mx-auto mb-4 opacity-80" alt="BKC">
 
-            <h2 class="text-2xl font-bold text-white mb-2">Ready to Join?</h2>
+            <h2 class="text-2xl font-bold text-white mb-2">${t('tokenomics.footer')}</h2>
             <p class="text-zinc-400 text-sm mb-6 max-w-md mx-auto">
-                Start earning airdrop points today. Stake, trade, play, or build — every action counts.
+                ${t('about.ctaDesc')}
             </p>
 
             <div class="flex flex-col sm:flex-row gap-3 justify-center mb-4">
                 <button onclick="window.navigateTo && window.navigateTo('airdrop')"
                     class="px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl hover:scale-105 transition-transform">
-                    <i class="fa-solid fa-parachute-box mr-2"></i>Join Airdrop
+                    <i class="fa-solid fa-parachute-box mr-2"></i>${t('nav.airdrop')}
                 </button>
                 <button onclick="window.navigateTo && window.navigateTo('staking')"
                     class="px-6 py-3 bg-zinc-800 text-white font-bold rounded-xl border border-zinc-700 hover:border-amber-500/50 transition-colors">
-                    <i class="fa-solid fa-layer-group mr-2"></i>Start Staking
+                    <i class="fa-solid fa-layer-group mr-2"></i>${t('tokenomics.startStaking')}
                 </button>
                 <button id="openWhitepaperBtn"
                     class="px-6 py-3 bg-zinc-800 text-white font-bold rounded-xl border border-zinc-700 hover:border-cyan-500/50 transition-colors">
-                    <i class="fa-solid fa-file-lines mr-2"></i>Whitepaper
+                    <i class="fa-solid fa-file-lines mr-2"></i>${t('about.whitepaper')}
                 </button>
             </div>
 
@@ -858,7 +854,7 @@ function renderWhitepaperModal() {
         <div id="whitepaperModal" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 hidden opacity-0 transition-opacity duration-300">
             <div class="ab-card bg-zinc-900 border-zinc-700 w-full max-w-md transform scale-95 transition-transform duration-300">
                 <div class="flex items-center justify-between mb-6">
-                    <h3 class="text-xl font-bold text-white">Documentation</h3>
+                    <h3 class="text-xl font-bold text-white">${t('about.links.docs')}</h3>
                     <button id="closeWhitepaperBtn" class="text-zinc-500 hover:text-white transition-colors">
                         <i class="fa-solid fa-xmark text-xl"></i>
                     </button>
@@ -871,8 +867,8 @@ function renderWhitepaperModal() {
                             <i class="fa-solid fa-coins text-amber-400"></i>
                         </div>
                         <div class="flex-1">
-                            <p class="text-white font-bold text-sm group-hover:text-amber-400 transition-colors">Tokenomics Paper V3</p>
-                            <p class="text-zinc-500 text-xs">Distribution, Mining & Scarcity Engines</p>
+                            <p class="text-white font-bold text-sm group-hover:text-amber-400 transition-colors">${t('about.tokenomicsPaper')}</p>
+                            <p class="text-zinc-500 text-xs">${t('about.tokenomicsPaperDesc')}</p>
                         </div>
                         <i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-white"></i>
                     </a>
@@ -883,8 +879,8 @@ function renderWhitepaperModal() {
                             <i class="fa-solid fa-network-wired text-cyan-400"></i>
                         </div>
                         <div class="flex-1">
-                            <p class="text-white font-bold text-sm group-hover:text-cyan-400 transition-colors">Technical Whitepaper V2</p>
-                            <p class="text-zinc-500 text-xs">Architecture, Contracts & Fee System</p>
+                            <p class="text-white font-bold text-sm group-hover:text-cyan-400 transition-colors">${t('about.technicalPaper')}</p>
+                            <p class="text-zinc-500 text-xs">${t('about.technicalPaperDesc')}</p>
                         </div>
                         <i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-white"></i>
                     </a>
@@ -947,7 +943,7 @@ export function render() {
 
             <!-- Footer -->
             <div class="text-center py-6 text-zinc-600 text-xs">
-                <p>Built by the community, for the community.</p>
+                <p>${t('about.footer')}</p>
                 <p class="mt-1">BACKCHAIN &copy; 2024-2026</p>
             </div>
         </div>

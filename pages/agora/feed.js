@@ -5,7 +5,7 @@
 import { State } from '../../state.js';
 import { BC, TAGS, LANGUAGES } from './state.js';
 import { renderPost } from './post-card.js';
-import { resolveContentUrl } from '../../modules/core/index.js';
+import { resolveContentUrl, t } from '../../modules/core/index.js';
 import { getProfileName, renderAvatar, formatETH, formatTimeAgo, escapeHtml } from './utils.js';
 
 const FEED_PAGE_SIZE = 20;
@@ -17,7 +17,7 @@ const FEED_PAGE_SIZE = 20;
 export function renderTagBar() {
     const allActive = BC.selectedTag === -1 ? 'active' : '';
     let html = `<div class="bc-tag-bar">
-        <button class="bc-tag-pill ${allActive}" onclick="AgoraPage.filterTag(-1)"><i class="fa-solid fa-layer-group"></i> All</button>`;
+        <button class="bc-tag-pill ${allActive}" onclick="AgoraPage.filterTag(-1)"><i class="fa-solid fa-layer-group"></i> ${t('agora.tags.all')}</button>`;
     for (const tag of TAGS) {
         const active = BC.selectedTag === tag.id ? 'active' : '';
         html += `<button class="bc-tag-pill ${active}" onclick="AgoraPage.filterTag(${tag.id})" style="${active ? '' : `color:${tag.color}`}"><i class="fa-solid ${tag.icon}"></i> ${tag.name}</button>`;
@@ -38,7 +38,7 @@ export function renderLanguageBar() {
 
     const allActive = !BC.selectedLanguage ? 'active' : '';
     let html = `<div class="bc-tag-bar" style="margin-bottom:4px;">
-        <button class="bc-tag-pill ${allActive}" onclick="AgoraPage.filterLanguage(null)"><i class="fa-solid fa-globe"></i> All</button>`;
+        <button class="bc-tag-pill ${allActive}" onclick="AgoraPage.filterLanguage(null)"><i class="fa-solid fa-globe"></i> ${t('agora.tags.all')}</button>`;
     for (const lang of activeLangs) {
         const active = BC.selectedLanguage === lang.code ? 'active' : '';
         html += `<button class="bc-tag-pill ${active}" onclick="AgoraPage.filterLanguage('${lang.code}')">${lang.flag} ${lang.name} <span style="opacity:0.6;font-size:11px;">${langCounts[lang.code]}</span></button>`;
@@ -59,10 +59,10 @@ export function renderLiveStreamBar() {
                 <div class="bc-live-indicator">
                     <span class="bc-live-dot"></span>
                     <span class="bc-live-label">LIVE</span>
-                    <span class="bc-live-viewers" data-live-viewers>${BC.liveViewerCount} viewer${BC.liveViewerCount !== 1 ? 's' : ''}</span>
+                    <span class="bc-live-viewers" data-live-viewers>${t('agora.viewers', {count: String(BC.liveViewerCount)})}</span>
                 </div>
                 <button class="bc-btn bc-btn-outline" style="border-color:#ef4444;color:#ef4444;padding:6px 14px;font-size:12px;" onclick="AgoraPage.endLive()">
-                    <i class="fa-solid fa-stop"></i> End Stream
+                    <i class="fa-solid fa-stop"></i> ${t('agora.endStream')}
                 </button>
             </div>
             <video id="bc-local-video" class="bc-live-video" autoplay muted playsinline></video>
@@ -80,7 +80,7 @@ export function renderLiveViewer() {
                     <span class="bc-live-label">LIVE</span>
                 </div>
                 <button class="bc-btn bc-btn-outline" onclick="AgoraPage.leaveLive()">
-                    <i class="fa-solid fa-xmark"></i> Leave
+                    <i class="fa-solid fa-xmark"></i> ${t('agora.leave')}
                 </button>
             </div>
         </div>`;
@@ -123,9 +123,9 @@ export function renderFeed() {
     if (!BC.contractAvailable) {
         return `<div class="bc-empty">
             <div class="bc-empty-glyph accent"><i class="fa-solid fa-rocket"></i></div>
-            <div class="bc-empty-title">Coming Soon!</div>
-            <div class="bc-empty-text">${BC.error || 'Agora is being deployed. The unstoppable social network will be live soon!'}</div>
-            <button class="bc-btn bc-btn-outline" style="margin-top:24px;" onclick="AgoraPage.refresh()"><i class="fa-solid fa-arrows-rotate"></i> Retry</button>
+            <div class="bc-empty-title">${t('agora.comingSoon')}</div>
+            <div class="bc-empty-text">${BC.error || t('agora.comingSoonDesc')}</div>
+            <button class="bc-btn bc-btn-outline" style="margin-top:24px;" onclick="AgoraPage.refresh()"><i class="fa-solid fa-arrows-rotate"></i> ${t('common.retry')}</button>
         </div>`;
     }
     if (BC.isLoading) return renderSkeleton();
@@ -157,35 +157,35 @@ export function renderFeed() {
         if (BC.selectedTag >= 0) {
             return `<div class="bc-empty">
                 <div class="bc-empty-glyph"><i class="fa-regular fa-comment-dots"></i></div>
-                <div class="bc-empty-title">No ${tagName} posts</div>
-                <div class="bc-empty-text">Try a different tag or be the first to post!</div>
+                <div class="bc-empty-title">${t('agora.noTagPosts', {tag: tagName})}</div>
+                <div class="bc-empty-text">${t('agora.noTagPostsSubtext')}</div>
             </div>`;
         }
         if (State.isConnected && !BC.hasProfile) {
             return `<div class="bc-empty">
                 <div class="bc-empty-glyph accent"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
-                <div class="bc-empty-title">Welcome to Agora</div>
+                <div class="bc-empty-title">${t('agora.welcomeTitle')}</div>
                 <div style="display:flex;flex-direction:column;gap:12px;margin:16px 0;text-align:left;max-width:280px;">
                     <div style="display:flex;align-items:center;gap:10px;font-size:14px;color:var(--bc-text-2);">
                         <span style="width:24px;height:24px;border-radius:50%;background:var(--bc-accent);color:#000;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;flex-shrink:0;">1</span>
-                        Create your profile
+                        ${t('agora.welcomeStep1')}
                     </div>
                     <div style="display:flex;align-items:center;gap:10px;font-size:14px;color:var(--bc-text-2);">
                         <span style="width:24px;height:24px;border-radius:50%;background:var(--bc-bg3);color:var(--bc-text-3);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;flex-shrink:0;">2</span>
-                        Post your first thought
+                        ${t('agora.welcomeStep2')}
                     </div>
                     <div style="display:flex;align-items:center;gap:10px;font-size:14px;color:var(--bc-text-2);">
                         <span style="width:24px;height:24px;border-radius:50%;background:var(--bc-bg3);color:var(--bc-text-3);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;flex-shrink:0;">3</span>
-                        Earn Super Likes
+                        ${t('agora.welcomeStep3')}
                     </div>
                 </div>
-                <button class="bc-btn bc-btn-primary" style="margin-top:8px;" onclick="AgoraPage.openProfileSetup()"><i class="fa-solid fa-user-plus"></i> Get Started</button>
+                <button class="bc-btn bc-btn-primary" style="margin-top:8px;" onclick="AgoraPage.openProfileSetup()"><i class="fa-solid fa-user-plus"></i> ${t('agora.createProfile')}</button>
             </div>`;
         }
         return `<div class="bc-empty">
             <div class="bc-empty-glyph"><i class="fa-regular fa-comment-dots"></i></div>
-            <div class="bc-empty-title">No posts yet</div>
-            <div class="bc-empty-text">Be the first to post on the unstoppable social network!</div>
+            <div class="bc-empty-title">${t('agora.feedEmpty')}</div>
+            <div class="bc-empty-text">${t('agora.feedEmptySubtext')}</div>
         </div>`;
     }
 
@@ -299,7 +299,7 @@ function _renderTikTokCard(post, i) {
                             <strong>${authorName}</strong>
                             <span class="bc-tiktok-time">${formatTimeAgo(post.timestamp)}</span>
                         </div>
-                        ${fullText ? `<div class="bc-tiktok-caption" data-caption-id="${post.id}" onclick="event.stopPropagation(); AgoraPage.toggleCaption('${post.id}')">${fullText}${isLong ? '<span class="bc-tiktok-more"> more</span>' : ''}</div>` : ''}
+                        ${fullText ? `<div class="bc-tiktok-caption" data-caption-id="${post.id}" onclick="event.stopPropagation(); AgoraPage.toggleCaption('${post.id}')">${fullText}${isLong ? `<span class="bc-tiktok-more"> ${t('agora.more')}</span>` : ''}</div>` : ''}
                     </div>
                     ${actionsSidebar}
                 </div>
@@ -321,13 +321,13 @@ export function renderDiscover() {
     if (BC.trendingPosts.length === 0) {
         return `
             <div class="bc-discover-header">
-                <h2><i class="fa-solid fa-fire"></i> Discover ${modeToggle}</h2>
-                <p>Ranked by engagement — likes, replies, reposts & Super Likes</p>
+                <h2><i class="fa-solid fa-fire"></i> ${t('agora.discover')} ${modeToggle}</h2>
+                <p>${t('agora.discoverRankedBy')}</p>
             </div>
             <div class="bc-empty">
                 <div class="bc-empty-glyph accent"><i class="fa-solid fa-fire"></i></div>
-                <div class="bc-empty-title">No posts yet</div>
-                <div class="bc-empty-text">Be the first to post! Posts are ranked by engagement — likes, replies, and Super Likes boost visibility.</div>
+                <div class="bc-empty-title">${t('agora.discoverEmpty')}</div>
+                <div class="bc-empty-text">${t('agora.discoverSubtext')}</div>
             </div>`;
     }
 
@@ -340,8 +340,8 @@ export function renderDiscover() {
 
     return `
         <div class="bc-discover-header">
-            <h2><i class="fa-solid fa-fire"></i> Discover ${modeToggle}</h2>
-            <p>Ranked by engagement — likes, replies, reposts & Super Likes</p>
+            <h2><i class="fa-solid fa-fire"></i> ${t('agora.discover')} ${modeToggle}</h2>
+            <p>${t('agora.discoverRankedBy')}</p>
         </div>
         ${BC.trendingPosts.map((post, i) => renderPost(post, i, { trendingRank: i + 1 })).join('')}`;
 }
