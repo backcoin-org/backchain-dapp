@@ -95,12 +95,14 @@ export const ValidationLayer = {
      * @throws {Error} If wallet not connected
      */
     async validateWalletConnected(address = null) {
-        if (!window.ethereum) {
+        // Embedded/social wallets (Google, email) don't inject window.ethereum
+        // Accept State-based connection as valid
+        if (!window.ethereum && !State.isConnected) {
             throw ErrorHandler.create(ErrorTypes.WALLET_NOT_CONNECTED);
         }
 
         const connectedAddress = address || await NetworkManager.getConnectedAddress();
-        
+
         if (!connectedAddress) {
             throw ErrorHandler.create(ErrorTypes.WALLET_NOT_CONNECTED);
         }

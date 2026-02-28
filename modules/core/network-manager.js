@@ -682,7 +682,10 @@ export const NetworkManager = {
             throw new Error('ethers.js not loaded');
         }
 
+        // Embedded/social wallets (Google, email) don't inject window.ethereum
+        // Fall back to State.provider set by wallet.js
         if (!window.ethereum) {
+            if (State.provider) return State.provider;
             throw ErrorHandler.create(ErrorTypes.WALLET_NOT_CONNECTED);
         }
 
@@ -694,9 +697,14 @@ export const NetworkManager = {
      * @returns {Promise<ethers.Signer>} Signer instance
      */
     async getSigner() {
+        // Embedded/social wallets: use signer already set up by wallet.js
+        if (!window.ethereum && State.signer) {
+            return State.signer;
+        }
+
         const ethers = window.ethers;
         const provider = this.getBrowserProvider();
-        
+
         try {
             // Get signer - ethers v6 may try ENS resolution which fails on testnets
             const signer = await provider.getSigner();
@@ -714,7 +722,10 @@ export const NetworkManager = {
                     console.warn('Signer fallback failed:', fallbackError);
                 }
             }
-            
+
+            // Fallback to State.signer if available
+            if (State.signer) return State.signer;
+
             // Not connected
             if (error.code === 4001 || error.message?.includes('user rejected')) {
                 throw ErrorHandler.create(ErrorTypes.USER_REJECTED);
@@ -749,7 +760,9 @@ export const NetworkManager = {
      * @returns {Promise<string>} Connected address
      */
     async requestConnection() {
+        // Embedded/social wallets: already connected via Web3Modal
         if (!window.ethereum) {
+            if (State.userAddress) return State.userAddress;
             throw ErrorHandler.create(ErrorTypes.WALLET_NOT_CONNECTED);
         }
 
@@ -757,7 +770,7 @@ export const NetworkManager = {
             const accounts = await window.ethereum.request({
                 method: 'eth_requestAccounts'
             });
-            
+
             if (!accounts || accounts.length === 0) {
                 throw ErrorHandler.create(ErrorTypes.WALLET_NOT_CONNECTED);
             }
