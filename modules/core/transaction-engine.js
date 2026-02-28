@@ -599,15 +599,27 @@ export class TransactionEngine {
             // Poll for receipt using Alchemy
             for (let i = 0; i < 30; i++) { // Max 30 attempts (45 seconds)
                 await new Promise(r => setTimeout(r, 1500));
-                receipt = await readProvider.getTransactionReceipt(tx.hash);
+                try {
+                    receipt = await readProvider.getTransactionReceipt(tx.hash);
+                } catch (pollErr) {
+                    // ERC-4337: ethers.js v6 yParity parse error — use raw RPC
+                    if (pollErr.message?.includes('yParity')) {
+                        try {
+                            const raw = await readProvider.send('eth_getTransactionReceipt', [tx.hash]);
+                            if (raw) {
+                                receipt = { hash: tx.hash, status: parseInt(raw.status, 16), blockNumber: parseInt(raw.blockNumber, 16) };
+                            }
+                        } catch {}
+                    }
+                }
                 if (receipt) break;
             }
-            
+
             if (!receipt) {
                 // Fallback: try standard wait
                 receipt = await tx.wait();
             }
-            
+
             if (receipt.status === 0) {
                 throw new Error('Approval transaction reverted');
             }
@@ -710,8 +722,37 @@ export class TransactionEngine {
                     throw new Error('Transaction reverted on-chain');
                 }
             } catch (pollError) {
-                // Ignore individual poll errors, keep trying
                 if (pollError.message === 'Transaction reverted on-chain') throw pollError;
+
+                // ERC-4337 embedded wallets: ethers.js v6 fails to parse bundler
+                // transaction signatures (yParity mismatch). Fall back to raw RPC.
+                if (pollError.message?.includes('yParity')) {
+                    console.warn('[TX] yParity parse error, using raw RPC fallback');
+                    try {
+                        const rawReceipt = await readProvider.send(
+                            'eth_getTransactionReceipt', [tx.hash]
+                        );
+                        if (rawReceipt) {
+                            const status = parseInt(rawReceipt.status, 16);
+                            if (status === 1) {
+                                console.log('[TX] Confirmed via raw RPC (ERC-4337)');
+                                return {
+                                    hash: tx.hash,
+                                    status: 1,
+                                    blockNumber: parseInt(rawReceipt.blockNumber, 16),
+                                    gasUsed: rawReceipt.gasUsed ? BigInt(rawReceipt.gasUsed) : 0n
+                                };
+                            }
+                            if (status === 0) {
+                                throw new Error('Transaction reverted on-chain');
+                            }
+                        }
+                    } catch (rawError) {
+                        if (rawError.message === 'Transaction reverted on-chain') throw rawError;
+                        console.warn('[TX] Raw RPC fallback also failed:', rawError.message);
+                    }
+                }
+                // Ignore other individual poll errors, keep trying
             }
         }
 
