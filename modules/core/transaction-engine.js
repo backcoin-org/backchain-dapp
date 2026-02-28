@@ -450,10 +450,25 @@ export class TransactionEngine {
             // Re-resolve args for execution (values may have been updated)
             const executionArgs = this._resolveArgs(args);
 
-            const tx = await this._executeWithRetry(
-                () => contract[method](...executionArgs, finalTxOptions),
-                { maxRetries, ui, signer, name }
-            );
+            let tx;
+            try {
+                tx = await this._executeWithRetry(
+                    () => contract[method](...executionArgs, finalTxOptions),
+                    { maxRetries, ui, signer, name }
+                );
+            } catch (sendError) {
+                // ERC-4337 embedded wallets: ethers.js v6 broadcasts the tx successfully
+                // but fails parsing the bundler's response due to yParity mismatch.
+                // The tx hash is embedded in the error — extract it and continue.
+                if (sendError.code === 'INVALID_ARGUMENT'
+                    && sendError.message?.includes('yParity')
+                    && sendError.value?.hash) {
+                    console.warn('[TX] yParity parse error after broadcast, extracting hash');
+                    tx = { hash: sendError.value.hash };
+                } else {
+                    throw sendError;
+                }
+            }
 
             console.log(`[TX] Transaction submitted: ${tx.hash}`);
 
@@ -590,7 +605,20 @@ export class TransactionEngine {
             } catch {}
 
             // Send approval transaction (uses MetaMask to sign, gas pre-set to avoid MetaMask RPC)
-            const tx = await tokenContract.approve(spender, approveAmount, approvalTxOptions);
+            let tx;
+            try {
+                tx = await tokenContract.approve(spender, approveAmount, approvalTxOptions);
+            } catch (approveErr) {
+                // ERC-4337: yParity parse error after successful broadcast
+                if (approveErr.code === 'INVALID_ARGUMENT'
+                    && approveErr.message?.includes('yParity')
+                    && approveErr.value?.hash) {
+                    console.warn('[TX] yParity error on approval, extracting hash');
+                    tx = { hash: approveErr.value.hash };
+                } else {
+                    throw approveErr;
+                }
+            }
             
             // Wait for confirmation using Alchemy provider instead of MetaMask
             const readProvider = NetworkManager.getProvider();
