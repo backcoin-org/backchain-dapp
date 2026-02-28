@@ -17,6 +17,7 @@
 import { NetworkManager, NETWORK_CONFIG } from './network-manager.js';
 import { ErrorHandler, ErrorTypes } from './error-handler.js';
 import { CacheManager, CacheTTL, CacheKeys } from './cache-manager.js';
+import { State } from '../../state.js';
 
 // ============================================================================
 // 1. CONFIGURATION
