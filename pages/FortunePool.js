@@ -1198,10 +1198,11 @@ async function commitGame() {
             onError: (error) => {
                 if (!error.cancelled) {
                     const msg = error.message || '';
-                    const errData = error.original?.data || error.data || msg;
-                    // 0xbfec5558 = PlayerHasActiveGame — try to recover pending game
-                    if (String(errData).includes('0xbfec5558') || msg.includes('active game')) {
-                        showToast('You have a pending game. Attempting to recover...', 'warning');
+                    const origMsg = error.original?.message || '';
+                    // Detect AlreadyCommitted: from validate check or contract revert
+                    if (origMsg.includes('AlreadyCommitted') || msg.includes('AlreadyCommitted')
+                        || msg.includes('0xbfec5558') || origMsg.includes('0xbfec5558')) {
+                        showToast('You have a pending game. Recovering...', 'warning');
                         tryRecoverActiveGame();
                         return;
                     }
@@ -1214,8 +1215,8 @@ async function commitGame() {
     } catch (e) {
         console.error('Commit error:', e);
         const msg = e.message || '';
-        if (String(e.data || msg).includes('0xbfec5558') || msg.includes('active game')) {
-            showToast('You have a pending game. Attempting to recover...', 'warning');
+        if (msg.includes('AlreadyCommitted') || msg.includes('0xbfec5558')) {
+            showToast('You have a pending game. Recovering...', 'warning');
             tryRecoverActiveGame();
             return;
         }

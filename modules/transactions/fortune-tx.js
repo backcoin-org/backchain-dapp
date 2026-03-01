@@ -230,6 +230,14 @@ export async function commitPlay({
         validate: async (signer, userAddress) => {
             if (wager <= 0n) throw new Error('Wager amount must be greater than 0');
 
+            // Check for active game BEFORE simulation (avoids wasted estimateGas call)
+            const activeInfo = await getActiveGameFromChain(userAddress);
+            if (activeInfo) {
+                const err = new Error(`AlreadyCommitted: active game #${activeInfo.gameId}`);
+                err.activeGame = activeInfo;
+                throw err;
+            }
+
             const { NetworkManager } = await import('../core/index.js');
             const ethBalance = await NetworkManager.getProvider().getBalance(userAddress);
             if (ethFee > 0n && ethBalance < ethFee + ethers.parseEther('0.001')) {
