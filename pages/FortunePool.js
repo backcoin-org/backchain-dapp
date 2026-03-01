@@ -349,6 +349,10 @@ function cleanup() {
         clearInterval(revealCheckInterval);
         revealCheckInterval = null;
     }
+    if (blockedGamePollInterval) {
+        clearInterval(blockedGamePollInterval);
+        blockedGamePollInterval = null;
+    }
     Game.phase = 'intro';
     Game.result = null;
     Game._balanceLoaded = false;
@@ -412,8 +416,33 @@ async function tryRecoverActiveGame() {
         return;
     }
 
-    // No localStorage data — inform user
-    showToast('You have an active game but recovery data was lost. Wait ~50s for it to expire, then try again.', 'error');
+    // No localStorage — fallback to on-chain check
+    const onChain = await FortuneTx.getActiveGameFromChain(State.userAddress);
+    if (onChain) {
+        // Check if localStorage has data for this specific gameId
+        const localData = stored[onChain.gameId];
+        if (localData && localData.userSecret) {
+            Game.gameId = onChain.gameId;
+            Game.commitment.userSecret = localData.userSecret;
+            Game.mode = onChain.tierMask === 1 ? 'easy' : onChain.tierMask === 2 ? 'medium' : onChain.tierMask === 4 ? 'hard' : 'combo';
+            Game.guesses = localData.guesses || [2, 5, 50];
+            Game.guess = localData.guesses?.[0] || 2;
+            Game.commitment.waitStartTime = localData.commitTimestamp || Date.now();
+            Game.commitment.canReveal = onChain.canReveal;
+            Game.phase = 'waiting';
+            renderQuickReveal();
+            pollCanRevealThenReveal();
+        } else {
+            // No recovery data — show blocked game UI
+            Game.phase = 'blocked';
+            Game.gameId = onChain.gameId;
+            renderBlockedGame(onChain);
+        }
+        return;
+    }
+
+    // No game found on-chain either — might have just expired
+    showToast('No active game found. Try playing again!', 'info');
     Game.phase = 'tier';
     renderPhase();
 }
@@ -422,6 +451,7 @@ async function checkPendingGame() {
     if (!State.userAddress) return;
 
     try {
+        // 1. Try localStorage first
         const stored = JSON.parse(localStorage.getItem('fortune_pending_games') || '{}');
         const pending = Object.entries(stored).find(([, g]) =>
             g.player?.toLowerCase() === State.userAddress?.toLowerCase() && !g.revealed
@@ -456,9 +486,36 @@ async function checkPendingGame() {
             Game.phase = 'waiting';
             renderPhase();
             startRevealCheck();
+            return;
+        }
+
+        // 2. No localStorage — check on-chain for active game
+        const onChain = await FortuneTx.getActiveGameFromChain(State.userAddress);
+        if (onChain) {
+            console.log('[FortunePool] On-chain active game detected:', onChain.gameId);
+            // Check if localStorage has data for this specific gameId
+            const localData = stored[onChain.gameId];
+            if (localData && localData.userSecret) {
+                // Recovery data available — restore normally
+                Game.gameId = onChain.gameId;
+                Game.commitment.userSecret = localData.userSecret;
+                Game.mode = onChain.tierMask === 1 ? 'easy' : onChain.tierMask === 2 ? 'medium' : onChain.tierMask === 4 ? 'hard' : 'combo';
+                Game.guesses = localData.guesses || [2, 5, 50];
+                Game.guess = localData.guesses?.[0] || 2;
+                Game.commitment.waitStartTime = localData.commitTimestamp || Date.now();
+                Game.commitment.canReveal = onChain.canReveal;
+                Game.phase = 'waiting';
+                renderPhase();
+                startRevealCheck();
+            } else {
+                // No recovery data — show blocked game UI
+                Game.phase = 'blocked';
+                Game.gameId = onChain.gameId;
+                renderBlockedGame(onChain);
+            }
         }
     } catch (e) {
-        console.warn('[FortunePool] Pending game recovery failed:', e);
+        console.warn('[FortunePool] Pending game check failed:', e);
     }
 }
 
@@ -481,11 +538,128 @@ function clearStuckGame() {
 }
 
 // ============================================================================
+// BLOCKED GAME — On-chain pending game without recovery data
+// ============================================================================
+let blockedGamePollInterval = null;
+
+function renderBlockedGame(onChainData) {
+    const area = document.getElementById('game-area');
+    if (!area) return;
+
+    const ethers = window.ethers;
+    const blocksLeft = onChainData?.blocksUntilExpiry || 0;
+    const estimatedMinutes = Math.ceil(blocksLeft * 12 / 60); // ~12s per block on Sepolia
+    const wagerFormatted = onChainData?.wagerAmount ? Number(ethers.formatEther(onChainData.wagerAmount)).toFixed(1) : '?';
+
+    area.innerHTML = `
+        <div class="bg-gradient-to-br from-orange-900/30 to-red-900/20 border border-orange-500/30 rounded-2xl p-6">
+            <div class="text-center mb-5">
+                <div class="w-14 h-14 mx-auto mb-3 rounded-full bg-orange-500/20 border border-orange-500/30 flex items-center justify-center">
+                    <i class="fa-solid fa-lock text-2xl text-orange-400"></i>
+                </div>
+                <h2 class="text-xl font-bold text-white mb-1">Pending Game Found</h2>
+                <p class="text-zinc-400 text-sm">You have an unfinished game on-chain</p>
+            </div>
+
+            <div class="bg-zinc-800/50 rounded-xl p-4 mb-4 space-y-2">
+                <div class="flex justify-between text-sm">
+                    <span class="text-zinc-400">Game ID</span>
+                    <span class="text-white font-mono">#${onChainData?.gameId || '?'}</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-zinc-400">Wager</span>
+                    <span class="text-amber-400 font-medium">${wagerFormatted} BKC</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-zinc-400">Status</span>
+                    <span id="blocked-status" class="text-orange-400 font-medium">
+                        ${blocksLeft > 0 ? `Expires in ~${blocksLeft} blocks (~${estimatedMinutes} min)` : 'Expired — ready to clear'}
+                    </span>
+                </div>
+            </div>
+
+            <div class="bg-zinc-800/30 rounded-lg p-3 mb-5">
+                <p class="text-xs text-zinc-400 leading-relaxed">
+                    <i class="fa-solid fa-circle-info text-orange-400 mr-1"></i>
+                    Recovery data is not available for this game. The game will auto-expire after the reveal window closes (~202 blocks). Once expired, you can start a new game.
+                </p>
+            </div>
+
+            <button id="btn-clear-blocked"
+                class="w-full py-3 rounded-xl font-bold text-base transition-all ${blocksLeft <= 0
+                    ? 'bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-white'
+                    : 'bg-zinc-700 text-zinc-400 cursor-not-allowed'}"
+                ${blocksLeft > 0 ? 'disabled' : ''}>
+                ${blocksLeft <= 0 ? 'Clear & Play Again' : `Waiting for expiry (~${estimatedMinutes} min)...`}
+            </button>
+        </div>
+    `;
+
+    const btnClear = document.getElementById('btn-clear-blocked');
+    if (btnClear) {
+        btnClear.addEventListener('click', async () => {
+            if (btnClear.disabled) return;
+            btnClear.disabled = true;
+            btnClear.textContent = 'Clearing...';
+            // Just reset state — next commitPlay will auto-expire the old game
+            Game.phase = 'tier';
+            Game.gameId = null;
+            Game.commitment = { hash: null, userSecret: null, commitBlock: null, commitTxHash: null, revealDelay: 2, waitStartTime: null, canReveal: false };
+            showToast('Game cleared! You can play again.', 'info');
+            renderPhase();
+        });
+    }
+
+    // Poll for expiry
+    if (blockedGamePollInterval) clearInterval(blockedGamePollInterval);
+    if (blocksLeft > 0) {
+        blockedGamePollInterval = setInterval(async () => {
+            try {
+                const updated = await FortuneTx.getActiveGameFromChain(State.userAddress);
+                if (!updated) {
+                    // Game expired or cleared
+                    clearInterval(blockedGamePollInterval);
+                    blockedGamePollInterval = null;
+                    Game.phase = 'tier';
+                    Game.gameId = null;
+                    showToast('Game expired! You can play again.', 'info');
+                    renderPhase();
+                    return;
+                }
+                // Update countdown
+                const statusEl = document.getElementById('blocked-status');
+                const btn = document.getElementById('btn-clear-blocked');
+                if (statusEl && updated.blocksUntilExpiry <= 0) {
+                    statusEl.textContent = 'Expired — ready to clear';
+                    statusEl.className = 'text-emerald-400 font-medium';
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.textContent = 'Clear & Play Again';
+                        btn.className = 'w-full py-3 rounded-xl font-bold text-base transition-all bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-white';
+                    }
+                    clearInterval(blockedGamePollInterval);
+                    blockedGamePollInterval = null;
+                } else if (statusEl) {
+                    const mins = Math.ceil(updated.blocksUntilExpiry * 12 / 60);
+                    statusEl.textContent = `Expires in ~${updated.blocksUntilExpiry} blocks (~${mins} min)`;
+                }
+            } catch {}
+        }, 15000); // Poll every 15s
+    }
+}
+
+// ============================================================================
 // PHASE ROUTER
 // ============================================================================
 function renderPhase() {
     const area = document.getElementById('game-area');
     if (!area) return;
+
+    // Clean up blocked game polling when leaving blocked phase
+    if (Game.phase !== 'blocked' && blockedGamePollInterval) {
+        clearInterval(blockedGamePollInterval);
+        blockedGamePollInterval = null;
+    }
 
     switch (Game.phase) {
         case 'intro': renderIntro(area); break;
@@ -495,6 +669,7 @@ function renderPhase() {
         case 'processing': renderProcessing(area); break;
         case 'waiting': renderWaiting(area); break;
         case 'result': renderResult(area); break;
+        case 'blocked': break; // Rendered directly by renderBlockedGame
         default: renderIntro(area);
     }
 }

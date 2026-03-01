@@ -67,6 +67,7 @@ const FORTUNE_ABI = [
     'function TIER_COUNT() view returns (uint8)',
 
     // Read - Games
+    'function activeGame(address player) view returns (uint256)',
     'function getGame(uint256 gameId) view returns (address player, uint48 commitBlock, uint8 tierMask, uint8 status, address operator, uint96 wagerAmount)',
     'function getGameResult(uint256 gameId) view returns (address player, uint128 grossWager, uint128 prizeWon, uint8 tierMask, uint8 matchCount, uint48 revealBlock)',
     'function getGameStatus(uint256 gameId) view returns (uint8 status, bool canReveal, uint256 blocksUntilReveal, uint256 blocksUntilExpiry)',
@@ -409,6 +410,43 @@ export async function playGame({
 // ============================================================================
 
 /**
+ * Checks on-chain if user has an active (COMMITTED) game.
+ * Returns game details or null if no active game.
+ */
+export async function getActiveGameFromChain(userAddress) {
+    if (!userAddress) return null;
+    try {
+        const contract = await getFortuneContractReadOnly();
+        const gameId = await contract.activeGame(userAddress);
+        if (!gameId || gameId === 0n) return null;
+
+        const id = Number(gameId);
+        const [statusResult, gameResult] = await Promise.all([
+            contract.getGameStatus(id),
+            contract.getGame(id)
+        ]);
+
+        const status = Number(statusResult.status);
+        // 0=NONE, 1=COMMITTED, 2=REVEALED, 3=EXPIRED
+        if (status !== 1) return null; // Only return if actively committed
+
+        return {
+            gameId: id,
+            status,
+            canReveal: statusResult.canReveal,
+            blocksUntilReveal: Number(statusResult.blocksUntilReveal),
+            blocksUntilExpiry: Number(statusResult.blocksUntilExpiry),
+            tierMask: Number(gameResult.tierMask),
+            wagerAmount: gameResult.wagerAmount,
+            commitBlock: Number(gameResult.commitBlock)
+        };
+    } catch (e) {
+        console.warn('[FortuneTx] getActiveGameFromChain error:', e.message);
+        return null;
+    }
+}
+
+/**
  * Gets all 3 tiers
  * V9: Returns fixed [3] arrays (ranges, multipliers, winChances)
  */
@@ -591,6 +629,7 @@ export const FortuneTx = {
     getActiveTiers, getTierById, getServiceFee,
     getPoolStats, getActiveTierCount,
     calculatePotentialWin, getGameResult, getCommitmentStatus,
+    getActiveGameFromChain,
     TIERS
 };
 

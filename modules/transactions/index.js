@@ -86,7 +86,8 @@ export {
     calculatePotentialWin,
     getPoolStats as fortuneGetPoolStats,
     getCommitmentStatus,
-    getGameResult
+    getGameResult,
+    getActiveGameFromChain
 } from './fortune-tx.js';
 
 // Rental Marketplace V2 (daily pricing + boost)
