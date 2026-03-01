@@ -133,6 +133,64 @@ function isExtensionWallet(provider) {
     return !!(provider.isMetaMask || provider.isCoinbaseWallet || provider.isBraveWallet || provider.isRabby || provider.isTrust);
 }
 
+/**
+ * Patch BrowserProvider.getTransaction to handle ERC-4337 yParity errors.
+ * ERC-4337 bundler transactions have signatures that ethers v6 can't parse,
+ * causing yParity mismatch errors in JsonRpcSigner.sendTransaction() internally.
+ * This patch catches the error at the provider level and falls back to raw
+ * JSON-RPC, returning a minimal TransactionResponse-like object.
+ */
+function patchProviderForERC4337(provider) {
+    if (!provider || provider._erc4337Patched) return;
+
+    const origGetTransaction = provider.getTransaction.bind(provider);
+    provider.getTransaction = async function(hash) {
+        try {
+            return await origGetTransaction(hash);
+        } catch (e) {
+            if (e.message?.includes('yParity') && hash) {
+                console.warn('[Wallet] yParity fallback for getTransaction:', hash.slice(0, 12));
+                const rawTx = await this.send('eth_getTransactionByHash', [hash]);
+                if (!rawTx) return null;
+
+                const self = this;
+                return {
+                    hash: rawTx.hash,
+                    from: rawTx.from,
+                    to: rawTx.to,
+                    value: BigInt(rawTx.value || '0'),
+                    nonce: parseInt(rawTx.nonce, 16),
+                    gasLimit: BigInt(rawTx.gas || '0'),
+                    blockNumber: rawTx.blockNumber ? parseInt(rawTx.blockNumber, 16) : null,
+                    blockHash: rawTx.blockHash || null,
+                    provider: self,
+                    wait: async function(_confirms, timeout) {
+                        const maxAttempts = Math.ceil((timeout || 60000) / 2000);
+                        for (let i = 0; i < maxAttempts; i++) {
+                            await new Promise(r => setTimeout(r, 2000));
+                            const raw = await self.send('eth_getTransactionReceipt', [hash]);
+                            if (raw && raw.status) {
+                                return {
+                                    hash,
+                                    status: parseInt(raw.status, 16),
+                                    blockNumber: parseInt(raw.blockNumber, 16),
+                                    gasUsed: BigInt(raw.gasUsed || '0'),
+                                    from: raw.from,
+                                    to: raw.to
+                                };
+                            }
+                        }
+                        throw new Error('Transaction receipt timeout');
+                    }
+                };
+            }
+            throw e;
+        }
+    };
+
+    provider._erc4337Patched = true;
+}
+
 function isRpcError(error) {
     const errorMessage = error?.message?.toLowerCase() || '';
     const errorCode = error?.code || error?.error?.code;
@@ -462,6 +520,7 @@ async function setupSignerAndLoadData(provider, address) {
                         rawWP._bkcPatched = true;
                     }
                     provider = new ethers.BrowserProvider(rawWP);
+                    patchProviderForERC4337(provider);
                 }
             }
         } else {
