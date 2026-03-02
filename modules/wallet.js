@@ -1,8 +1,8 @@
 // js/modules/wallet.js
 // ✅ VERSÃO V9.0: Reown AppKit — Universal Login (Google, Apple, Discord, X, GitHub, Facebook, Farcaster)
 
-import { createAppKit } from 'https://esm.sh/@reown/appkit@1.8.18?bundle';
-import { EthersAdapter } from 'https://esm.sh/@reown/appkit-adapter-ethers@1.8.18?bundle';
+import { createAppKit } from '@reown/appkit';
+import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 
 import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
