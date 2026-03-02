@@ -82,7 +82,7 @@ const _originalFetch = window.fetch;
 window.fetch = async function(...args) {
     const response = await _originalFetch.apply(this, args);
     try {
-        const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+        const url = String(args[0] || '');
         if (url.includes('api.web3modal.org') && url.includes('/config')) {
             const data = await response.json();
             if (data?.features) {
