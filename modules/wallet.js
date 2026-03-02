@@ -1,7 +1,8 @@
 // js/modules/wallet.js
-// ✅ VERSÃO V8.0: Auto Network Management - Fix RPC issues automatically
+// ✅ VERSÃO V9.0: Reown AppKit — Universal Login (Google, Apple, Discord, X, GitHub, Facebook, Farcaster)
 
-import { createWeb3Modal, defaultConfig } from 'https://esm.sh/@web3modal/ethers@5.1.11?bundle';
+import { createAppKit } from 'https://esm.sh/@reown/appkit@1.8.18?bundle';
+import { EthersAdapter } from 'https://esm.sh/@reown/appkit-adapter-ethers@1.8.18?bundle';
 
 import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
@@ -59,17 +60,30 @@ const MAX_RPC_RETRIES = 3;
 let currentPublicProvider = null;
 
 // ============================================================================
-// 2. WEB3MODAL SETUP
+// 2. REOWN APPKIT SETUP
 // ============================================================================
 const WALLETCONNECT_PROJECT_ID = 'cd4bdedee7a7e909ebd3df8bbc502aed';
 
-// 🔥 V8.0: Usa configuração centralizada do METAMASK_NETWORK_CONFIG
-const opbnbTestnetConfig = {
-    chainId: METAMASK_NETWORK_CONFIG.chainIdDecimal,
+// 🔥 V9.0: AppKit CAIP-2 chain config (from centralized METAMASK_NETWORK_CONFIG)
+const sepoliaChain = {
+    id: METAMASK_NETWORK_CONFIG.chainIdDecimal,
+    caipNetworkId: `eip155:${METAMASK_NETWORK_CONFIG.chainIdDecimal}`,
+    chainNamespace: 'eip155',
     name: METAMASK_NETWORK_CONFIG.chainName,
-    currency: METAMASK_NETWORK_CONFIG.nativeCurrency.symbol,
-    explorerUrl: METAMASK_NETWORK_CONFIG.blockExplorerUrls[0],
-    rpcUrl: METAMASK_NETWORK_CONFIG.rpcUrls[0]  // Usa o RPC primário da config
+    nativeCurrency: {
+        name: METAMASK_NETWORK_CONFIG.nativeCurrency.name,
+        symbol: METAMASK_NETWORK_CONFIG.nativeCurrency.symbol,
+        decimals: METAMASK_NETWORK_CONFIG.nativeCurrency.decimals
+    },
+    rpcUrls: {
+        default: { http: METAMASK_NETWORK_CONFIG.rpcUrls }
+    },
+    blockExplorers: {
+        default: {
+            name: 'Etherscan',
+            url: METAMASK_NETWORK_CONFIG.blockExplorerUrls[0]
+        }
+    }
 };
 
 const metadata = {
@@ -79,42 +93,28 @@ const metadata = {
     icons: [window.location.origin + '/assets/bkc_logo_3d.png']
 };
 
-const ethersConfig = defaultConfig({
-    metadata,
-    enableEIP6963: true,
-    enableInjected: true,
-    enableCoinbase: false,
-    rpcUrl: sepoliaRpcUrl,
-    defaultChainId: NETWORK_ID_DECIMAL,
-    enableEmail: true,
-    enableEns: false,
-    auth: {
-        email: true,
-        showWallets: true,
-        walletFeatures: true
-    }
-});
-
-const web3modal = createWeb3Modal({
-    ethersConfig,
-    chains: [opbnbTestnetConfig],
+// 🔥 V9.0: Reown AppKit — login social (Google, Apple, Discord, X, GitHub, FB, Farcaster)
+const modal = createAppKit({
+    adapters: [new EthersAdapter()],
+    networks: [sepoliaChain],
+    defaultNetwork: sepoliaChain,
     projectId: WALLETCONNECT_PROJECT_ID,
-    enableAnalytics: true,
+    metadata,
+    features: {
+        email: true,
+        socials: ['google', 'apple', 'discord', 'x', 'github', 'facebook', 'farcaster'],
+        emailShowWallets: true,
+        analytics: true
+    },
     themeMode: 'dark',
     themeVariables: {
         '--w3m-accent': '#f59e0b',
         '--w3m-border-radius-master': '1px',
         '--w3m-z-index': 100
     },
-    // Force opBNB Testnet as default chain for new connections
-    defaultChain: opbnbTestnetConfig,
     // Force EOA only — no smart accounts for social/email login
-    defaultAccountTypes: { eip155: 'eoa' },
-    preferredAccountType: 'eoa'
+    defaultAccountTypes: { eip155: 'eoa' }
 });
-
-// Force EOA account type (belt-and-suspenders)
-try { web3modal.setPreferredAccountType?.('eoa'); } catch(e) {}
 
 // ============================================================================
 // 3. 🔥 MULTI-RPC SYSTEM (NOVO!)
@@ -154,16 +154,27 @@ function patchProviderForERC4337(provider) {
                 if (!rawTx) return null;
 
                 const self = this;
-                return {
+                const txResponse = {
                     hash: rawTx.hash,
                     from: rawTx.from,
                     to: rawTx.to,
                     value: BigInt(rawTx.value || '0'),
                     nonce: parseInt(rawTx.nonce, 16),
                     gasLimit: BigInt(rawTx.gas || '0'),
+                    gasPrice: rawTx.gasPrice ? BigInt(rawTx.gasPrice) : null,
+                    maxFeePerGas: rawTx.maxFeePerGas ? BigInt(rawTx.maxFeePerGas) : null,
+                    maxPriorityFeePerGas: rawTx.maxPriorityFeePerGas ? BigInt(rawTx.maxPriorityFeePerGas) : null,
+                    data: rawTx.input || rawTx.data || '0x',
+                    chainId: rawTx.chainId ? BigInt(rawTx.chainId) : null,
+                    type: rawTx.type ? parseInt(rawTx.type, 16) : 0,
                     blockNumber: rawTx.blockNumber ? parseInt(rawTx.blockNumber, 16) : null,
                     blockHash: rawTx.blockHash || null,
+                    index: rawTx.transactionIndex ? parseInt(rawTx.transactionIndex, 16) : 0,
                     provider: self,
+                    // ethers v6 sendTransaction calls tx.replaceableTransaction(blockNumber)
+                    replaceableTransaction: function(_startBlock) { return txResponse; },
+                    // ethers v6 may call isMined() to check confirmation status
+                    isMined: function() { return txResponse.blockNumber != null; },
                     wait: async function(_confirms, timeout) {
                         const maxAttempts = Math.ceil((timeout || 60000) / 2000);
                         for (let i = 0; i < maxAttempts; i++) {
@@ -183,6 +194,7 @@ function patchProviderForERC4337(provider) {
                         throw new Error('Transaction receipt timeout');
                     }
                 };
+                return txResponse;
             }
             throw e;
         }
@@ -494,14 +506,14 @@ async function setupSignerAndLoadData(provider, address) {
         const rawProvider = provider?.provider || State.web3Provider;
         const isEmbedded = !isExtensionWallet(rawProvider);
 
-        // Network: extension wallets use RPC, embedded wallets use Web3Modal API
+        // Network: extension wallets use RPC, embedded wallets use AppKit API
         if (isEmbedded) {
             try {
-                const chainId = web3modal.getChainId();
+                const chainId = modal.getChainId();
                 if (chainId !== NETWORK_ID_DECIMAL) {
                     console.log(`[Wallet] Embedded wallet on chain ${chainId}, switching...`);
-                    await web3modal.switchNetwork(NETWORK_ID_DECIMAL);
-                    try { web3modal.close(); } catch(_) {}
+                    await modal.switchNetwork(sepoliaChain);
+                    try { modal.close(); } catch(_) {}
                 }
             } catch (e) {
                 console.warn('[Wallet] Network switch error:', e.message);
@@ -509,7 +521,7 @@ async function setupSignerAndLoadData(provider, address) {
 
             // Get fresh wallet provider after any potential network switch
             if (address) {
-                const rawWP = web3modal.getWalletProvider() || State.web3Provider;
+                const rawWP = modal.getWalletProvider() || State.web3Provider;
                 if (rawWP) {
                     if (rawWP.request && !rawWP._bkcPatched) {
                         const origRequest = rawWP.request.bind(rawWP);
@@ -689,14 +701,14 @@ export async function initPublicProvider() {
 }
 
 export function initWalletSubscriptions(callback) {
-    let currentAddress = web3modal.getAddress();
-    
-    if (web3modal.getIsConnected() && currentAddress) {
-        const walletProvider = web3modal.getWalletProvider();
+    let currentAddress = modal.getAddress();
+
+    if (modal.getIsConnected() && currentAddress) {
+        const walletProvider = modal.getWalletProvider();
         if (walletProvider) {
             const ethersProvider = new ethers.BrowserProvider(walletProvider);
             State.web3Provider = walletProvider;
-            
+
             // Callback IMEDIATO
             callback({ isConnected: true, address: currentAddress, isNewConnection: false });
             setupSignerAndLoadData(ethersProvider, currentAddress);
@@ -707,7 +719,7 @@ export function initWalletSubscriptions(callback) {
         try {
             console.log(`[Wallet] subscribeProvider event: connected=${isConnected}, chain=${chainId}, addr=${address?.slice(0,10) || 'null'}, hasProvider=${!!provider}`);
             if (isConnected) {
-                let activeAddress = address || web3modal.getAddress();
+                let activeAddress = address || modal.getAddress();
                 if (!activeAddress && provider) {
                     try {
                         const tempProvider = new ethers.BrowserProvider(provider);
@@ -748,11 +760,11 @@ export function initWalletSubscriptions(callback) {
         } catch (err) { }
     };
     
-    web3modal.subscribeProvider(handler);
+    modal.subscribeProvider(handler);
 }
 
-export function openConnectModal() { web3modal.open(); }
-export async function disconnectWallet() { await web3modal.disconnect(); }
+export function openConnectModal() { modal.open(); }
+export async function disconnectWallet() { await modal.disconnect(); }
 
 // ============================================================================
 // 7. 🔥 V8.0: RPC HEALTH MONITORING

@@ -495,8 +495,8 @@ export function injectStyles() {
         .bc-fab:active { transform:scale(0.95); }
         @media (max-width:1023px) { .bc-fab { bottom:80px; right:16px; } }
 
-        /* Web3Modal overrides — more subtle backdrop */
-        w3m-modal { --w3m-z-index: 9999 !important; }
+        /* AppKit/Web3Modal overrides — more subtle backdrop */
+        w3m-modal, appkit-modal { --w3m-z-index: 9999 !important; }
 
         /* Mobile: cart bar above bottom tabs */
         @media (max-width: 1023px) {
