@@ -3,6 +3,7 @@
 
 import { createAppKit } from '@reown/appkit';
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
+import { sepolia } from '@reown/appkit/networks';
 
 import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
@@ -64,27 +65,8 @@ let currentPublicProvider = null;
 // ============================================================================
 const WALLETCONNECT_PROJECT_ID = 'cd4bdedee7a7e909ebd3df8bbc502aed';
 
-// 🔥 V9.0: AppKit CAIP-2 chain config (from centralized METAMASK_NETWORK_CONFIG)
-const sepoliaChain = {
-    id: METAMASK_NETWORK_CONFIG.chainIdDecimal,
-    caipNetworkId: `eip155:${METAMASK_NETWORK_CONFIG.chainIdDecimal}`,
-    chainNamespace: 'eip155',
-    name: METAMASK_NETWORK_CONFIG.chainName,
-    nativeCurrency: {
-        name: METAMASK_NETWORK_CONFIG.nativeCurrency.name,
-        symbol: METAMASK_NETWORK_CONFIG.nativeCurrency.symbol,
-        decimals: METAMASK_NETWORK_CONFIG.nativeCurrency.decimals
-    },
-    rpcUrls: {
-        default: { http: METAMASK_NETWORK_CONFIG.rpcUrls }
-    },
-    blockExplorers: {
-        default: {
-            name: 'Etherscan',
-            url: METAMASK_NETWORK_CONFIG.blockExplorerUrls[0]
-        }
-    }
-};
+// 🔥 V9.0: Use AppKit built-in Sepolia chain (required for auth/social connector)
+// Custom RPC overrides are set via customRpcUrls in createAppKit below
 
 const metadata = {
     name: 'Backcoin Protocol',
@@ -96,13 +78,17 @@ const metadata = {
 // 🔥 V9.0: Reown AppKit — login social (Google, Apple, Discord, X, GitHub, FB, Farcaster)
 const modal = createAppKit({
     adapters: [new EthersAdapter()],
-    networks: [sepoliaChain],
-    defaultNetwork: sepoliaChain,
+    networks: [sepolia],
+    defaultNetwork: sepolia,
     projectId: WALLETCONNECT_PROJECT_ID,
     metadata,
+    // Use our own RPC endpoints instead of AppKit defaults
+    customRpcUrls: {
+        [`eip155:${NETWORK_ID_DECIMAL}`]: METAMASK_NETWORK_CONFIG.rpcUrls.map(url => ({ url }))
+    },
     features: {
         email: true,
-        socials: ['google', 'apple', 'discord', 'x', 'github', 'facebook', 'farcaster'],
+        socials: ['google', 'x', 'facebook', 'apple', 'discord', 'github', 'farcaster'],
         emailShowWallets: true,
         analytics: true,
         connectMethodsOrder: ['social', 'email', 'wallet']
@@ -513,7 +499,7 @@ async function setupSignerAndLoadData(provider, address) {
                 const chainId = modal.getChainId();
                 if (chainId !== NETWORK_ID_DECIMAL) {
                     console.log(`[Wallet] Embedded wallet on chain ${chainId}, switching...`);
-                    await modal.switchNetwork(sepoliaChain);
+                    await modal.switchNetwork(sepolia);
                     try { modal.close(); } catch(_) {}
                 }
             } catch (e) {
