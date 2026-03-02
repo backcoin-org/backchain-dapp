@@ -104,7 +104,8 @@ const modal = createAppKit({
         email: true,
         socials: ['google', 'apple', 'discord', 'x', 'github', 'facebook', 'farcaster'],
         emailShowWallets: true,
-        analytics: true
+        analytics: true,
+        connectMethodsOrder: ['social', 'email', 'wallet']
     },
     themeMode: 'dark',
     themeVariables: {
