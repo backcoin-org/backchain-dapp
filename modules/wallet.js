@@ -75,6 +75,33 @@ const metadata = {
     icons: [window.location.origin + '/assets/bkc_logo_3d.png']
 };
 
+// 🔥 V9.1: Force-enable social login in Reown API response
+// Workaround: Reown dashboard shows Social ON but API returns isEnabled:false
+// This intercepts the config fetch and patches the response before AppKit processes it
+const _originalFetch = window.fetch;
+window.fetch = async function(...args) {
+    const response = await _originalFetch.apply(this, args);
+    try {
+        const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+        if (url.includes('api.web3modal.org') && url.includes('/config')) {
+            const data = await response.json();
+            if (data?.features) {
+                for (const f of data.features) {
+                    if (f.id === 'social_login' || f.id === 'reown_authentication') {
+                        f.isEnabled = true;
+                    }
+                }
+            }
+            console.log('[Wallet] Patched Reown config: social_login + reown_authentication forced ON');
+            return new Response(JSON.stringify(data), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+    } catch(e) { /* non-config request, pass through */ }
+    return response;
+};
+
 // 🔥 V9.0: Reown AppKit — login social (Google, Apple, Discord, X, GitHub, FB, Farcaster)
 const modal = createAppKit({
     adapters: [new EthersAdapter()],
@@ -690,7 +717,7 @@ export async function initPublicProvider() {
 export function initWalletSubscriptions(callback) {
     let currentAddress = modal.getAddress();
 
-    if (modal.getIsConnected() && currentAddress) {
+    if (modal.getIsConnectedState() && currentAddress) {
         const walletProvider = modal.getWalletProvider();
         if (walletProvider) {
             const ethersProvider = new ethers.BrowserProvider(walletProvider);
@@ -702,9 +729,12 @@ export function initWalletSubscriptions(callback) {
         }
     }
 
-    const handler = async ({ provider, address, chainId, isConnected }) => {
+    const handler = async (account) => {
         try {
-            console.log(`[Wallet] subscribeProvider event: connected=${isConnected}, chain=${chainId}, addr=${address?.slice(0,10) || 'null'}, hasProvider=${!!provider}`);
+            const { address, isConnected } = account;
+            const provider = modal.getWalletProvider();
+            const chainId = modal.getChainId();
+            console.log(`[Wallet] subscribeAccount event: connected=${isConnected}, chain=${chainId}, addr=${address?.slice(0,10) || 'null'}, hasProvider=${!!provider}`);
             if (isConnected) {
                 let activeAddress = address || modal.getAddress();
                 if (!activeAddress && provider) {
@@ -721,13 +751,16 @@ export function initWalletSubscriptions(callback) {
                     }
                 }
 
-                if (activeAddress) {
+                if (activeAddress && provider) {
                     const ethersProvider = new ethers.BrowserProvider(provider);
-                    State.web3Provider = provider; 
+                    State.web3Provider = provider;
 
                     callback({ isConnected: true, address: activeAddress, chainId, isNewConnection: true });
                     await setupSignerAndLoadData(ethersProvider, activeAddress);
 
+                } else if (activeAddress && !provider) {
+                    // Provider not ready yet (can happen with social login) — wait for it
+                    console.log('[Wallet] Address available but no provider yet, waiting...');
                 } else {
                     if (balancePollingInterval) clearInterval(balancePollingInterval);
                     State.isConnected = false;
@@ -744,10 +777,12 @@ export function initWalletSubscriptions(callback) {
                 stopUIEnforcer();
                 callback({ isConnected: false });
             }
-        } catch (err) { }
+        } catch (err) {
+            console.error('[Wallet] subscribeAccount error:', err);
+        }
     };
-    
-    modal.subscribeProvider(handler);
+
+    modal.subscribeAccount(handler);
 }
 
 export function openConnectModal() { modal.open(); }
