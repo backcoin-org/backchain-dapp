@@ -233,9 +233,15 @@ export async function commitPlay({
             // Check for active game BEFORE simulation (avoids wasted estimateGas call)
             const activeInfo = await getActiveGameFromChain(userAddress);
             if (activeInfo) {
-                const err = new Error(`AlreadyCommitted: active game #${activeInfo.gameId}`);
-                err.activeGame = activeInfo;
-                throw err;
+                // If reveal window has passed, the contract's commitPlay will auto-expire
+                // the old game — let the TX through instead of blocking
+                const isExpired = !activeInfo.canReveal && activeInfo.blocksUntilExpiry === 0;
+                if (!isExpired) {
+                    const err = new Error(`AlreadyCommitted: active game #${activeInfo.gameId}`);
+                    err.activeGame = activeInfo;
+                    throw err;
+                }
+                console.log(`[FortuneTx] Active game #${activeInfo.gameId} is expired — contract will auto-expire on commitPlay`);
             }
 
             const { NetworkManager } = await import('../core/index.js');
