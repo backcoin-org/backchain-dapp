@@ -61,22 +61,22 @@ const FLAG_IMAGES = {
 
 let currentLang = 'en';
 
-// Tier definitions — match V11 contract (3.2x/16x/80x, 80% EV)
+// Tier definitions — match V12 contract (2x/5x/100x)
 const TIERS = [
     {
-        id: 0, name: "Easy", emoji: "🍀", range: 4, multiplier: 3.2, chance: "25%",
+        id: 0, name: "Easy", emoji: "🍀", range: 5, multiplier: 2, chance: "20%",
         color: "emerald", hex: "#10b981",
         bgFrom: "from-emerald-500/20", bgTo: "to-green-600/10",
         borderColor: "border-emerald-500/50", textColor: "text-emerald-400"
     },
     {
-        id: 1, name: "Medium", emoji: "⚡", range: 20, multiplier: 16, chance: "5%",
+        id: 1, name: "Medium", emoji: "⚡", range: 10, multiplier: 5, chance: "10%",
         color: "violet", hex: "#8b5cf6",
         bgFrom: "from-violet-500/20", bgTo: "to-purple-600/10",
         borderColor: "border-violet-500/50", textColor: "text-violet-400"
     },
     {
-        id: 2, name: "Hard", emoji: "👑", range: 100, multiplier: 80, chance: "1%",
+        id: 2, name: "Hard", emoji: "👑", range: 150, multiplier: 100, chance: "0.67%",
         color: "amber", hex: "#f59e0b",
         bgFrom: "from-amber-500/20", bgTo: "to-orange-600/10",
         borderColor: "border-amber-500/50", textColor: "text-amber-400"
@@ -84,14 +84,14 @@ const TIERS = [
 ];
 
 // Derived constants from TIERS (not hardcoded)
-const COMBO_MAX_MULTIPLIER = TIERS.reduce((sum, tr) => sum + tr.multiplier, 0); // 99.2
-const JACKPOT_MULTIPLIER = TIERS[2].multiplier; // 80
-const JACKPOT_RANGE = TIERS[2].range; // 100
+const COMBO_MAX_MULTIPLIER = TIERS.reduce((sum, tr) => sum + tr.multiplier, 0); // 107
+const JACKPOT_MULTIPLIER = TIERS[2].multiplier; // 100
+const JACKPOT_RANGE = TIERS[2].range; // 150
 
 // Combo win probability: chance of matching at least 1 tier
-// = 1 - (1-0.25) × (1-0.05) × (1-0.01) ≈ 29.5%
+// = 1 - (1-0.20) × (1-0.10) × (1-0.0067) ≈ 28.6%
 const COMBO_WIN_CHANCE = 1 - TIERS.reduce((miss, tr) => miss * (1 - 1 / tr.range), 1);
-const COMBO_WIN_PCT = (COMBO_WIN_CHANCE * 100).toFixed(0); // "29"
+const COMBO_WIN_PCT = (COMBO_WIN_CHANCE * 100).toFixed(0); // "28"
 const COMBO_BOOST_VS_EASY = Math.round(((COMBO_WIN_CHANCE - 1 / TIERS[0].range) / (1 / TIERS[0].range)) * 100); // ~18
 
 // ============================================================================

@@ -97,9 +97,9 @@ const FORTUNE_ABI = [
 
 // Tier data (fallback if contract read fails — actual values read from getAllTiers())
 const TIERS = [
-    { range: 4,   multiplierBps: 32000 },  // Tier 0: 1-4, 3.2x
-    { range: 20,  multiplierBps: 160000 }, // Tier 1: 1-20, 16x
-    { range: 100, multiplierBps: 800000 } // Tier 2: 1-100, 80x
+    { range: 5,   multiplierBps: 20000 },   // Tier 0: 1-5, 2x   (V12 contract)
+    { range: 10,  multiplierBps: 50000 },    // Tier 1: 1-10, 5x  (V12 contract)
+    { range: 150, multiplierBps: 1000000 }   // Tier 2: 1-150, 100x (V12 contract)
 ];
 
 // ============================================================================
