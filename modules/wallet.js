@@ -109,10 +109,8 @@ const modal = createAppKit({
     defaultNetwork: sepolia,
     projectId: WALLETCONNECT_PROJECT_ID,
     metadata,
-    // Use our own RPC endpoints instead of AppKit defaults
-    customRpcUrls: {
-        [`eip155:${NETWORK_ID_DECIMAL}`]: METAMASK_NETWORK_CONFIG.rpcUrls.map(url => ({ url }))
-    },
+    // Note: no customRpcUrls — AppKit uses rpc.walletconnect.com (CSP-allowed in embedded wallet iframe).
+    // Our public provider (Alchemy/PublicNode) handles reads separately.
     features: {
         email: true,
         socials: ['google', 'x', 'facebook', 'apple', 'discord', 'github', 'farcaster'],
