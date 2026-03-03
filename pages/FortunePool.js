@@ -397,9 +397,13 @@ async function tryRecoverActiveGame() {
             if (State.fortunePoolContractPublic) {
                 const status = await State.fortunePoolContractPublic.getGameStatus(Number(gameId));
                 const gameStatus = Number(status.status);
-                if (gameStatus === 0 || gameStatus === 3) {
-                    // Game expired or doesn't exist — clean up
-                    console.log('[FortunePool] Game', gameId, 'is expired on-chain, clearing');
+                const canReveal = status.canReveal;
+                const blocksUntilExpiry = Number(status.blocksUntilExpiry || 0);
+
+                // Game finalized (expired/revealed) or reveal window passed
+                if (gameStatus === 0 || gameStatus === 3 || gameStatus === 2
+                    || (gameStatus === 1 && !canReveal && blocksUntilExpiry === 0)) {
+                    console.log('[FortunePool] Game', gameId, 'expired/finalized (status:', gameStatus, 'canReveal:', canReveal, 'blocksLeft:', blocksUntilExpiry, ')');
                     delete stored[gameId];
                     localStorage.setItem('fortune_pending_games', JSON.stringify(stored));
                     showToast('Previous game expired. Start a new one!', 'info');
@@ -472,8 +476,11 @@ async function checkPendingGame() {
                 if (State.fortunePoolContractPublic) {
                     const status = await State.fortunePoolContractPublic.getGameStatus(Number(gameId));
                     const gameStatus = Number(status.status);
-                    if (gameStatus === 0 || gameStatus === 3) {
-                        console.log('[FortunePool] Pending game', gameId, 'is expired, clearing');
+                    const canReveal = status.canReveal;
+                    const blocksLeft = Number(status.blocksUntilExpiry || 0);
+                    if (gameStatus === 0 || gameStatus === 3 || gameStatus === 2
+                        || (gameStatus === 1 && !canReveal && blocksLeft === 0)) {
+                        console.log('[FortunePool] Pending game', gameId, 'expired (status:', gameStatus, 'blocksLeft:', blocksLeft, ')');
                         delete stored[gameId];
                         localStorage.setItem('fortune_pending_games', JSON.stringify(stored));
                         showToast('Previous game expired. Start a new one!', 'info');
@@ -1574,9 +1581,12 @@ async function checkCanReveal() {
         // V9: getGameStatus returns (status, canReveal, blocksUntilReveal, blocksUntilExpiry)
         const status = await State.fortunePoolContractPublic.getGameStatus(Game.gameId);
 
-        // Detect expired or non-existent games (status: 0=none, 3=expired)
+        // Detect expired or non-existent games
         const gameStatus = Number(status.status);
+        const blocksLeft = Number(status.blocksUntilExpiry || 0);
         if (gameStatus === 0 || gameStatus === 3) return 'expired';
+        // Reveal window passed but claimExpired not called yet
+        if (gameStatus === 1 && !status.canReveal && blocksLeft === 0) return 'expired';
 
         // Also get commitBlock from getGame if missing
         if (!Game.commitment.commitBlock) {
@@ -1677,7 +1687,11 @@ function pollCanRevealThenReveal() {
             // Get detailed game status including blocks remaining
             const status = await State.fortunePoolContractPublic.getGameStatus(Game.gameId);
             const gameStatus = Number(status.status);
-            if (gameStatus === 0 || gameStatus === 3) { clearStuckGame(); return; }
+            const blocksUntilExpiry = Number(status.blocksUntilExpiry || 0);
+            if (gameStatus === 0 || gameStatus === 3
+                || (gameStatus === 1 && !status.canReveal && blocksUntilExpiry === 0)) {
+                clearStuckGame(); return;
+            }
 
             const blocksUntilReveal = Number(status.blocksUntilReveal);
             const canReveal = status.canReveal === true;
@@ -1804,8 +1818,9 @@ async function forceExpireGame() {
         const readContract = State.fortunePoolContractPublic;
         if (readContract) {
             const status = await readContract.getGameStatus(Game.gameId);
-            if (Number(status.status) === 3 || Number(status.status) === 0) {
-                // Already expired — just clean up
+            const gs = Number(status.status);
+            if (gs === 3 || gs === 0 || gs === 2) {
+                // Already finalized — just clean up
                 removePendingGame(Game.gameId);
                 showToast('Game cleared! Start a new one.', 'success');
                 Game.phase = 'tier';
