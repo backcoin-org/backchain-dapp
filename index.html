@@ -165,8 +165,8 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 12px;
-            padding: 8px 16px;
+            gap: 8px;
+            padding: 8px 14px;
             border-radius: 12px;
             font-weight: 700;
             font-family: 'Inter', sans-serif;
@@ -221,6 +221,35 @@
             50% { opacity: 0.4; }
         }
 
+        /* Caixa unificada: address + BNB */
+        .wallet-unified {
+            display: flex;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(63, 63, 70, 0.5);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .wallet-addr {
+            padding: 3px 8px;
+            font-size: 12px;
+            color: #e4e4e7;
+            letter-spacing: 0.3px;
+        }
+        .wallet-native {
+            padding: 3px 8px;
+            font-size: 11px;
+            color: #a1a1aa;
+            background: rgba(63, 63, 70, 0.4);
+            border-left: 1px solid rgba(63, 63, 70, 0.5);
+            white-space: nowrap;
+        }
+        .wallet-native.low-gas {
+            color: #ef4444;
+            background: rgba(239, 68, 68, 0.1);
+            animation: pulse-red 1.5s infinite;
+        }
+
         .balance-pill {
             background: rgba(0, 0, 0, 0.4);
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -232,32 +261,12 @@
             display: flex;
             align-items: center;
         }
-        .native-pill {
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(113, 113, 122, 0.4);
-            padding: 4px 8px;
-            border-radius: 8px;
-            color: #a1a1aa;
-            font-size: 11px;
-            display: flex;
-            align-items: center;
-        }
-        .low-gas-pill {
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.4);
-            padding: 4px 8px;
-            border-radius: 8px;
-            color: #ef4444;
-            font-size: 11px;
-            display: flex;
-            align-items: center;
-            animation: pulse-red 1.5s infinite;
-        }
 
         @media (max-width: 480px) {
             .balance-pill { display: none; }
-            .native-pill, .low-gas-pill { font-size: 10px; padding: 3px 6px; }
-            .wallet-btn { padding: 8px 12px; font-size: 12px; }
+            .wallet-btn { padding: 8px 10px; font-size: 12px; gap: 8px; }
+            .wallet-addr { font-size: 11px; padding: 2px 6px; }
+            .wallet-native { font-size: 10px; padding: 2px 6px; }
         }
     </style>
 </head>
@@ -272,7 +281,7 @@
             
             <div class="flex items-center gap-3 px-2 mb-8">
                 <img src="./assets/bkc_logo_3d.png" alt="Backcoin.org Logo" class="h-10 w-auto rounded-full">
-                <span class="text-2xl font-bold text-amber-400">Backcoin.org</span>
+                <span class="text-2xl font-bold text-amber-400">Backchain</span>
             </div>
 
             <nav id="nav-links" class="flex flex-col flex-1">
@@ -356,7 +365,7 @@
                 <div class="flex items-center gap-3">
                     <button id="menu-btn" class="lg:hidden text-xl text-zinc-400 hover:text-white h-10 w-10"><i class="fa-solid fa-bars"></i></button>
                     <img src="./assets/bkc_logo_3d.png" alt="Backcoin.org Logo" class="h-8 w-auto rounded-full lg:hidden">
-                    <span id="mobileAppDisplay" class="text-xl font-bold text-amber-400 lg:hidden">Backcoin.org</span>
+                    <span id="mobileAppDisplay" class="text-xl font-bold text-amber-400 lg:hidden">Backchain</span>
                 </div>
                 
                 <div class="flex items-center ml-auto gap-2 sm:gap-3">

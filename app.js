@@ -242,15 +242,15 @@ function performUIUpdate(forcePageUpdate) {
         const isLowGas = nativeNum < 0.002;
         const shortAddress = formatAddress(currentAddress);
 
-        // Estilo "Conectado"
+        // Estilo "Conectado" — caixa única address+BNB
         const btnContent = `
             <div class="status-dot ${isLowGas ? 'low-gas' : ''}"></div>
-            <span>${shortAddress}</span>
+            <div class="wallet-unified">
+                <span class="wallet-addr">${shortAddress}</span>
+                <span class="wallet-native ${isLowGas ? 'low-gas' : ''}">${nativeDisplay} BNB</span>
+            </div>
             <div class="balance-pill">
                 ${balanceString} BKC
-            </div>
-            <div class="${isLowGas ? 'low-gas-pill' : 'native-pill'}">
-                ${nativeDisplay} BNB
             </div>
         `;
 
@@ -264,7 +264,7 @@ function performUIUpdate(forcePageUpdate) {
         
         // Atualiza textos auxiliares
         if (mobileAppDisplay) { 
-            mobileAppDisplay.textContent = 'Backcoin.org'; 
+            mobileAppDisplay.textContent = 'Backchain'; 
             mobileAppDisplay.classList.add('text-white'); 
             mobileAppDisplay.classList.remove('text-amber-400'); 
         }
@@ -299,7 +299,7 @@ function performUIUpdate(forcePageUpdate) {
         });
 
         if (mobileAppDisplay) { 
-            mobileAppDisplay.textContent = 'Backcoin.org'; 
+            mobileAppDisplay.textContent = 'Backchain'; 
             mobileAppDisplay.classList.add('text-amber-400'); 
             mobileAppDisplay.classList.remove('text-white'); 
         }
