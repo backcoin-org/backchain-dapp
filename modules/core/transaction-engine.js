@@ -342,11 +342,19 @@ export class TransactionEngine {
             console.log(`[TX] Signer obtained`);
 
             // Layer 3: ETH balance for gas
+            // V2.1: If approval is needed, ETH is mandatory (approval TX needs gas)
+            const resolvedApprovalEarly = this._resolveApproval(approval);
+            const needsApprovalGas = resolvedApprovalEarly && resolvedApprovalEarly.amount > 0n;
             try {
                 await ValidationLayer.validateEthForGas(userAddress);
             } catch (gasError) {
+                if (needsApprovalGas) {
+                    // Approval TX absolutely requires ETH — throw immediately
+                    throw ErrorHandler.create(ErrorTypes.INSUFFICIENT_ETH, {
+                        message: `Not enough ETH for gas. Token approval requires ETH to pay for gas fees.`
+                    });
+                }
                 console.warn('[TX] ETH gas validation failed, continuing anyway:', gasError.message);
-                // Don't throw - let the transaction try and potentially fail with a clearer error
             }
 
             // ═══════════════════════════════════════════════════════════════

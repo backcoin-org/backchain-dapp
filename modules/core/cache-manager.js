@@ -279,11 +279,7 @@ export const CacheManager = {
                 'token-balance-',
                 'allowance-'
             ],
-            'CancelCampaign': [
-                'campaign-',
-                'charity-stats',
-                'user-campaigns-'
-            ],
+            // CancelCampaign removed — actual TX name is CloseCampaign (added below)
             'Withdraw': [
                 'campaign-',
                 'charity-stats',
@@ -315,16 +311,31 @@ export const CacheManager = {
                 'pending-rewards-',
                 'network-pstake'
             ],
-            'ClaimReward': [
+            'ClaimRewards': [
                 'pending-rewards-',
                 'token-balance-',
                 'saved-rewards-'
+            ],
+            'CompoundRewards': [
+                'pending-rewards-',
+                'delegation-',
+                'user-pstake-',
+                'network-pstake'
             ],
 
             // ─────────────────────────────────────────────────────────────
             // NFT POOL
             // ─────────────────────────────────────────────────────────────
             'BuyNFT': [
+                'pool-info-',
+                'pool-nfts-',
+                'token-balance-',
+                'allowance-',
+                'user-nfts-',
+                'buy-price-',
+                'sell-price-'
+            ],
+            'BuySpecificNFT': [
                 'pool-info-',
                 'pool-nfts-',
                 'token-balance-',
@@ -341,15 +352,24 @@ export const CacheManager = {
                 'buy-price-',
                 'sell-price-'
             ],
+            'ApproveAllNFTs': [
+                'allowance-'
+            ],
 
             // ─────────────────────────────────────────────────────────────
             // FORTUNE POOL
             // ─────────────────────────────────────────────────────────────
-            'PlayGame': [
+            'CommitPlay': [
                 'fortune-pool-',
                 'fortune-stats-',
                 'token-balance-',
                 'allowance-',
+                'user-fortune-history-'
+            ],
+            'RevealPlay': [
+                'fortune-pool-',
+                'fortune-stats-',
+                'token-balance-',
                 'user-fortune-history-'
             ],
 
@@ -372,17 +392,42 @@ export const CacheManager = {
                 'rental-listings-',
                 'user-nfts-'
             ],
+            'WithdrawEarnings': [
+                'rental-listing-',
+                'token-balance-'
+            ],
             'UpdateListing': [
                 'rental-listing-'
+            ],
+            'BoostListing': [
+                'rental-listing-',
+                'token-balance-'
             ],
 
             // ─────────────────────────────────────────────────────────────
             // NOTARY
             // ─────────────────────────────────────────────────────────────
-            'Notarize': [
+            'Certify': [
                 'notary-',
                 'token-balance-',
                 'allowance-',
+                'user-documents-'
+            ],
+            'TransferCertificate': [
+                'notary-',
+                'user-documents-'
+            ],
+            'RegisterAsset': [
+                'notary-',
+                'token-balance-',
+                'user-documents-'
+            ],
+            'TransferAsset': [
+                'notary-',
+                'user-documents-'
+            ],
+            'AddAnnotation': [
+                'notary-',
                 'user-documents-'
             ],
 
@@ -425,9 +470,30 @@ export const CacheManager = {
             // ─────────────────────────────────────────────────────────────
             // NFT FUSION
             // ─────────────────────────────────────────────────────────────
-            'FuseNFT': ['user-nfts-', 'pool-info-'],
+            'FuseNFTs': ['user-nfts-', 'pool-info-'],
+            'BulkFuseNFTs': ['user-nfts-', 'pool-info-'],
             'SplitNFT': ['user-nfts-', 'pool-info-'],
-            'SplitToNFT': ['user-nfts-', 'pool-info-']
+            'SplitNFTTo': ['user-nfts-', 'pool-info-'],
+
+            // ─────────────────────────────────────────────────────────────
+            // CHARITY (extra)
+            // ─────────────────────────────────────────────────────────────
+            'CloseCampaign': [
+                'campaign-',
+                'charity-stats',
+                'user-campaigns-'
+            ],
+            'BoostCampaign': [
+                'campaign-',
+                'charity-stats',
+                'token-balance-'
+            ],
+
+            // ─────────────────────────────────────────────────────────────
+            // FAUCET / AIRDROP
+            // ─────────────────────────────────────────────────────────────
+            'FaucetClaim': ['token-balance-'],
+            'AirdropClaim': ['token-balance-']
         };
 
         const patterns = invalidationMap[txType];
