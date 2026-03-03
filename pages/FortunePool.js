@@ -2470,6 +2470,7 @@ async function loadPoolData() {
 
 async function loadHistory() {
     try {
+        // 1. Try API first
         const endpoint = API_ENDPOINTS.fortuneGames || 'https://getfortunegames-4wvdcuoouq-uc.a.run.app';
         const url = State.userAddress ? `${endpoint}?player=${State.userAddress}&limit=15` : `${endpoint}?limit=15`;
         const res = await fetch(url);
@@ -2480,18 +2481,110 @@ async function loadHistory() {
             const wins = data.games.filter(g => g.isWin || (g.prizeWon && BigInt(g.prizeWon) > 0n)).length;
             const el = document.getElementById('win-rate');
             if (el) el.textContent = `${wins}/${data.games.length} wins`;
-        } else {
-            const list = document.getElementById('history-list');
-            if (list) list.innerHTML = `
-                <div class="p-6 text-center">
-                    <span class="text-3xl block mb-2 opacity-30">🎰</span>
-                    <p class="text-zinc-500 text-sm">No games yet</p>
-                    <p class="text-zinc-600 text-xs mt-1">Be the first to play!</p>
-                </div>
-            `;
+            return;
         }
+
+        // 2. Fallback: read on-chain events if API returns empty and user is connected
+        if (State.userAddress) {
+            const onChainGames = await loadHistoryFromChain(State.userAddress);
+            if (onChainGames.length > 0) {
+                renderHistoryList(onChainGames);
+                const wins = onChainGames.filter(g => g.prizeWon && BigInt(g.prizeWon) > 0n).length;
+                const el = document.getElementById('win-rate');
+                if (el) el.textContent = `${wins}/${onChainGames.length} wins`;
+                return;
+            }
+        }
+
+        const list = document.getElementById('history-list');
+        if (list) list.innerHTML = `
+            <div class="p-6 text-center">
+                <span class="text-3xl block mb-2 opacity-30">🎰</span>
+                <p class="text-zinc-500 text-sm">No games yet</p>
+                <p class="text-zinc-600 text-xs mt-1">Be the first to play!</p>
+            </div>
+        `;
     } catch (e) {
         console.error("loadHistory error:", e);
+    }
+}
+
+/**
+ * Fallback: read GameRevealed + GameDetails events directly from the contract.
+ * Used when the indexer API has no data (e.g. after V12 redeploy).
+ */
+async function loadHistoryFromChain(userAddress) {
+    try {
+        const { NetworkManager } = await import('../modules/core/index.js');
+        const provider = NetworkManager.getProvider();
+        const currentBlock = await provider.getBlockNumber();
+        // V12 deploy block on Sepolia; don't scan before this
+        const deployBlock = 10_332_794;
+        // Scan last 50k blocks max (~7 days on Sepolia)
+        const fromBlock = Math.max(deployBlock, currentBlock - 50_000);
+
+        const iface = new ethers.Interface([
+            'event GameRevealed(uint256 indexed gameId, address indexed player, uint256 grossWager, uint256 prizeWon, uint8 tierMask, uint8 matchCount, address operator)',
+            'event GameDetails(uint256 indexed gameId, uint8 tierMask, uint256[] guesses, uint256[] rolls, bool[] matches)'
+        ]);
+
+        const contract = new ethers.Contract(FORTUNE_POOL_ADDRESS, iface, provider);
+
+        // Query GameRevealed for this player
+        const revealFilter = contract.filters.GameRevealed(null, userAddress);
+        const revealLogs = await contract.queryFilter(revealFilter, fromBlock, currentBlock);
+
+        if (revealLogs.length === 0) return [];
+
+        // Get gameIds to query GameDetails
+        const gameIds = revealLogs.map(l => l.args.gameId);
+
+        // Query GameDetails for those gameIds (indexed by gameId)
+        const detailsMap = {};
+        for (const gid of gameIds) {
+            try {
+                const detFilter = contract.filters.GameDetails(gid);
+                const detLogs = await contract.queryFilter(detFilter, fromBlock, currentBlock);
+                if (detLogs.length > 0) {
+                    const d = detLogs[0].args;
+                    detailsMap[gid.toString()] = {
+                        guesses: d.guesses.map(Number),
+                        rolls: d.rolls.map(Number),
+                        matches: d.matches
+                    };
+                }
+            } catch (_) { /* individual detail query failed, skip */ }
+        }
+
+        // Build game objects compatible with renderHistoryList
+        const games = revealLogs.map(log => {
+            const a = log.args;
+            const gid = a.gameId.toString();
+            const details = detailsMap[gid] || {};
+            const tierMask = Number(a.tierMask);
+            const isCumulative = tierMask === 7; // all 3 tiers = 0b111
+
+            return {
+                gameId: gid,
+                player: userAddress,
+                wagerAmount: a.grossWager.toString(),
+                prizeWon: a.prizeWon.toString(),
+                isWin: a.prizeWon > 0n,
+                tierMask,
+                matchCount: Number(a.matchCount),
+                isCumulative,
+                guesses: details.guesses || [],
+                rolls: details.rolls || [],
+                txHash: log.transactionHash,
+                timestamp: Date.now() / 1000 // approximate; could read block.timestamp
+            };
+        }).reverse(); // newest first
+
+        console.log(`[FortunePool] Loaded ${games.length} games from on-chain events`);
+        return games.slice(0, 15);
+    } catch (e) {
+        console.warn('[FortunePool] On-chain history fallback failed:', e.message);
+        return [];
     }
 }
 
