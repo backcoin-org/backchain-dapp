@@ -729,12 +729,29 @@ export function initWalletSubscriptions(callback) {
         }
     }
 
+    // 🔥 V9.1: Deduplicate subscribeAccount events (fires many times per connection)
+    let lastHandledAddress = currentAddress || null;
+    let lastHandledConnected = modal.getIsConnectedState() || false;
+    let handlerBusy = false;
+
     const handler = async (account) => {
         try {
             const { address, isConnected } = account;
             const provider = modal.getWalletProvider();
             const chainId = modal.getChainId();
-            console.log(`[Wallet] subscribeAccount event: connected=${isConnected}, chain=${chainId}, addr=${address?.slice(0,10) || 'null'}, hasProvider=${!!provider}`);
+
+            // Skip duplicate events (same address + same connection state)
+            if (address === lastHandledAddress && isConnected === lastHandledConnected && !(!lastHandledConnected && isConnected)) {
+                return;
+            }
+
+            // Skip if already processing a connection setup
+            if (handlerBusy && isConnected && address === lastHandledAddress) {
+                return;
+            }
+
+            console.log(`[Wallet] subscribeAccount: connected=${isConnected}, chain=${chainId}, addr=${address?.slice(0,10) || 'null'}, hasProvider=${!!provider}`);
+
             if (isConnected) {
                 let activeAddress = address || modal.getAddress();
                 if (!activeAddress && provider) {
@@ -752,17 +769,28 @@ export function initWalletSubscriptions(callback) {
                 }
 
                 if (activeAddress && provider) {
+                    // Only process if address changed or transitioning from disconnected
+                    if (activeAddress === lastHandledAddress && lastHandledConnected) {
+                        return;
+                    }
+                    handlerBusy = true;
+                    lastHandledAddress = activeAddress;
+                    lastHandledConnected = true;
+
                     const ethersProvider = new ethers.BrowserProvider(provider);
                     State.web3Provider = provider;
 
                     callback({ isConnected: true, address: activeAddress, chainId, isNewConnection: true });
                     await setupSignerAndLoadData(ethersProvider, activeAddress);
+                    handlerBusy = false;
 
                 } else if (activeAddress && !provider) {
-                    // Provider not ready yet (can happen with social login) — wait for it
+                    // Provider not ready yet (can happen with social login) — wait for next event
                     console.log('[Wallet] Address available but no provider yet, waiting...');
                 } else {
                     if (balancePollingInterval) clearInterval(balancePollingInterval);
+                    lastHandledAddress = null;
+                    lastHandledConnected = false;
                     State.isConnected = false;
                     State.userAddress = null;
                     State.signer = null;
@@ -770,7 +798,11 @@ export function initWalletSubscriptions(callback) {
                     callback({ isConnected: false });
                 }
             } else {
+                if (lastHandledConnected === false) return; // Already disconnected
                 if (balancePollingInterval) clearInterval(balancePollingInterval);
+                lastHandledAddress = null;
+                lastHandledConnected = false;
+                handlerBusy = false;
                 State.isConnected = false;
                 State.userAddress = null;
                 State.signer = null;
@@ -778,6 +810,7 @@ export function initWalletSubscriptions(callback) {
                 callback({ isConnected: false });
             }
         } catch (err) {
+            handlerBusy = false;
             console.error('[Wallet] subscribeAccount error:', err);
         }
     };
