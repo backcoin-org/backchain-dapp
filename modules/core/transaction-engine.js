@@ -46,7 +46,16 @@ const ENGINE_CONFIG = {
     
     // Gas settings
     GAS_SAFETY_MARGIN: 20,  // 20% margin
-    DEFAULT_GAS_LIMIT: 500000n  // Fallback gas limit
+    DEFAULT_GAS_LIMIT: 500000n,  // Fallback gas limit
+
+    // Phase duration estimates (seconds) for countdown UI
+    PHASE_ESTIMATES: {
+        'validating': 2,
+        'approving': 8,
+        'simulating': 2,
+        'confirming': 10,
+        'waiting': 30
+    }
 };
 
 /**
@@ -71,7 +80,9 @@ export class TransactionUI {
         this.showToasts = showToasts;
         this.originalContent = null;
         this.originalDisabled = false;
-        
+        this._timerInterval = null;
+        this._timerSeconds = 0;
+
         if (this.button) {
             this.originalContent = this.button.innerHTML;
             this.originalDisabled = this.button.disabled;
@@ -79,10 +90,11 @@ export class TransactionUI {
     }
 
     /**
-     * Sets the current phase and updates button
+     * Sets the current phase and updates button with countdown timer
      */
     setPhase(phase) {
         if (!this.button) return;
+        this._stopTimer();
 
         const phases = {
             'validating': { text: 'Validating...', icon: '🔍' },
@@ -95,14 +107,40 @@ export class TransactionUI {
         };
 
         const config = phases[phase] || { text: phase, icon: '⏳' };
-        
+        const estimate = ENGINE_CONFIG.PHASE_ESTIMATES[phase];
+
         this.button.disabled = true;
         this.button.innerHTML = `
             <span class="tx-status">
                 <span class="tx-icon">${config.icon}</span>
                 <span class="tx-text">${config.text}</span>
+                ${estimate ? `<span class="tx-timer" style="opacity:0.6;font-size:0.85em;margin-left:4px">(~${estimate}s)</span>` : ''}
             </span>
         `;
+
+        if (estimate) this._startTimer(estimate);
+    }
+
+    _startTimer(estimatedSeconds) {
+        this._timerSeconds = estimatedSeconds;
+        this._timerInterval = setInterval(() => {
+            this._timerSeconds--;
+            const timerEl = this.button?.querySelector('.tx-timer');
+            if (timerEl) {
+                timerEl.textContent = this._timerSeconds > 0 ? `(~${this._timerSeconds}s)` : '';
+            }
+            if (this._timerSeconds <= 0) {
+                clearInterval(this._timerInterval);
+                this._timerInterval = null;
+            }
+        }, 1000);
+    }
+
+    _stopTimer() {
+        if (this._timerInterval) {
+            clearInterval(this._timerInterval);
+            this._timerInterval = null;
+        }
     }
 
     /**
@@ -110,7 +148,8 @@ export class TransactionUI {
      */
     setRetry(attempt, maxAttempts) {
         if (!this.button) return;
-        
+        this._stopTimer();
+
         this.button.innerHTML = `
             <span class="tx-status">
                 <span class="tx-icon">🔄</span>
@@ -124,7 +163,8 @@ export class TransactionUI {
      */
     cleanup() {
         if (!this.button) return;
-        
+        this._stopTimer();
+
         this.button.innerHTML = this.originalContent;
         this.button.disabled = this.originalDisabled;
     }
