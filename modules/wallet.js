@@ -75,9 +75,11 @@ const metadata = {
     icons: [window.location.origin + '/assets/bkc_logo_3d.png']
 };
 
-// 🔥 V9.1: Force-enable social login in Reown API response
-// Workaround: Reown dashboard shows Social ON but API returns isEnabled:false
-// This intercepts the config fetch and patches the response before AppKit processes it
+// 🔥 V9.2: Force-enable social login in Reown API response
+// Workaround: Reown Cloud may return social_login with isEnabled:false or missing config array.
+// AppKit's ConfigUtil.processApi requires BOTH isEnabled:true AND a non-empty config array.
+// This intercepts the /config fetch and ensures both fields are set correctly.
+const SOCIAL_CONFIG = ['google', 'x', 'facebook', 'apple', 'discord', 'github', 'farcaster', 'email'];
 const _originalFetch = window.fetch;
 window.fetch = async function(...args) {
     const response = await _originalFetch.apply(this, args);
@@ -85,14 +87,27 @@ window.fetch = async function(...args) {
         const url = String(args[0] || '');
         if (url.includes('api.web3modal.org') && url.includes('/config')) {
             const data = await response.json();
-            if (data?.features) {
-                for (const f of data.features) {
-                    if (f.id === 'social_login' || f.id === 'reown_authentication') {
-                        f.isEnabled = true;
-                    }
-                }
+            if (!data.features) data.features = [];
+
+            // Ensure social_login exists with isEnabled + full config array
+            let socialFeature = data.features.find(f => f.id === 'social_login');
+            if (!socialFeature) {
+                socialFeature = { id: 'social_login' };
+                data.features.push(socialFeature);
             }
-            console.log('[Wallet] Patched Reown config: social_login + reown_authentication forced ON');
+            socialFeature.isEnabled = true;
+            socialFeature.config = SOCIAL_CONFIG;
+
+            // Ensure reown_authentication exists and is enabled
+            let authFeature = data.features.find(f => f.id === 'reown_authentication');
+            if (!authFeature) {
+                authFeature = { id: 'reown_authentication' };
+                data.features.push(authFeature);
+            }
+            authFeature.isEnabled = true;
+            authFeature.config = ['enabled'];
+
+            console.log('[Wallet] Patched Reown config: social_login + reown_authentication forced ON', data.features.map(f => `${f.id}:${f.isEnabled}`));
             return new Response(JSON.stringify(data), {
                 status: 200,
                 headers: { 'Content-Type': 'application/json' }
