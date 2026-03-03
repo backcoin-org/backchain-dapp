@@ -832,7 +832,15 @@ export function initWalletSubscriptions(callback) {
 }
 
 export function openConnectModal() { modal.open(); }
-export function openOnramp() { modal.open({ view: 'OnRampProviders' }); }
+export function openOnramp() {
+    const address = State.userAddress || modal.getAddress() || '';
+    const url = new URL('https://meldcrypto.com');
+    url.searchParams.set('publicKey', 'WXETMuFUQmqqybHuRkSgxv:25B8LJHSfpG6LVjR2ytU5Cwh7Z4Sch2ocoU');
+    url.searchParams.set('destinationCurrencyCode', 'BNB');
+    if (address) url.searchParams.set('walletAddress', address);
+    url.searchParams.set('externalCustomerId', WALLETCONNECT_PROJECT_ID);
+    window.open(url.toString(), '_blank', 'noopener,noreferrer');
+}
 export async function disconnectWallet() { await modal.disconnect(); }
 
 // ============================================================================
