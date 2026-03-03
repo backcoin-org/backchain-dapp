@@ -94,6 +94,13 @@ const COMBO_WIN_CHANCE = 1 - TIERS.reduce((miss, tr) => miss * (1 - 1 / tr.range
 const COMBO_WIN_PCT = (COMBO_WIN_CHANCE * 100).toFixed(0); // "28"
 const COMBO_BOOST_VS_EASY = Math.round(((COMBO_WIN_CHANCE - 1 / TIERS[0].range) / (1 / TIERS[0].range)) * 100); // ~18
 
+/** Remove a pending game from localStorage */
+function removePendingGame(gameId) {
+    const stored = JSON.parse(localStorage.getItem('fortune_pending_games') || '{}');
+    delete stored[gameId];
+    localStorage.setItem('fortune_pending_games', JSON.stringify(stored));
+}
+
 // ============================================================================
 // GAME STATE
 // ============================================================================
@@ -1737,6 +1744,102 @@ async function logHashDiagnostic() {
     }
 }
 
+/**
+ * Handle permanent reveal errors (InvalidGuessRange, HashMismatch, TooLateToReveal).
+ * These can never succeed — clear the game and let user start fresh.
+ */
+function handlePermanentRevealError(msg) {
+    if (revealCheckInterval) clearInterval(revealCheckInterval);
+
+    let userMsg = 'Game cannot be revealed.';
+    if (msg.includes('InvalidGuessRange') || msg.includes('0x5c844fb4')) {
+        userMsg = 'Invalid guess range — game must expire before you can play again.';
+    } else if (msg.includes('TooLateToReveal') || msg.includes('0x40fc9596')) {
+        userMsg = 'Reveal window has passed — game expired.';
+        // Game is expired; clean up immediately
+        removePendingGame(Game.gameId);
+        showToast('Game expired. You can start a new one!', 'info');
+        Game.phase = 'tier';
+        renderPhase();
+        return;
+    } else if (msg.includes('HashMismatch') || msg.includes('0x3f4d6053')) {
+        userMsg = 'Commitment hash mismatch — game data corrupted.';
+    }
+
+    showToast(userMsg, 'error');
+
+    // Show an "Expire Game" button so user can claim after window passes
+    const container = document.getElementById('fortune-content');
+    if (!container) return;
+
+    const statusText = document.getElementById('reveal-status-text');
+    if (statusText) {
+        statusText.innerHTML = `
+            <div class="text-red-400 mb-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${userMsg}</div>
+            <div class="text-zinc-400 text-sm">Wait ~30 min for the reveal window to pass, then tap "Expire & Reset".</div>
+        `;
+    }
+
+    const btnEl = document.getElementById('btn-reveal');
+    const btnTextEl = document.getElementById('reveal-btn-text');
+    if (btnEl) {
+        btnEl.disabled = false;
+        btnEl.classList.remove('from-emerald-500', 'to-green-500', 'from-amber-500', 'to-yellow-500');
+        btnEl.classList.add('bg-gradient-to-r', 'from-red-500', 'to-orange-500', 'text-white');
+        btnEl.onclick = () => forceExpireGame();
+    }
+    if (btnTextEl) btnTextEl.textContent = 'Expire & Reset';
+}
+
+/**
+ * Call claimExpired() on-chain to force-expire a stuck game,
+ * or just clean up localStorage if already expired.
+ */
+async function forceExpireGame() {
+    const btn = document.getElementById('btn-reveal');
+    try {
+        if (btn) { btn.disabled = true; }
+
+        // First check if game is already expired on-chain
+        const readContract = State.fortunePoolContractPublic;
+        if (readContract) {
+            const status = await readContract.getGameStatus(Game.gameId);
+            if (Number(status.status) === 3 || Number(status.status) === 0) {
+                // Already expired — just clean up
+                removePendingGame(Game.gameId);
+                showToast('Game cleared! Start a new one.', 'success');
+                Game.phase = 'tier';
+                renderPhase();
+                return;
+            }
+        }
+
+        // Try claimExpired on-chain
+        const { NetworkManager } = await import('../modules/core/index.js');
+        const signer = await NetworkManager.getSigner();
+        const fortuneAddr = window.contractAddresses?.fortunePool;
+        const abi = ['function claimExpired(uint256 gameId) external'];
+        const contract = new (window.ethers.Contract)(fortuneAddr, abi, signer);
+
+        showToast('Expiring game...', 'info');
+        const tx = await contract.claimExpired(Game.gameId);
+        await tx.wait();
+
+        removePendingGame(Game.gameId);
+        showToast('Game expired! Start a new one.', 'success');
+        Game.phase = 'tier';
+        renderPhase();
+    } catch (e) {
+        const msg = e.message || '';
+        if (msg.includes('CommitmentNotExpired') || msg.includes('0x')) {
+            showToast('Game not yet expired — wait a few more minutes', 'warning');
+        } else {
+            showToast('Error: ' + (msg.slice(0, 80) || 'Could not expire game'), 'error');
+        }
+        if (btn) { btn.disabled = false; }
+    }
+}
+
 async function executeReveal() {
     const btn = document.getElementById('btn-reveal');
 
@@ -1769,7 +1872,6 @@ async function executeReveal() {
 
             onError: (error) => {
                 if (error.cancelled) {
-                    // User rejected MetaMask — show manual reveal button, don't auto-retry
                     console.log('[FortunePool] User rejected reveal, showing manual button');
                     showToast('You can reveal your result when ready', 'info');
                     autoRevealAttempt = 0;
@@ -1777,7 +1879,23 @@ async function executeReveal() {
                     return;
                 }
 
-                const msg = error.message || '';
+                const msg = (error.message || '') + ' ' + (error.original?.message || '');
+
+                // Permanent errors — NEVER retry (would just waste gas)
+                const isPermanent = msg.includes('InvalidGuessRange') || msg.includes('0x5c844fb4')
+                    || msg.includes('InvalidGuessCount') || msg.includes('0xbcfa8e99')
+                    || msg.includes('HashMismatch') || msg.includes('0x3f4d6053')
+                    || msg.includes('TooLateToReveal') || msg.includes('0x40fc9596')
+                    || msg.includes('AlreadyFinalized') || msg.includes('0x475a2535');
+
+                if (isPermanent) {
+                    console.error('[FortunePool] Permanent reveal error — not retrying:', msg);
+                    autoRevealAttempt = 0;
+                    handlePermanentRevealError(msg);
+                    return;
+                }
+
+                // Transient errors — retry (timing, blockhash, etc.)
                 const isRevert = error.type === 'tx_reverted' || msg.includes('revert') ||
                                  msg.includes('failed') || msg.includes('0x92555c0e') ||
                                  msg.includes('BlockhashUnavailable') || msg.includes('CALL_EXCEPTION');
@@ -1796,8 +1914,18 @@ async function executeReveal() {
     } catch (e) {
         console.error('Reveal error:', e);
         const msg = e.message || '';
-        const isRevert = msg.includes('revert') || msg.includes('failed') || msg.includes('BlockhashUnavailable');
 
+        // Permanent errors — don't retry
+        const isPermanent = msg.includes('InvalidGuessRange') || msg.includes('0x5c844fb4')
+            || msg.includes('HashMismatch') || msg.includes('0x3f4d6053')
+            || msg.includes('TooLateToReveal') || msg.includes('0x40fc9596');
+        if (isPermanent) {
+            autoRevealAttempt = 0;
+            handlePermanentRevealError(msg);
+            return;
+        }
+
+        const isRevert = msg.includes('revert') || msg.includes('failed') || msg.includes('BlockhashUnavailable');
         if (isRevert && autoRevealAttempt < AUTO_REVEAL_DELAYS.length - 1) {
             autoRevealAttempt++;
             console.warn(`[FortunePool] Reveal exception (attempt ${autoRevealAttempt}), auto-retrying...`);
