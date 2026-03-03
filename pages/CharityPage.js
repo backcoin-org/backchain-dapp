@@ -1725,3 +1725,6 @@ export const CharityPage = {
     // Wizard
     wizardSelectCategory, wizardNext, wizardBack, cancelCreate, wizardLaunch
 };
+
+// Expose to global scope for inline onclick handlers
+window.CharityPage = CharityPage;
