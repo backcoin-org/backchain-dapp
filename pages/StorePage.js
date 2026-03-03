@@ -68,9 +68,10 @@ const BOOST_TO_TIER = { 1000: 0, 2500: 1, 4000: 2, 5000: 3 };
 
 /**
  * Optimistically update State.myBoosters after a transaction,
- * then sync with API in background. This avoids the indexer delay
- * that causes stale fusion/inventory UI.
+ * then schedule a delayed sync with API to confirm real data.
+ * The delay gives the indexer time to index the new transaction.
  */
+let _boosterSyncTimer = null;
 function optimisticBoosterUpdate({ add = [], remove = [] }) {
     let boosters = [...(State.myBoosters || [])];
     // Remove by tokenId
@@ -83,8 +84,16 @@ function optimisticBoosterUpdate({ add = [], remove = [] }) {
         boosters.push({ tokenId: BigInt(entry.tokenId), boostBips: entry.boostBips });
     }
     State.myBoosters = boosters;
-    // Background sync — will eventually overwrite with real data
-    loadMyBoostersFromAPI(true).catch(() => {});
+    // Delayed sync — wait for indexer to catch up, then refresh with real data
+    if (_boosterSyncTimer) clearTimeout(_boosterSyncTimer);
+    _boosterSyncTimer = setTimeout(async () => {
+        _boosterSyncTimer = null;
+        try {
+            await loadMyBoostersFromAPI(true);
+            renderInventory();
+            renderFusionSection();
+        } catch {}
+    }, 8000);
 }
 
 // ============================================================================
