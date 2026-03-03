@@ -2099,7 +2099,7 @@ function renderActivityItem(item, showAddress = false) {
     if (actType.includes('DONATION') || actType.includes('CHARITY')) {
         const netAmount = details.netAmount || details.amount;
         const campaignId = details.campaignId;
-        if (netAmount && BigInt(netAmount) > 0n) { extraInfo = `<span style="color:#ec4899;font-weight:700">${formatBigNumber(BigInt(netAmount)).toFixed(2)} BKC</span>`; if (campaignId) extraInfo += `<span style="margin-left:4px;font-size:9px;color:var(--dash-text-3)">Campaign #${campaignId}</span>`; }
+        if (netAmount && BigInt(netAmount) > 0n) { extraInfo = `<span style="color:#ec4899;font-weight:700">${parseFloat(ethers.formatEther(BigInt(netAmount))).toFixed(4)} BNB</span>`; if (campaignId) extraInfo += `<span style="margin-left:4px;font-size:9px;color:var(--dash-text-3)">Campaign #${campaignId}</span>`; }
     }
     if (actType.includes('CLAIM') || actType.includes('REWARD')) {
         const amount = details.amount || item.amount;
@@ -2108,6 +2108,7 @@ function renderActivityItem(item, showAddress = false) {
         if (feePaid && BigInt(feePaid) > 0n) extraInfo += `<span style="margin-left:4px;font-size:9px;color:var(--dash-text-3)">(fee: ${formatBigNumber(BigInt(feePaid)).toFixed(2)})</span>`;
     }
     const isPromote = actType.includes('PROMOT') || actType.includes('ADS') || actType.includes('ADVERTIS');
+    const isDonation = actType.includes('DONATION') || actType.includes('CHARITY');
     if (isPromote) {
         const promoAmount = details.promotionFee || details.amount || item.amount;
         if (promoAmount && BigInt(promoAmount) > 0n) extraInfo = `<span style="color:#fbbf24;font-weight:700">${parseFloat(ethers.formatEther(BigInt(promoAmount))).toFixed(4)} BNB</span>`;
@@ -2117,15 +2118,16 @@ function renderActivityItem(item, showAddress = false) {
 
     const txLink = item.txHash ? `${EXPLORER_BASE_URL}${item.txHash}` : '#';
     let amountDisplay = '';
-    if (isPromote) {
-        const promoAmount = details.promotionFee || details.amount || item.amount;
-        if (promoAmount && BigInt(promoAmount) > 0n) amountDisplay = parseFloat(ethers.formatEther(BigInt(promoAmount))).toFixed(4);
+    const isNativeCurrency = isPromote || isDonation;
+    if (isNativeCurrency) {
+        const nativeAmount = isDonation ? (details.netAmount || details.amount) : (details.promotionFee || details.amount || item.amount);
+        if (nativeAmount && BigInt(nativeAmount) > 0n) amountDisplay = parseFloat(ethers.formatEther(BigInt(nativeAmount))).toFixed(4);
     } else {
         let rawAmount = item.amount || details.netAmount || details.amount || details.wagerAmount || details.prizeWon || "0";
         const amountNum = formatBigNumber(BigInt(rawAmount));
         amountDisplay = amountNum > 0.001 ? amountNum.toFixed(2) : '';
     }
-    const currencyLabel = isPromote ? 'BNB' : 'BKC';
+    const currencyLabel = isNativeCurrency ? 'BNB' : 'BKC';
 
     return `
         <a href="${txLink}" target="_blank" class="dash-activity-item" title="${fullDateTime}">

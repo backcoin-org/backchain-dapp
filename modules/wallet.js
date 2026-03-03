@@ -832,6 +832,7 @@ export function initWalletSubscriptions(callback) {
 }
 
 export function openConnectModal() { modal.open(); }
+export function openOnramp() { modal.open({ view: 'OnRampProviders' }); }
 export async function disconnectWallet() { await modal.disconnect(); }
 
 // ============================================================================

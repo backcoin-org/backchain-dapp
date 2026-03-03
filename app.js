@@ -10,7 +10,7 @@ const ethers = window.ethers;
 
 import { DOMElements } from './dom-elements.js';
 import { State } from './state.js';
-import { initPublicProvider, initWalletSubscriptions, disconnectWallet, openConnectModal } from './modules/wallet.js';
+import { initPublicProvider, initWalletSubscriptions, disconnectWallet, openConnectModal, openOnramp } from './modules/wallet.js';
 import { showToast, showShareModal, showWelcomeModal, dismissSplash, openModal, closeModal } from './ui-feedback.js';
 import { formatBigNumber } from './utils.js';
 import { loadAddresses } from './config.js';
@@ -280,6 +280,12 @@ function performUIUpdate(forcePageUpdate) {
             statUserBalanceEl.textContent = balanceString;
         }
 
+        // Show Buy Crypto buttons when connected
+        const buyCryptoBtn = document.getElementById('customBuyCryptoBtn');
+        const buyCryptoBtnMobile = document.getElementById('customBuyCryptoBtnMobile');
+        buyCryptoBtn?.classList.replace('hidden', 'flex');
+        buyCryptoBtnMobile?.classList.replace('hidden', 'flex');
+
     } else {
         // Estilo "Desconectado"
         const defaultText = `<i class="fa-solid fa-plug"></i> ${t('common.connectWallet')}`;
@@ -300,6 +306,12 @@ function performUIUpdate(forcePageUpdate) {
         
         if (adminLinkContainer) adminLinkContainer.style.display = 'none';
         if (statUserBalanceEl) statUserBalanceEl.textContent = '--';
+
+        // Hide Buy Crypto buttons when disconnected
+        const buyCryptoBtn = document.getElementById('customBuyCryptoBtn');
+        const buyCryptoBtnMobile = document.getElementById('customBuyCryptoBtnMobile');
+        buyCryptoBtn?.classList.replace('flex', 'hidden');
+        buyCryptoBtnMobile?.classList.replace('flex', 'hidden');
     }
 
     const targetPage = activePageId || 'dashboard';
@@ -403,7 +415,13 @@ function setupGlobalListeners() {
 
     if (connectButton) connectButton.addEventListener('click', handleConnectClick);
     if (connectButtonMobile) connectButtonMobile.addEventListener('click', handleConnectClick);
-    
+
+    // Buy Crypto (on-ramp) buttons
+    const buyCryptoBtn = document.getElementById('customBuyCryptoBtn');
+    const buyCryptoBtnMobile = document.getElementById('customBuyCryptoBtnMobile');
+    if (buyCryptoBtn) buyCryptoBtn.addEventListener('click', openOnramp);
+    if (buyCryptoBtnMobile) buyCryptoBtnMobile.addEventListener('click', openOnramp);
+
     if (shareButton) shareButton.addEventListener('click', () => showShareModal(State.userAddress));
 
     if (menuButton && sidebar && sidebarBackdrop) {
