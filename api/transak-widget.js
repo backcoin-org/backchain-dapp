@@ -5,8 +5,8 @@
 
 const TRANSAK_API_KEY = process.env.TRANSAK_API_KEY;
 const TRANSAK_API_SECRET = process.env.TRANSAK_API_SECRET;
-const BASE_URL = 'https://api.transak.com';
-const WIDGET_BASE = 'https://global.transak.com';
+const TOKEN_URL = 'https://api.transak.com/partners/api/v2/refresh-token';
+const SESSION_URL = 'https://api-gateway.transak.com/api/v2/auth/session';
 
 const setCorsHeaders = (res) => {
     res.setHeader('Access-Control-Allow-Credentials', true);
@@ -27,7 +27,7 @@ async function getAccessToken() {
         return cachedAccessToken;
     }
 
-    const res = await fetch(`${BASE_URL}/partners/api/v2/refresh-token`, {
+    const res = await fetch(TOKEN_URL, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -63,7 +63,7 @@ async function createWidgetUrl(walletAddress) {
     };
     if (walletAddress) widgetParams.walletAddress = walletAddress;
 
-    const res = await fetch(`${BASE_URL}/partners/api/v2/session`, {
+    const res = await fetch(SESSION_URL, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -91,15 +91,17 @@ export default async function handler(req, res) {
 
     try {
         const walletAddress = req.query.address || '';
+        console.log('[transak-widget] Generating widget URL for:', walletAddress || '(no address)');
         const widgetUrl = await createWidgetUrl(walletAddress);
 
         if (!widgetUrl) {
             return res.status(500).json({ error: 'Failed to generate widget URL' });
         }
 
+        console.log('[transak-widget] Widget URL generated successfully');
         return res.status(200).json({ url: widgetUrl });
     } catch (err) {
-        console.error('[transak-widget]', err.message);
+        console.error('[transak-widget] Error:', err.message);
         return res.status(500).json({ error: err.message });
     }
 }
