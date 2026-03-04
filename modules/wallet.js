@@ -832,18 +832,22 @@ export function initWalletSubscriptions(callback) {
 }
 
 export function openConnectModal() { modal.open(); }
-export function openOnramp() {
+export async function openOnramp() {
     const address = State.userAddress || modal.getAddress() || '';
-    const url = new URL('https://global.transak.com');
-    url.searchParams.set('apiKey', '70c3b553-b13b-49f4-8718-47c643f94dba');
-    url.searchParams.set('productsAvailed', 'BUY');
-    url.searchParams.set('cryptoCurrencyCode', 'BNB');
-    url.searchParams.set('network', 'opbnb');
-    url.searchParams.set('fiatCurrency', 'BRL');
-    url.searchParams.set('defaultPaymentMethod', 'pix');
+
+    // Try Transak first (partner referral revenue)
+    try {
+        const res = await fetch(`/api/transak-widget?address=${encodeURIComponent(address)}`);
+        const data = await res.json();
+        if (data.url) { window.open(data.url, '_blank'); return; }
+    } catch (_) { /* fall through to Meld */ }
+
+    // Fallback: Meld (no referral, but works)
+    const url = new URL('https://meldcrypto.com');
+    url.searchParams.set('publicKey', 'WXETMuFUQmqqybHuRkSgxv:25B8LJHSfpG6LVjR2ytU5Cwh7Z4Sch2ocoU');
+    url.searchParams.set('destinationCurrencyCode', 'BNB_OPBNB');
     if (address) url.searchParams.set('walletAddress', address);
-    url.searchParams.set('disableWalletAddressForm', 'true');
-    url.searchParams.set('referrerDomain', 'backcoin.org');
+    url.searchParams.set('externalCustomerId', WALLETCONNECT_PROJECT_ID);
     window.open(url.toString(), '_blank');
 }
 export async function disconnectWallet() { await modal.disconnect(); }
