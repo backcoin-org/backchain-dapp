@@ -125,6 +125,7 @@ export default async function handler(req, res) {
                         'Content-Type': 'application/json',
                         'accept': 'application/json',
                         'access-token': token,
+                        'Authorization': `Bearer ${token}`,
                     },
                     body: JSON.stringify({
                         widgetParams: {
