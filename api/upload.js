@@ -6,7 +6,32 @@ import { Formidable } from 'formidable';
 import fs from 'fs';
 import { ethers } from 'ethers';
 import crypto from 'crypto';
-import { uploadToIrys } from './_irys.js';
+import { Uploader } from '@irys/upload';
+import { Ethereum } from '@irys/upload-ethereum';
+
+const IRYS_GATEWAY = 'https://devnet.irys.xyz';
+let cachedUploader = null;
+
+async function getIrysUploader() {
+    if (cachedUploader) return cachedUploader;
+    cachedUploader = await Uploader(Ethereum)
+        .withWallet(process.env.IRYS_PRIVATE_KEY)
+        .withRpc('https://ethereum-sepolia-rpc.publicnode.com')
+        .devnet();
+    return cachedUploader;
+}
+
+async function uploadToIrys(fileBuffer, fileName, mimeType) {
+    const uploader = await getIrysUploader();
+    const tags = [
+        { name: 'Content-Type', value: mimeType },
+        { name: 'File-Name', value: fileName },
+        { name: 'App-Name', value: 'Backchain' },
+    ];
+    const receipt = await uploader.upload(fileBuffer, { tags });
+    console.log(`[Irys] Uploaded: ${IRYS_GATEWAY}/${receipt.id} (${(fileBuffer.length / 1024).toFixed(0)}KB)`);
+    return { Hash: receipt.id };
+}
 
 export const config = {
     api: {

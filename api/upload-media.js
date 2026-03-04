@@ -5,7 +5,8 @@
 
 import { Formidable } from 'formidable';
 import fs from 'fs';
-import { uploadToIrys, IRYS_GATEWAY } from './_irys.js';
+import { Uploader } from '@irys/upload';
+import { Ethereum } from '@irys/upload-ethereum';
 
 export const config = {
     api: {
@@ -13,6 +14,31 @@ export const config = {
         responseLimit: false,
     },
 };
+
+// Devnet uses devnet.irys.xyz; mainnet uses gateway.irys.xyz
+const IRYS_GATEWAY = 'https://devnet.irys.xyz';
+let cachedUploader = null;
+
+async function getIrysUploader() {
+    if (cachedUploader) return cachedUploader;
+    cachedUploader = await Uploader(Ethereum)
+        .withWallet(process.env.IRYS_PRIVATE_KEY)
+        .withRpc('https://ethereum-sepolia-rpc.publicnode.com')
+        .devnet();
+    return cachedUploader;
+}
+
+async function uploadToIrys(fileBuffer, fileName, mimeType) {
+    const uploader = await getIrysUploader();
+    const tags = [
+        { name: 'Content-Type', value: mimeType },
+        { name: 'File-Name', value: fileName },
+        { name: 'App-Name', value: 'Backchain' },
+    ];
+    const receipt = await uploader.upload(fileBuffer, { tags });
+    console.log(`[Irys] Uploaded: ${IRYS_GATEWAY}/${receipt.id} (${(fileBuffer.length / 1024).toFixed(0)}KB)`);
+    return { Hash: receipt.id };
+}
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const ALLOWED_TYPES = [
