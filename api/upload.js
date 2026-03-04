@@ -1,24 +1,35 @@
 // api/upload.js
-// V4.0: Notary document upload with signature verification via Irys
-// Used by: Notary page (certified document uploads)
+// V4.0: Migrated from Lighthouse to Irys/Arweave (devnet = free)
+// Used by: Notary document upload with signature verification
 
 import { Formidable } from 'formidable';
 import fs from 'fs';
 import { ethers } from 'ethers';
 import crypto from 'crypto';
-import { Uploader } from '@irys/upload';
-import { Ethereum } from '@irys/upload-ethereum';
+
+export const config = {
+    api: {
+        bodyParser: false,
+        responseLimit: false,
+    },
+};
 
 const IRYS_GATEWAY = 'https://devnet.irys.xyz';
-let cachedUploader = null;
 
-async function getIrysUploader() {
-    if (cachedUploader) return cachedUploader;
-    cachedUploader = await Uploader(Ethereum)
-        .withWallet(process.env.IRYS_PRIVATE_KEY)
-        .withRpc('https://ethereum-sepolia-rpc.publicnode.com')
-        .devnet();
-    return cachedUploader;
+// Dynamic import of Irys SDK (loaded only when needed)
+let _uploaderPromise = null;
+function getIrysUploader() {
+    if (!_uploaderPromise) {
+        _uploaderPromise = (async () => {
+            const { Uploader } = await import('@irys/upload');
+            const { Ethereum } = await import('@irys/upload-ethereum');
+            return Uploader(Ethereum)
+                .withWallet(process.env.IRYS_PRIVATE_KEY)
+                .withRpc('https://ethereum-sepolia-rpc.publicnode.com')
+                .devnet();
+        })();
+    }
+    return _uploaderPromise;
 }
 
 async function uploadToIrys(fileBuffer, fileName, mimeType) {
@@ -32,13 +43,6 @@ async function uploadToIrys(fileBuffer, fileName, mimeType) {
     console.log(`[Irys] Uploaded: ${IRYS_GATEWAY}/${receipt.id} (${(fileBuffer.length / 1024).toFixed(0)}KB)`);
     return { Hash: receipt.id };
 }
-
-export const config = {
-    api: {
-        bodyParser: false,
-        responseLimit: false,
-    },
-};
 
 const setCorsHeaders = (res) => {
     res.setHeader('Access-Control-Allow-Credentials', true);
@@ -58,7 +62,8 @@ export default async function handler(req, res) {
 
     console.log(`[${new Date().toISOString()}] Upload request received`);
 
-    if (!process.env.IRYS_PRIVATE_KEY) {
+    const IRYS_KEY = process.env.IRYS_PRIVATE_KEY;
+    if (!IRYS_KEY) {
         console.error('IRYS_PRIVATE_KEY not configured');
         return res.status(500).json({ error: 'Server configuration error.' });
     }
@@ -71,7 +76,7 @@ export default async function handler(req, res) {
             uploadDir: '/tmp',
             keepExtensions: true,
             multiples: false,
-            filter: () => true, // Accept ALL file types (notary can certify anything)
+            filter: () => true,
         });
 
         const [fields, files] = await new Promise((resolve, reject) => {
@@ -132,15 +137,15 @@ export default async function handler(req, res) {
         hashSum.update(fileBuffer);
         const contentHash = '0x' + hashSum.digest('hex');
 
-        // Upload to Irys
+        // Upload to Irys (devnet = free)
         const irysData = await uploadToIrys(fileBuffer, fileName, fileMime);
         const ipfsHash = irysData?.Hash;
 
         if (!ipfsHash) {
             throw new Error('Irys returned no hash: ' + JSON.stringify(irysData).slice(0, 200));
         }
-
         const ipfsUri = `irys://${ipfsHash}`;
+
         console.log('Uploaded (Irys):', ipfsUri);
 
         return res.status(200).json({

@@ -1,12 +1,11 @@
 // api/upload-media.js
-// V4.0: Unified media upload via Irys (Arweave-backed, decentralized)
-// Devnet: free (~60 day persistence). Mainnet: permanent (user pays crypto).
+// V4.0: Unified media upload via Irys/Arweave (devnet = free, mainnet = permanent)
+// Uses @irys/upload SDK with dynamic imports for serverless compatibility.
 // Used by: Agora posts, avatars, Charity campaigns, general media
 
 import { Formidable } from 'formidable';
 import fs from 'fs';
-import { Uploader } from '@irys/upload';
-import { Ethereum } from '@irys/upload-ethereum';
+import crypto from 'crypto';
 
 export const config = {
     api: {
@@ -15,17 +14,33 @@ export const config = {
     },
 };
 
-// Devnet uses devnet.irys.xyz; mainnet uses gateway.irys.xyz
 const IRYS_GATEWAY = 'https://devnet.irys.xyz';
-let cachedUploader = null;
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+const ALLOWED_TYPES = [
+    'video/webm', 'video/mp4', 'video/ogg',
+    'audio/webm', 'audio/ogg', 'audio/mpeg',
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+    'application/pdf', 'text/plain', 'application/json', 'text/html', 'text/csv',
+    'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/zip', 'application/x-zip-compressed',
+    'application/octet-stream'
+];
 
-async function getIrysUploader() {
-    if (cachedUploader) return cachedUploader;
-    cachedUploader = await Uploader(Ethereum)
-        .withWallet(process.env.IRYS_PRIVATE_KEY)
-        .withRpc('https://ethereum-sepolia-rpc.publicnode.com')
-        .devnet();
-    return cachedUploader;
+// Dynamic import of Irys SDK (loaded only when needed, avoids bundle issues)
+let _uploaderPromise = null;
+function getIrysUploader() {
+    if (!_uploaderPromise) {
+        _uploaderPromise = (async () => {
+            const { Uploader } = await import('@irys/upload');
+            const { Ethereum } = await import('@irys/upload-ethereum');
+            return Uploader(Ethereum)
+                .withWallet(process.env.IRYS_PRIVATE_KEY)
+                .withRpc('https://ethereum-sepolia-rpc.publicnode.com')
+                .devnet();
+        })();
+    }
+    return _uploaderPromise;
 }
 
 async function uploadToIrys(fileBuffer, fileName, mimeType) {
@@ -39,18 +54,6 @@ async function uploadToIrys(fileBuffer, fileName, mimeType) {
     console.log(`[Irys] Uploaded: ${IRYS_GATEWAY}/${receipt.id} (${(fileBuffer.length / 1024).toFixed(0)}KB)`);
     return { Hash: receipt.id };
 }
-
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
-const ALLOWED_TYPES = [
-    'video/webm', 'video/mp4', 'video/ogg',
-    'audio/webm', 'audio/ogg', 'audio/mpeg',
-    'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-    'application/pdf', 'text/plain', 'application/json', 'text/html', 'text/csv',
-    'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/zip', 'application/x-zip-compressed',
-    'application/octet-stream'
-];
 
 const setCorsHeaders = (res) => {
     res.setHeader('Access-Control-Allow-Credentials', true);
@@ -68,7 +71,8 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
-    if (!process.env.IRYS_PRIVATE_KEY) {
+    const IRYS_KEY = process.env.IRYS_PRIVATE_KEY;
+    if (!IRYS_KEY) {
         console.error('IRYS_PRIVATE_KEY not configured');
         return res.status(500).json({ error: 'Server configuration error.' });
     }

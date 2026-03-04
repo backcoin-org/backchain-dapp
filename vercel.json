@@ -37,9 +37,9 @@
     }
   ],
   "functions": {
-    "api/**/*.js": {
-      "maxDuration": 120,
-      "memory": 1024
-    }
+    "api/faucet.js": { "maxDuration": 60 },
+    "api/upload.js": { "maxDuration": 60 },
+    "api/upload-media.js": { "maxDuration": 60 },
+    "api/referral.js": { "maxDuration": 60 }
   }
 }
