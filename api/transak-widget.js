@@ -24,9 +24,11 @@ let tokenExpiresAt = 0;
 
 async function getAccessToken() {
     if (cachedAccessToken && Date.now() < tokenExpiresAt) {
+        console.log('[transak-widget] Using cached access token');
         return cachedAccessToken;
     }
 
+    console.log('[transak-widget] Refreshing access token...');
     const res = await fetch(TOKEN_URL, {
         method: 'POST',
         headers: {
@@ -36,15 +38,21 @@ async function getAccessToken() {
         body: JSON.stringify({ apiKey: TRANSAK_API_KEY }),
     });
 
+    const text = await res.text();
+    console.log('[transak-widget] Token response:', res.status, text.slice(0, 500));
+
     if (!res.ok) {
-        const text = await res.text();
         throw new Error(`Transak token refresh failed: ${res.status} ${text}`);
     }
 
-    const data = await res.json();
+    const data = JSON.parse(text);
     cachedAccessToken = data.data?.accessToken || data.accessToken;
+    if (!cachedAccessToken) {
+        throw new Error(`No accessToken in response: ${JSON.stringify(data).slice(0, 300)}`);
+    }
     // Refresh 1 day before expiry (token valid 7 days)
     tokenExpiresAt = Date.now() + 6 * 24 * 60 * 60 * 1000;
+    console.log('[transak-widget] Access token obtained, length:', cachedAccessToken.length);
     return cachedAccessToken;
 }
 
