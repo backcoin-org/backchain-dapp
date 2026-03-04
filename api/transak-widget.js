@@ -97,16 +97,34 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Transak credentials not configured' });
     }
 
+    const debug = req.query.debug === '1';
+
     try {
         const walletAddress = req.query.address || '';
-        console.log('[transak-widget] Generating widget URL for:', walletAddress || '(no address)');
+
+        // Debug mode: return token refresh result
+        if (debug) {
+            cachedAccessToken = null; tokenExpiresAt = 0;
+            const tokenRes = await fetch(TOKEN_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'api-secret': TRANSAK_API_SECRET },
+                body: JSON.stringify({ apiKey: TRANSAK_API_KEY }),
+            });
+            const tokenText = await tokenRes.text();
+            return res.status(200).json({
+                tokenStatus: tokenRes.status,
+                tokenResponse: tokenText.slice(0, 1000),
+                envKeySet: !!TRANSAK_API_KEY,
+                envSecretSet: !!TRANSAK_API_SECRET,
+            });
+        }
+
         const widgetUrl = await createWidgetUrl(walletAddress);
 
         if (!widgetUrl) {
             return res.status(500).json({ error: 'Failed to generate widget URL' });
         }
 
-        console.log('[transak-widget] Widget URL generated successfully');
         return res.status(200).json({ url: widgetUrl });
     } catch (err) {
         console.error('[transak-widget] Error:', err.message);
