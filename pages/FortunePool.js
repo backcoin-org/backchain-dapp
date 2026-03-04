@@ -2005,29 +2005,29 @@ function renderResult(container) {
             </div>
 
             <!-- Animated Result Grid -->
-            <div class="grid ${cfg.isSingle ? 'grid-cols-1 max-w-[220px] mx-auto' : 'grid-cols-3'} gap-3 mb-4">
+            <div class="grid ${cfg.isSingle ? 'grid-cols-1 max-w-[220px] mx-auto' : 'grid-cols-3'} gap-2 sm:gap-3 mb-4">
                 ${tiersToShow.map((tier, idx) => {
                     const pick = picks[idx];
                     const roll = rolls[idx];
                     const isMatch = matches[idx];
 
                     return `
-                        <div class="text-center p-3 rounded-xl ${isMatch ? 'bg-emerald-500/20 border border-emerald-500/50' : 'bg-zinc-800/50 border border-zinc-700/50'}" id="result-tier-${idx}">
+                        <div class="text-center p-2 sm:p-3 rounded-xl ${isMatch ? 'bg-emerald-500/20 border border-emerald-500/50' : 'bg-zinc-800/50 border border-zinc-700/50'}" id="result-tier-${idx}">
                             <p class="text-[10px] text-zinc-500 mb-1">${tier.emoji} ${tier.name}</p>
-                            <div class="flex items-center justify-center gap-2">
+                            <div class="flex items-center justify-center gap-1 sm:gap-2">
                                 <div class="text-center">
                                     <p class="text-[8px] text-zinc-600 mb-0.5">YOU</p>
-                                    <div class="w-12 h-12 rounded-lg bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border ${tier.borderColor} flex items-center justify-center">
-                                        <span class="text-xl font-black ${tier.textColor}">${pick}</span>
+                                    <div class="w-9 h-9 sm:w-12 sm:h-12 rounded-lg bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border ${tier.borderColor} flex items-center justify-center">
+                                        <span class="text-base sm:text-xl font-black ${tier.textColor}">${pick}</span>
                                     </div>
                                 </div>
-                                <span class="text-xl" id="match-icon-${idx}" style="opacity: 0">
+                                <span class="text-base sm:text-xl" id="match-icon-${idx}" style="opacity: 0">
                                     ${isMatch ? '=' : '≠'}
                                 </span>
                                 <div class="text-center">
                                     <p class="text-[8px] text-zinc-600 mb-0.5">ROLL</p>
-                                    <div class="w-12 h-12 rounded-lg ${isMatch ? 'bg-emerald-500/30 border-emerald-500' : 'bg-zinc-700/50 border-zinc-600'} border flex items-center justify-center overflow-hidden">
-                                        <span class="text-xl font-black ${isMatch ? 'text-emerald-400' : 'text-zinc-300'}" id="roll-num-${idx}" style="opacity: 0">${roll !== undefined ? roll : '?'}</span>
+                                    <div class="w-9 h-9 sm:w-12 sm:h-12 rounded-lg ${isMatch ? 'bg-emerald-500/30 border-emerald-500' : 'bg-zinc-700/50 border-zinc-600'} border flex items-center justify-center overflow-hidden">
+                                        <span class="text-base sm:text-xl font-black ${isMatch ? 'text-emerald-400' : 'text-zinc-300'}" id="roll-num-${idx}" style="opacity: 0">${roll !== undefined ? roll : '?'}</span>
                                     </div>
                                 </div>
                             </div>
