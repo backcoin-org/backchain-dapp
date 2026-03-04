@@ -832,19 +832,19 @@ export function initWalletSubscriptions(callback) {
 }
 
 export function openConnectModal() { modal.open(); }
-export async function openOnramp() {
+export function openOnramp() {
     const address = State.userAddress || modal.getAddress() || '';
-    try {
-        const res = await fetch(`/api/transak-widget?address=${encodeURIComponent(address)}`);
-        const data = await res.json();
-        if (data.url) {
-            window.open(data.url, '_blank');
-        } else {
-            throw new Error(data.error || 'No URL returned');
-        }
-    } catch (e) {
-        console.error('[Wallet] Transak on-ramp error:', e.message);
-    }
+    const url = new URL('https://global.transak.com');
+    url.searchParams.set('apiKey', '70c3b553-b13b-49f4-8718-47c643f94dba');
+    url.searchParams.set('productsAvailed', 'BUY');
+    url.searchParams.set('cryptoCurrencyCode', 'BNB');
+    url.searchParams.set('network', 'opbnb');
+    url.searchParams.set('fiatCurrency', 'BRL');
+    url.searchParams.set('defaultPaymentMethod', 'pix');
+    if (address) url.searchParams.set('walletAddress', address);
+    url.searchParams.set('disableWalletAddressForm', 'true');
+    url.searchParams.set('referrerDomain', 'backcoin.org');
+    window.open(url.toString(), '_blank');
 }
 export async function disconnectWallet() { await modal.disconnect(); }
 
