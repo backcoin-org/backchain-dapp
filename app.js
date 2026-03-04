@@ -242,16 +242,12 @@ function performUIUpdate(forcePageUpdate) {
         const isLowGas = nativeNum < 0.002;
         const shortAddress = formatAddress(currentAddress);
 
-        // Estilo "Conectado" — caixa única address+BNB
+        // Estilo "Conectado" — clean, sem caixas
         const btnContent = `
             <div class="status-dot ${isLowGas ? 'low-gas' : ''}"></div>
-            <div class="wallet-unified">
-                <span class="wallet-addr">${shortAddress}</span>
-                <span class="wallet-native ${isLowGas ? 'low-gas' : ''}">${nativeDisplay} BNB</span>
-            </div>
-            <div class="balance-pill">
-                ${balanceString} BKC
-            </div>
+            <span class="wallet-addr">${shortAddress}</span>
+            <span class="wallet-native ${isLowGas ? 'low-gas' : ''}">${nativeDisplay} BNB</span>
+            <span class="balance-pill">${balanceString} BKC</span>
         `;
 
         connectBtns.forEach(btn => {
@@ -284,7 +280,12 @@ function performUIUpdate(forcePageUpdate) {
         const buyCryptoBtn = document.getElementById('customBuyCryptoBtn');
         const buyCryptoBtnMobile = document.getElementById('customBuyCryptoBtnMobile');
         buyCryptoBtn?.classList.replace('hidden', 'flex');
-        buyCryptoBtnMobile?.classList.replace('hidden', 'flex');
+        // Mobile: só mostra Buy Crypto se BNB estiver baixo (low gas)
+        if (isLowGas) {
+            buyCryptoBtnMobile?.classList.replace('hidden', 'flex');
+        } else {
+            buyCryptoBtnMobile?.classList.replace('flex', 'hidden');
+        }
 
     } else {
         // Estilo "Desconectado"
