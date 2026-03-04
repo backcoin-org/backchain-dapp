@@ -75,6 +75,7 @@ async function createWidgetUrl(walletAddress) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            'accept': 'application/json',
             'access-token': accessToken,
         },
         body: JSON.stringify({ widgetParams }),
@@ -102,20 +103,47 @@ export default async function handler(req, res) {
     try {
         const walletAddress = req.query.address || '';
 
-        // Debug mode: return token refresh result
+        // Debug mode: test full flow and return both results
         if (debug) {
             cachedAccessToken = null; tokenExpiresAt = 0;
+            // Step 1: get token
             const tokenRes = await fetch(TOKEN_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'api-secret': TRANSAK_API_SECRET },
                 body: JSON.stringify({ apiKey: TRANSAK_API_KEY }),
             });
             const tokenText = await tokenRes.text();
+            const tokenData = JSON.parse(tokenText);
+            const token = tokenData.data?.accessToken;
+
+            // Step 2: try session with token
+            let sessionResult = null;
+            if (token) {
+                const sessionRes = await fetch(SESSION_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'accept': 'application/json',
+                        'access-token': token,
+                    },
+                    body: JSON.stringify({
+                        widgetParams: {
+                            apiKey: TRANSAK_API_KEY,
+                            referrerDomain: 'backcoin.org',
+                            productsAvailed: 'BUY',
+                            cryptoCurrencyCode: 'BNB',
+                            network: 'opbnb',
+                            fiatCurrency: 'BRL',
+                        }
+                    }),
+                });
+                sessionResult = { status: sessionRes.status, body: (await sessionRes.text()).slice(0, 500) };
+            }
+
             return res.status(200).json({
                 tokenStatus: tokenRes.status,
-                tokenResponse: tokenText.slice(0, 1000),
-                envKeySet: !!TRANSAK_API_KEY,
-                envSecretSet: !!TRANSAK_API_SECRET,
+                tokenLength: token?.length || 0,
+                sessionResult,
             });
         }
 
