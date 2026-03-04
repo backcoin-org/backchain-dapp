@@ -27,6 +27,7 @@ const NOTARY_ABI = [
 ];
 
 const IPFS_GATEWAYS = [
+    'https://gateway.irys.xyz/',
     'https://gateway.lighthouse.storage/ipfs/',
     'https://cloudflare-ipfs.com/ipfs/',
     'https://dweb.link/ipfs/',

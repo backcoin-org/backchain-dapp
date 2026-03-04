@@ -176,7 +176,7 @@ export function getRpcStats() {
 // 4. IPFS & ARWEAVE GATEWAYS
 // ============================================================================
 
-export const ipfsGateway = "https://gateway.lighthouse.storage/ipfs/";
+export const ipfsGateway = "https://devnet.irys.xyz/";
 
 export const IPFS_GATEWAYS = [
     "https://dweb.link/ipfs/",

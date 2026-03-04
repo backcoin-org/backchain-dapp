@@ -1,10 +1,10 @@
 // modules/core/irys-uploader.js
-// Media Upload Pipeline — Optimize + Permanent Storage (Lighthouse/Filecoin)
+// Media Upload Pipeline — Optimize + Decentralized Storage (Irys/Arweave)
 //
-// Flow: file → client-side optimization → POST /api/upload-media (Lighthouse) → IPFS+Filecoin
+// Flow: file → client-side optimization → POST /api/upload-media → Irys (Arweave)
 //
-// Lighthouse: pay once, stored forever on IPFS + Filecoin. ~$0.005/GB.
-// No MetaMask required — server-side upload via API key.
+// Devnet: free (~60 day persistence). Mainnet: user pays crypto (permanent).
+// Server-side upload via relayer wallet.
 
 import { optimizeMedia } from './media-optimizer.js';
 
@@ -13,7 +13,7 @@ import { optimizeMedia } from './media-optimizer.js';
 // ============================================================================
 
 export const UPLOAD_CONFIG = {
-    gateway: 'https://gateway.lighthouse.storage/ipfs',
+    gateway: 'https://devnet.irys.xyz',
     maxFileSize: 100 * 1024 * 1024, // 100MB
     allowedTypes: {
         document: ['application/pdf', 'text/plain', 'application/json', 'text/html', 'text/csv'],
@@ -86,7 +86,7 @@ export async function uploadFile(file, options = {}) {
         type: optimized.type
     };
 
-    console.log(`[Upload] Permanent (Lighthouse): ${result.url} (${_formatSize(optimized.size)})`);
+    console.log(`[Upload] Irys: ${result.url} (${_formatSize(optimized.size)})`);
     onProgress('done', result.url);
     return result;
 }
@@ -137,6 +137,8 @@ export async function getUploadPrice(bytes) {
 // ============================================================================
 
 const IPFS_GATEWAYS = [
+    'https://devnet.irys.xyz/',
+    'https://gateway.irys.xyz/',
     'https://gateway.lighthouse.storage/ipfs/',
     'https://gateway.pinata.cloud/ipfs/',
     'https://dweb.link/ipfs/',
@@ -174,6 +176,12 @@ export function resolveContentUrl(uri) {
         if (txId.startsWith('Qm') || txId.startsWith('bafy')) {
             return `${IPFS_GATEWAYS[0]}${txId}`;
         }
+        return `https://gateway.irys.xyz/${txId}`;
+    }
+
+    // irys://txId → Irys gateway
+    if (trimmed.startsWith('irys://')) {
+        const txId = trimmed.slice(7);
         return `https://gateway.irys.xyz/${txId}`;
     }
 

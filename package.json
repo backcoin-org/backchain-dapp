@@ -44,6 +44,8 @@
     "node": "20.x"
   },
   "dependencies": {
+    "@irys/upload": "^0.0.15",
+    "@irys/upload-ethereum": "^0.0.16",
     "@openzeppelin/contracts": "^4.9.3",
     "@openzeppelin/contracts-upgradeable": "4.9.3",
     "@reown/appkit": "^1.8.18",

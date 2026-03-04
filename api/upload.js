@@ -1,12 +1,12 @@
 // api/upload.js
-// ✅ VERSION V3.0: Migrated from Pinata to Lighthouse (IPFS+Filecoin permanent storage)
-// Used by: Notary document upload with signature verification
+// V4.0: Notary document upload with signature verification via Irys
+// Used by: Notary page (certified document uploads)
 
 import { Formidable } from 'formidable';
 import fs from 'fs';
-import https from 'https';
 import { ethers } from 'ethers';
 import crypto from 'crypto';
+import { uploadToIrys } from './_irys.js';
 
 export const config = {
     api: {
@@ -33,9 +33,8 @@ export default async function handler(req, res) {
 
     console.log(`[${new Date().toISOString()}] Upload request received`);
 
-    const API_KEY = process.env.LIGHTHOUSE_API_KEY;
-    if (!API_KEY) {
-        console.error('LIGHTHOUSE_API_KEY not configured');
+    if (!process.env.IRYS_PRIVATE_KEY) {
+        console.error('IRYS_PRIVATE_KEY not configured');
         return res.status(500).json({ error: 'Server configuration error.' });
     }
 
@@ -43,7 +42,7 @@ export default async function handler(req, res) {
 
     try {
         const form = new Formidable({
-            maxFileSize: 20 * 1024 * 1024, // 20MB (Lighthouse allows much more)
+            maxFileSize: 20 * 1024 * 1024, // 20MB
             uploadDir: '/tmp',
             keepExtensions: true,
             multiples: false,
@@ -108,39 +107,16 @@ export default async function handler(req, res) {
         hashSum.update(fileBuffer);
         const contentHash = '0x' + hashSum.digest('hex');
 
-        // Upload via https.request (most reliable in serverless)
-        const lhData = await new Promise((resolve, reject) => {
-            const boundary = '----LH' + crypto.randomBytes(16).toString('hex');
-            const reqBody = Buffer.concat([
-                Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: ${fileMime}\r\n\r\n`),
-                fileBuffer,
-                Buffer.from(`\r\n--${boundary}--\r\n`)
-            ]);
-            const opts = {
-                hostname: 'upload.lighthouse.storage', path: '/api/v0/add', method: 'POST',
-                headers: { 'Authorization': `Bearer ${API_KEY}`, 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': reqBody.length }
-            };
-            const r = https.request(opts, (resp) => {
-                let d = '';
-                resp.on('data', c => d += c);
-                resp.on('end', () => {
-                    if (resp.statusCode !== 200) return reject(new Error(`Lighthouse HTTP ${resp.statusCode}: ${d.slice(0, 300)}`));
-                    try { resolve(JSON.parse(d)); } catch { reject(new Error('Lighthouse bad JSON: ' + d.slice(0, 300))); }
-                });
-            });
-            r.on('error', e => reject(new Error('Lighthouse network: ' + e.message)));
-            r.setTimeout(60000, () => { r.destroy(); reject(new Error('Lighthouse timeout')); });
-            r.write(reqBody);
-            r.end();
-        });
+        // Upload to Irys
+        const irysData = await uploadToIrys(fileBuffer, fileName, fileMime);
+        const ipfsHash = irysData?.Hash;
 
-        const ipfsHash = lhData?.Hash;
         if (!ipfsHash) {
-            throw new Error('Lighthouse returned no hash: ' + JSON.stringify(lhData).slice(0, 200));
+            throw new Error('Irys returned no hash: ' + JSON.stringify(irysData).slice(0, 200));
         }
-        const ipfsUri = `ipfs://${ipfsHash}`;
 
-        console.log('Uploaded (Lighthouse):', ipfsUri);
+        const ipfsUri = `irys://${ipfsHash}`;
+        console.log('Uploaded (Irys):', ipfsUri);
 
         return res.status(200).json({
             success: true,

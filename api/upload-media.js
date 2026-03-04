@@ -1,12 +1,11 @@
 // api/upload-media.js
-// V3.2: Unified media upload via Lighthouse REST API (IPFS + Filecoin permanent storage)
-// Uses https.request for maximum serverless compatibility.
+// V4.0: Unified media upload via Irys (Arweave-backed, decentralized)
+// Devnet: free (~60 day persistence). Mainnet: permanent (user pays crypto).
 // Used by: Agora posts, avatars, Charity campaigns, general media
 
 import { Formidable } from 'formidable';
 import fs from 'fs';
-import crypto from 'crypto';
-import https from 'https';
+import { uploadToIrys, IRYS_GATEWAY } from './_irys.js';
 
 export const config = {
     api: {
@@ -15,7 +14,6 @@ export const config = {
     },
 };
 
-const IPFS_GATEWAY = 'https://gateway.lighthouse.storage/ipfs/';
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const ALLOWED_TYPES = [
     'video/webm', 'video/mp4', 'video/ogg',
@@ -27,49 +25,6 @@ const ALLOWED_TYPES = [
     'application/zip', 'application/x-zip-compressed',
     'application/octet-stream'
 ];
-
-function uploadToLighthouse(fileBuffer, fileName, mimeType, apiKey) {
-    return new Promise((resolve, reject) => {
-        const boundary = '----LH' + crypto.randomBytes(16).toString('hex');
-        const body = Buffer.concat([
-            Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: ${mimeType}\r\n\r\n`),
-            fileBuffer,
-            Buffer.from(`\r\n--${boundary}--\r\n`)
-        ]);
-
-        const options = {
-            hostname: 'upload.lighthouse.storage',
-            path: '/api/v0/add',
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': `multipart/form-data; boundary=${boundary}`,
-                'Content-Length': body.length
-            }
-        };
-
-        const req = https.request(options, (res) => {
-            let data = '';
-            res.on('data', chunk => data += chunk);
-            res.on('end', () => {
-                if (res.statusCode !== 200) {
-                    reject(new Error(`Lighthouse HTTP ${res.statusCode}: ${data.slice(0, 300)}`));
-                    return;
-                }
-                try {
-                    resolve(JSON.parse(data));
-                } catch (e) {
-                    reject(new Error('Lighthouse invalid response: ' + data.slice(0, 300)));
-                }
-            });
-        });
-
-        req.on('error', (e) => reject(new Error('Lighthouse network error: ' + e.message)));
-        req.setTimeout(60000, () => { req.destroy(); reject(new Error('Lighthouse upload timeout (60s)')); });
-        req.write(body);
-        req.end();
-    });
-}
 
 const setCorsHeaders = (res) => {
     res.setHeader('Access-Control-Allow-Credentials', true);
@@ -87,9 +42,8 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
-    const API_KEY = process.env.LIGHTHOUSE_API_KEY;
-    if (!API_KEY) {
-        console.error('LIGHTHOUSE_API_KEY not configured');
+    if (!process.env.IRYS_PRIVATE_KEY) {
+        console.error('IRYS_PRIVATE_KEY not configured');
         return res.status(500).json({ error: 'Server configuration error.' });
     }
 
@@ -136,17 +90,16 @@ export default async function handler(req, res) {
         const sizeMB = (fileSize / (1024 * 1024)).toFixed(1);
         console.log(`Media: ${fileName} | Size: ${sizeMB} MB | Type: ${fileMime}`);
 
-        // Upload via https.request (most reliable in serverless)
         const fileBuffer = fs.readFileSync(file.filepath);
-        const lhData = await uploadToLighthouse(fileBuffer, fileName, fileMime, API_KEY);
-        const ipfsHash = lhData?.Hash;
+        const irysData = await uploadToIrys(fileBuffer, fileName, fileMime);
+        const ipfsHash = irysData?.Hash;
 
         if (!ipfsHash) {
-            throw new Error('Lighthouse returned no hash: ' + JSON.stringify(lhData).slice(0, 200));
+            throw new Error('Irys returned no hash: ' + JSON.stringify(irysData).slice(0, 200));
         }
 
-        const mediaUrl = `${IPFS_GATEWAY}${ipfsHash}`;
-        console.log('Media uploaded (Lighthouse):', mediaUrl);
+        const mediaUrl = `${IRYS_GATEWAY}/${ipfsHash}`;
+        console.log('Media uploaded (Irys):', mediaUrl);
 
         return res.status(200).json({
             success: true,
