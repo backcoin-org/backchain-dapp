@@ -832,14 +832,19 @@ export function initWalletSubscriptions(callback) {
 }
 
 export function openConnectModal() { modal.open(); }
-export function openOnramp() {
+export async function openOnramp() {
     const address = State.userAddress || modal.getAddress() || '';
-    const url = new URL('https://meldcrypto.com');
-    url.searchParams.set('publicKey', 'WXETMuFUQmqqybHuRkSgxv:25B8LJHSfpG6LVjR2ytU5Cwh7Z4Sch2ocoU');
-    url.searchParams.set('destinationCurrencyCode', 'BNB_OPBNB');
-    if (address) url.searchParams.set('walletAddress', address);
-    url.searchParams.set('externalCustomerId', WALLETCONNECT_PROJECT_ID);
-    window.open(url.toString(), '_blank', 'noopener,noreferrer');
+    try {
+        const res = await fetch(`/api/transak-widget?address=${encodeURIComponent(address)}`);
+        const data = await res.json();
+        if (data.url) {
+            window.open(data.url, '_blank');
+        } else {
+            throw new Error(data.error || 'No URL returned');
+        }
+    } catch (e) {
+        console.error('[Wallet] Transak on-ramp error:', e.message);
+    }
 }
 export async function disconnectWallet() { await modal.disconnect(); }
 
