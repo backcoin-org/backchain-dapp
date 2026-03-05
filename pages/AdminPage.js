@@ -154,6 +154,7 @@ let adminState = {
 
     // Overview
     faucetStatus: null,
+    ecosystemStats: null,
 
     // Settings
     settingsOpenSection: 'ugc-points',
@@ -234,18 +235,14 @@ const loadFaucetStatus = async () => {
             return;
         }
         const [status, stats, isPaused] = await Promise.all([
-            faucetContract.getFaucetStatus(),
-            faucetContract.getStats(),
+            faucetContract.getFaucetStatus(),  // V2: 3 values (ethBalance, ethPerDrip, estimatedClaims)
+            faucetContract.getStats(),          // V2: 3 values (eth, claims, users)
             faucetContract.paused(),
         ]);
         adminState.faucetStatus = {
             ethBalance: status.ethBalance,
-            tokenBalance: status.tokenBalance,
             ethPerDrip: status.ethPerDrip,
-            tokensPerDrip: status.tokensPerDrip,
-            estimatedEthClaims: status.estimatedEthClaims,
-            estimatedTokenClaims: status.estimatedTokenClaims,
-            totalTokens: stats.tokens,
+            estimatedClaims: status.estimatedClaims,
             totalEth: stats.eth,
             totalClaims: stats.claims,
             totalUsers: stats.users,
@@ -270,9 +267,9 @@ const renderFaucetCard = () => {
         return;
     }
 
-    const tokenBal = parseFloat(ethers.formatEther(fs.tokenBalance));
     const ethBal = parseFloat(ethers.formatEther(fs.ethBalance));
-    const totalTokensDist = parseFloat(ethers.formatEther(fs.totalTokens));
+    const ethPerDrip = parseFloat(ethers.formatEther(fs.ethPerDrip));
+    const totalEthDist = parseFloat(ethers.formatEther(fs.totalEth));
     const statusColor = fs.isPaused ? 'text-red-400' : 'text-green-400';
     const statusText = fs.isPaused ? 'Paused' : 'Active';
     const statusDot = fs.isPaused ? 'bg-red-500' : 'bg-green-500';
@@ -284,14 +281,18 @@ const renderFaucetCard = () => {
                 <span class="w-2.5 h-2.5 rounded-full ${statusDot} animate-pulse"></span>${statusText}
             </span>
         </div>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
             <div class="text-center">
-                <span class="block text-lg font-bold text-amber-400">${tokenBal.toLocaleString('en-US', {maximumFractionDigits:0})} BKC</span>
-                <span class="text-xs text-zinc-500">Token Balance</span>
+                <span class="block text-lg font-bold text-sky-400">${ethBal.toFixed(4)} ETH</span>
+                <span class="text-xs text-zinc-500">Balance</span>
             </div>
             <div class="text-center">
-                <span class="block text-lg font-bold text-sky-400">${ethBal.toFixed(4)} BNB</span>
-                <span class="text-xs text-zinc-500">BNB Balance</span>
+                <span class="block text-lg font-bold text-amber-400">${ethPerDrip} ETH</span>
+                <span class="text-xs text-zinc-500">Per Claim</span>
+            </div>
+            <div class="text-center">
+                <span class="block text-lg font-bold text-emerald-400">${Number(fs.estimatedClaims).toLocaleString()}</span>
+                <span class="text-xs text-zinc-500">Est. Claims Left</span>
             </div>
             <div class="text-center">
                 <span class="block text-lg font-bold text-purple-400">${Number(fs.totalClaims).toLocaleString()}</span>
@@ -303,9 +304,7 @@ const renderFaucetCard = () => {
             </div>
         </div>
         <div class="flex flex-wrap gap-2 text-xs text-zinc-400 mb-4">
-            <span>Per claim: ${parseFloat(ethers.formatEther(fs.tokensPerDrip)).toLocaleString()} BKC + ${parseFloat(ethers.formatEther(fs.ethPerDrip))} BNB</span>
-            <span>|</span>
-            <span>Total distributed: ${totalTokensDist.toLocaleString('en-US', {maximumFractionDigits:0})} BKC</span>
+            <span>Total distributed: ${totalEthDist.toFixed(4)} ETH</span>
         </div>
         <div class="flex gap-3">
             <button id="toggle-faucet-pause-btn" class="${fs.isPaused ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} text-white text-sm font-bold py-2 px-4 rounded-lg transition-colors">
@@ -319,6 +318,182 @@ const renderFaucetCard = () => {
     `;
 
     document.getElementById('toggle-faucet-pause-btn')?.addEventListener('click', handleToggleFaucetPause);
+};
+
+// --- ECOSYSTEM HEALTH ---
+
+const LP_MINI_ABI = [
+    "function bkcReserve() view returns (uint256)",
+    "function ethReserve() view returns (uint256)",
+    "function currentPrice() view returns (uint256)",
+    "function totalLPShares() view returns (uint256)",
+];
+
+const loadEcosystemStats = async () => {
+    try {
+        const provider = State.publicProvider;
+        if (!provider) {
+            adminState.ecosystemStats = { error: 'No provider' };
+            return;
+        }
+
+        const results = await Promise.allSettled([
+            // 0: Treasury address
+            State.ecosystemManagerContractPublic?.treasury(),
+            // 1: Staking stats
+            State.stakingPoolContractPublic?.getStakingStats(),
+            // 2: Fortune pool stats
+            State.fortunePoolContractPublic?.getPoolStats(),
+            // 3: LP reserves (inline contract — no public instance in State)
+            (addresses.liquidityPool ? (async () => {
+                const lp = new ethers.Contract(addresses.liquidityPool, LP_MINI_ABI, provider);
+                const [bkc, eth, price] = await Promise.all([lp.bkcReserve(), lp.ethReserve(), lp.currentPrice()]);
+                return { bkcReserve: bkc, ethReserve: eth, currentPrice: price };
+            })() : Promise.resolve(null)),
+            // 4: Ecosystem manager stats
+            State.ecosystemManagerContractPublic?.getStats(),
+            // 5: Buyback pending ETH
+            State.buybackMinerContractPublic?.pendingBuybackETH(),
+            // 6: BKC total supply
+            State.bkcTokenContractPublic?.totalSupply(),
+        ]);
+
+        // Get treasury balance (needs treasury address first)
+        let treasuryBalance = 0n;
+        let treasuryAddress = null;
+        if (results[0].status === 'fulfilled' && results[0].value) {
+            treasuryAddress = results[0].value;
+            try {
+                treasuryBalance = await provider.getBalance(treasuryAddress);
+            } catch (e) { /* ignore */ }
+        }
+
+        // Get Fortune pool ETH balance
+        let fortuneEthBalance = 0n;
+        if (addresses.fortunePool) {
+            try {
+                fortuneEthBalance = await provider.getBalance(addresses.fortunePool);
+            } catch (e) { /* ignore */ }
+        }
+
+        const staking = results[1].status === 'fulfilled' ? results[1].value : null;
+        const fortune = results[2].status === 'fulfilled' ? results[2].value : null;
+        const lp = results[3].status === 'fulfilled' ? results[3].value : null;
+        const ecosystem = results[4].status === 'fulfilled' ? results[4].value : null;
+        const pendingBuyback = results[5].status === 'fulfilled' ? results[5].value : 0n;
+        const totalSupply = results[6].status === 'fulfilled' ? results[6].value : 0n;
+
+        adminState.ecosystemStats = {
+            treasuryAddress,
+            treasuryBalance,
+            stakingTotalPStake: staking?.totalPStake || 0n,
+            stakingTotalBkc: staking?.totalBkcDelegated || 0n,
+            stakingTotalRewards: staking?.totalRewardsDistributed || 0n,
+            fortunePrizePool: fortune?.prizePool || 0n,
+            fortuneGamesPlayed: fortune?.totalGamesPlayed || 0n,
+            fortuneTotalWagered: fortune?.totalBkcWagered || 0n,
+            fortuneTotalWon: fortune?.totalBkcWon || 0n,
+            fortuneEthBalance,
+            lpBkcReserve: lp?.bkcReserve || 0n,
+            lpEthReserve: lp?.ethReserve || 0n,
+            lpPrice: lp?.currentPrice || 0n,
+            ecosystemEthCollected: ecosystem?.ethCollected || 0n,
+            ecosystemBkcCollected: ecosystem?.bkcCollected || 0n,
+            ecosystemFeeEvents: ecosystem?.feeEvents || 0n,
+            pendingBuyback,
+            totalSupply,
+        };
+    } catch (error) {
+        console.error("Error loading ecosystem stats:", error);
+        adminState.ecosystemStats = { error: error.message };
+    }
+    const el = document.getElementById('overview-ecosystem-cards');
+    if (el) renderEcosystemCards();
+};
+
+const _fmtEth = (val) => {
+    const n = parseFloat(ethers.formatEther(val || 0n));
+    if (n >= 1000) return n.toFixed(1);
+    if (n >= 1) return n.toFixed(4);
+    return n.toFixed(6);
+};
+
+const _fmtBkc = (val) => {
+    const n = parseFloat(ethers.formatEther(val || 0n));
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + 'M';
+    if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+    return n.toFixed(1);
+};
+
+const renderEcosystemCards = () => {
+    const container = document.getElementById('overview-ecosystem-cards');
+    if (!container) return;
+    const s = adminState.ecosystemStats;
+
+    if (!s || s.error) {
+        container.innerHTML = `<div class="p-4 text-sm text-zinc-400">${s?.error || '<span class="loader !w-5 !h-5 inline-block mr-2"></span>Loading ecosystem...'}</div>`;
+        return;
+    }
+
+    const treasuryShort = s.treasuryAddress ? `${s.treasuryAddress.slice(0, 6)}...${s.treasuryAddress.slice(-4)}` : '—';
+    const priceNum = parseFloat(ethers.formatEther(s.lpPrice || 0n));
+    const priceStr = priceNum > 0 ? `1 ETH = ${priceNum.toLocaleString(undefined, { maximumFractionDigits: 0 })} BKC` : '—';
+
+    container.innerHTML = `
+        <h3 class="text-lg font-bold text-white mb-4"><i class="fa-solid fa-heart-pulse mr-2 text-rose-400"></i>Ecosystem Health</h3>
+
+        <!-- Row 1: Core balances -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div class="bg-zinc-700/50 rounded-lg p-3 text-center">
+                <i class="fa-solid fa-vault text-lg text-emerald-400 mb-1"></i>
+                <span class="block text-lg font-bold text-white">${_fmtEth(s.treasuryBalance)} ETH</span>
+                <span class="text-xs text-zinc-500">Treasury <span class="text-zinc-600">${treasuryShort}</span></span>
+            </div>
+            <div class="bg-zinc-700/50 rounded-lg p-3 text-center">
+                <i class="fa-solid fa-layer-group text-lg text-sky-400 mb-1"></i>
+                <span class="block text-lg font-bold text-white">${_fmtBkc(s.stakingTotalBkc)} BKC</span>
+                <span class="text-xs text-zinc-500">Staking TVL</span>
+            </div>
+            <div class="bg-zinc-700/50 rounded-lg p-3 text-center">
+                <i class="fa-solid fa-dice text-lg text-purple-400 mb-1"></i>
+                <span class="block text-lg font-bold text-white">${_fmtBkc(s.fortunePrizePool)} BKC</span>
+                <span class="text-xs text-zinc-500">Fortune Prize Pool</span>
+            </div>
+            <div class="bg-zinc-700/50 rounded-lg p-3 text-center">
+                <i class="fa-solid fa-water text-lg text-blue-400 mb-1"></i>
+                <span class="block text-lg font-bold text-white">${_fmtEth(s.lpEthReserve)} ETH</span>
+                <span class="text-xs text-zinc-500">LP ETH Reserve</span>
+            </div>
+        </div>
+
+        <!-- Row 2: Secondary metrics -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+            <div class="bg-zinc-700/30 rounded-lg p-2.5 text-center">
+                <span class="block text-sm font-bold text-amber-400">${_fmtBkc(s.lpBkcReserve)} BKC</span>
+                <span class="text-xs text-zinc-500">LP BKC Reserve</span>
+            </div>
+            <div class="bg-zinc-700/30 rounded-lg p-2.5 text-center">
+                <span class="block text-sm font-bold text-cyan-400">${priceStr}</span>
+                <span class="text-xs text-zinc-500">BKC Price</span>
+            </div>
+            <div class="bg-zinc-700/30 rounded-lg p-2.5 text-center">
+                <span class="block text-sm font-bold text-green-400">${_fmtEth(s.ecosystemEthCollected)} ETH</span>
+                <span class="text-xs text-zinc-500">Total Fees Collected</span>
+            </div>
+            <div class="bg-zinc-700/30 rounded-lg p-2.5 text-center">
+                <span class="block text-sm font-bold text-orange-400">${_fmtEth(s.pendingBuyback)} ETH</span>
+                <span class="text-xs text-zinc-500">Pending Buyback</span>
+            </div>
+        </div>
+
+        <!-- Row 3: Activity summary -->
+        <div class="flex flex-wrap gap-3 text-xs text-zinc-400">
+            <span><i class="fa-solid fa-coins mr-1 text-zinc-500"></i>Supply: ${_fmtBkc(s.totalSupply)} BKC</span>
+            <span><i class="fa-solid fa-trophy mr-1 text-zinc-500"></i>Staking rewards: ${_fmtBkc(s.stakingTotalRewards)} BKC</span>
+            <span><i class="fa-solid fa-gamepad mr-1 text-zinc-500"></i>Fortune: ${Number(s.fortuneGamesPlayed).toLocaleString()} games</span>
+            <span><i class="fa-solid fa-receipt mr-1 text-zinc-500"></i>Fee events: ${Number(s.ecosystemFeeEvents).toLocaleString()}</span>
+        </div>
+    `;
 };
 
 const handleToggleFaucetPause = async () => {
@@ -390,6 +565,11 @@ const renderOverviewPanel = () => {
             </div>
         </div>
 
+        <!-- Ecosystem Health -->
+        <div id="overview-ecosystem-cards" class="bg-zinc-800 border border-zinc-700 rounded-xl p-5 mb-6">
+            <div class="p-4 text-sm text-zinc-400"><span class="loader !w-5 !h-5 inline-block mr-2"></span>Loading ecosystem data...</div>
+        </div>
+
         <!-- Faucet Status -->
         <div id="overview-faucet-card" class="bg-zinc-800 border border-zinc-700 rounded-xl p-5 mb-6">
             <div class="p-4 text-sm text-zinc-400"><span class="loader !w-5 !h-5 inline-block mr-2"></span>Loading faucet status...</div>
@@ -412,7 +592,8 @@ const renderOverviewPanel = () => {
         </div>
     `;
 
-    // Load faucet data
+    // Load on-chain data
+    loadEcosystemStats();
     loadFaucetStatus();
 
     // Quick action listeners

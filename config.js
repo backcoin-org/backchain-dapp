@@ -677,16 +677,15 @@ export const faucetABI = [
     "function getCooldownRemaining(address user) view returns (uint256)",
     "function getUserInfo(address user) view returns (uint256 lastClaim, uint256 claims, bool eligible, uint256 cooldownLeft)",
 
-    // Read — Faucet
-    "function getFaucetStatus() view returns (uint256 ethBalance, uint256 tokenBalance, uint256 ethPerDrip, uint256 tokensPerDrip, uint256 estimatedEthClaims, uint256 estimatedTokenClaims)",
-    "function getStats() view returns (uint256 tokens, uint256 eth, uint256 claims, uint256 users)",
+    // Read — Faucet (V2: ETH-only, no token distribution)
+    "function getFaucetStatus() view returns (uint256 ethBalance, uint256 ethPerDrip, uint256 estimatedClaims)",
+    "function getStats() view returns (uint256 eth, uint256 claims, uint256 users)",
     "function cooldown() view returns (uint256)",
-    "function tokensPerClaim() view returns (uint256)",
     "function ethPerClaim() view returns (uint256)",
     "function paused() view returns (bool)",
 
     // Events
-    "event Claimed(address indexed recipient, uint256 tokens, uint256 eth, address indexed via)"
+    "event Claimed(address indexed recipient, uint256 eth, address indexed via)"
 ];
 
 // BackchainEcosystem V10 ABI — Central fee hub with module registration + tutor system
