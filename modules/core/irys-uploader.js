@@ -1,10 +1,10 @@
 // modules/core/irys-uploader.js
-// Media Upload Pipeline — Optimize + Permanent Storage (Lighthouse/Filecoin)
+// Media Upload Pipeline — Optimize + Irys/Arweave Storage
 //
-// Flow: file → client-side optimization → POST /api/upload-media (Lighthouse) → IPFS+Filecoin
+// Flow: file → client-side optimization → POST /api/upload-media → Irys (Arweave)
 //
-// Lighthouse: pay once, stored forever on IPFS + Filecoin. ~$0.005/GB.
-// No MetaMask required — server-side upload via API key.
+// Devnet: free (~60 days). Mainnet: user pays crypto for permanent storage.
+// No MetaMask required — server-side upload via relayer wallet.
 
 import { optimizeMedia } from './media-optimizer.js';
 
@@ -13,7 +13,7 @@ import { optimizeMedia } from './media-optimizer.js';
 // ============================================================================
 
 export const UPLOAD_CONFIG = {
-    gateway: 'https://gateway.lighthouse.storage/ipfs',
+    gateway: 'https://devnet.irys.xyz',
     maxFileSize: 100 * 1024 * 1024, // 100MB
     allowedTypes: {
         document: ['application/pdf', 'text/plain', 'application/json', 'text/html', 'text/csv'],
@@ -33,7 +33,7 @@ export const IRYS_CONFIG = UPLOAD_CONFIG;
 /**
  * Upload a File with automatic optimization + permanent storage.
  *
- * Pipeline: optimize (Canvas WebP) → POST /api/upload-media → Lighthouse (IPFS+Filecoin)
+ * Pipeline: optimize (Canvas WebP) → POST /api/upload-media → Irys (Arweave)
  *
  * @param {File} file - Browser File object
  * @param {object} [options] - Upload options
@@ -58,8 +58,8 @@ export async function uploadFile(file, options = {}) {
         optimized = await optimizeMedia(file, options.optimize || {});
     }
 
-    // Step 2: Upload via server API (Lighthouse — permanent IPFS+Filecoin)
-    onProgress('uploading', `Uploading ${_formatSize(optimized.size)} to permanent storage...`);
+    // Step 2: Upload via server API (Irys/Arweave)
+    onProgress('uploading', `Uploading ${_formatSize(optimized.size)} to storage...`);
 
     const formData = new FormData();
     formData.append('file', optimized);
@@ -81,12 +81,12 @@ export async function uploadFile(file, options = {}) {
 
     const result = {
         id: data.ipfsHash,
-        url: `${UPLOAD_CONFIG.gateway}/${data.ipfsHash}`,
+        url: data.mediaUrl || `${UPLOAD_CONFIG.gateway}/${data.ipfsHash}`,
         size: optimized.size,
         type: optimized.type
     };
 
-    console.log(`[Upload] Permanent (Lighthouse): ${result.url} (${_formatSize(optimized.size)})`);
+    console.log(`[Upload] Irys: ${result.url} (${_formatSize(optimized.size)})`);
     onProgress('done', result.url);
     return result;
 }
@@ -118,17 +118,16 @@ export async function uploadData(data, options = {}) {
 
 /**
  * Estimate the upload cost for a given number of bytes.
- * Lighthouse is ~$0.005/GB. Returns a formatted estimate.
+ * Irys devnet: free. Mainnet: user pays crypto.
  *
  * @param {number} bytes - File size in bytes
  * @returns {Promise<{cost: bigint, costFormatted: string}>}
  */
 export async function getUploadPrice(bytes) {
-    // Lighthouse: ~$0.005/GB = effectively free for small files
-    // Return 0 cost since it's server-side (user doesn't pay directly)
+    // Devnet: free (server-side relayer). Mainnet: user pays.
     return {
         cost: 0n,
-        costFormatted: 'Free (permanent storage)'
+        costFormatted: 'Free (devnet storage)'
     };
 }
 
@@ -144,6 +143,9 @@ const IPFS_GATEWAYS = [
     'https://ipfs.io/ipfs/'
 ];
 
+const IRYS_GATEWAY = 'https://devnet.irys.xyz';
+const IRYS_MAINNET_GATEWAY = 'https://gateway.irys.xyz';
+
 /**
  * Universal content URL resolver.
  * Handles: ar://txId, ipfs://Qm..., bare CIDs (Qm.../bafy...), bare Arweave TX IDs,
@@ -157,13 +159,14 @@ export function resolveContentUrl(uri) {
 
     const trimmed = uri.trim();
 
-    // Already a full URL
+    // irys://txId → Irys gateway
+    if (trimmed.startsWith('irys://')) {
+        const txId = trimmed.slice(7);
+        return `${IRYS_GATEWAY}/${txId}`;
+    }
+
+    // Already a full URL — pass through
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-        // Rewrite old Irys devnet URLs to Lighthouse gateway
-        if (trimmed.includes('devnet.irys.xyz/')) {
-            const txId = trimmed.split('devnet.irys.xyz/')[1];
-            if (txId) return `https://gateway.irys.xyz/${txId}`;
-        }
         return trimmed;
     }
 
