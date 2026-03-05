@@ -1464,7 +1464,13 @@ async function closeCampaignAction(id) {
     await CharityTx.closeCampaign({
         campaignId: id,
         button: document.getElementById('btn-close-campaign'),
-        onSuccess: async () => { showToast(t('charity.toast.closeSuccess'), 'success'); await loadData(); render(); },
+        onSuccess: async () => {
+            showToast(t('charity.toast.closeSuccess'), 'success');
+            await loadData();
+            render();
+            // Refresh My Campaigns modal if open
+            if (document.getElementById('modal-my')?.classList.contains('active')) openMyCampaigns();
+        },
         onError: (error) => { if (!error.cancelled && error.type !== 'user_rejected') showToast(error.message?.slice(0, 80) || t('common.transactionFailed'), 'error'); }
     });
 }
