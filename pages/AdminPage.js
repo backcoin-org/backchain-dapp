@@ -2198,46 +2198,45 @@ const renderSettingsPanel = () => {
 };
 
 // --- MAIN ADMIN PANEL ---
+const _tabBtn = (id, icon, label, badge, isActive) => {
+    const base = 'cursor-pointer px-4 py-2.5 text-sm font-semibold rounded-t-lg transition-colors flex items-center gap-2 border-b-2';
+    const active = 'border-amber-500 text-amber-400 bg-zinc-800';
+    const inactive = 'border-transparent text-zinc-400 hover:text-white hover:bg-zinc-800/50';
+    return `<button class="${base} ${isActive ? active : inactive}" data-target="${id}">
+        <i class="fa-solid ${icon}"></i>${label}${badge || ''}
+    </button>`;
+};
+
 const renderAdminPanel = () => {
     const adminContent = document.getElementById('admin-content-wrapper');
     if (!adminContent) return;
 
     const pendingCount = adminState.allSubmissions.length;
     const tab = adminState.activeTab;
+    const badge = pendingCount > 0 ? `<span class="ml-1 text-xs bg-amber-600 text-white px-1.5 py-0.5 rounded-full">${pendingCount}</span>` : '';
 
     adminContent.innerHTML = `
         <h1 class="text-3xl font-bold mb-6">${t('admin.title')}</h1>
 
-        <div class="border-b border-border-color mb-6">
-            <nav id="admin-tabs" class="-mb-px flex flex-wrap gap-x-6 gap-y-2">
-                <button class="tab-btn ${tab === 'overview' ? 'active' : ''}" data-target="overview">
-                    <i class="fa-solid fa-gauge-high mr-1.5"></i>${t('admin.tabs.overview')}
-                </button>
-                <button class="tab-btn ${tab === 'review-submissions' ? 'active' : ''}" data-target="review-submissions">
-                    <i class="fa-solid fa-list-check mr-1.5"></i>${t('admin.tabs.submissions')}${pendingCount > 0 ? ` <span class="ml-1 text-xs bg-amber-600 text-white px-1.5 py-0.5 rounded-full">${pendingCount}</span>` : ''}
-                </button>
-                <button class="tab-btn ${tab === 'manage-users' ? 'active' : ''}" data-target="manage-users">
-                    <i class="fa-solid fa-users mr-1.5"></i>${t('admin.tabs.users')}
-                </button>
-                <button class="tab-btn ${tab === 'settings' ? 'active' : ''}" data-target="settings">
-                    <i class="fa-solid fa-gear mr-1.5"></i>${t('admin.tabs.settings')}
-                </button>
+        <div class="border-b border-zinc-700 mb-6">
+            <nav id="admin-tabs" class="flex flex-wrap gap-1">
+                ${_tabBtn('overview', 'fa-gauge-high', t('admin.tabs.overview'), '', tab === 'overview')}
+                ${_tabBtn('review-submissions', 'fa-list-check', t('admin.tabs.submissions'), badge, tab === 'review-submissions')}
+                ${_tabBtn('manage-users', 'fa-users', t('admin.tabs.users'), '', tab === 'manage-users')}
+                ${_tabBtn('settings', 'fa-gear', t('admin.tabs.settings'), '', tab === 'settings')}
             </nav>
         </div>
 
-        <div id="overview_tab" class="tab-content ${tab === 'overview' ? 'active' : ''}">
+        <div id="overview_tab" class="${tab === 'overview' ? '' : 'hidden'}">
             <div id="overview-content" class="max-w-7xl mx-auto"></div>
         </div>
-
-        <div id="review_submissions_tab" class="tab-content ${tab === 'review-submissions' ? 'active' : ''}">
+        <div id="review_submissions_tab" class="${tab === 'review-submissions' ? '' : 'hidden'}">
             <div id="submissions-content" class="max-w-7xl mx-auto"></div>
         </div>
-
-        <div id="manage_users_tab" class="tab-content ${tab === 'manage-users' ? 'active' : ''}">
+        <div id="manage_users_tab" class="${tab === 'manage-users' ? '' : 'hidden'}">
             <div id="manage-users-content" class="max-w-7xl mx-auto"></div>
         </div>
-
-        <div id="settings_tab" class="tab-content ${tab === 'settings' ? 'active' : ''}">
+        <div id="settings_tab" class="${tab === 'settings' ? '' : 'hidden'}">
             <div id="settings-content" class="max-w-4xl mx-auto"></div>
         </div>
     `;
@@ -2255,9 +2254,11 @@ const renderAdminPanel = () => {
     const adminTabs = document.getElementById('admin-tabs');
     if (adminTabs && !adminTabs._listenerAttached) {
         adminTabs.addEventListener('click', (e) => {
-            const button = e.target.closest('.tab-btn');
-            if (!button || button.classList.contains('active')) return;
+            const button = e.target.closest('button[data-target]');
+            if (!button) return;
             const targetId = button.dataset.target;
+            if (targetId === adminState.activeTab) return;
+
             adminState.activeTab = targetId;
 
             // Reset filters when leaving tabs
@@ -2272,15 +2273,20 @@ const renderAdminPanel = () => {
                 adminState.selectedSubmissions.clear();
             }
 
-            document.querySelectorAll('#admin-tabs .tab-btn').forEach(btn => btn.classList.remove('active'));
-            button.classList.add('active');
+            // Update tab button styles
+            adminTabs.querySelectorAll('button[data-target]').forEach(btn => {
+                btn.classList.remove('border-amber-500', 'text-amber-400', 'bg-zinc-800');
+                btn.classList.add('border-transparent', 'text-zinc-400');
+            });
+            button.classList.remove('border-transparent', 'text-zinc-400');
+            button.classList.add('border-amber-500', 'text-amber-400', 'bg-zinc-800');
 
-            adminContent.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            const targetTabElement = document.getElementById(targetId.replace(/-/g, '_') + '_tab');
-            if (targetTabElement) {
-                targetTabElement.classList.add('active');
-                renderTab(targetId);
-            }
+            // Show/hide tab content
+            ['overview', 'review-submissions', 'manage-users', 'settings'].forEach(id => {
+                const el = document.getElementById(id.replace(/-/g, '_') + '_tab');
+                if (el) el.classList.toggle('hidden', id !== targetId);
+            });
+            renderTab(targetId);
         });
         adminTabs._listenerAttached = true;
     }
