@@ -286,11 +286,11 @@ function injectStyles() {
         .cp-balance-row .max-btn:hover { background: rgba(245,158,11,0.1); }
 
         @media(max-width:768px) {
-            .cp-detail-content { grid-template-columns: 1fr; }
-            .cp-detail-sidebar { order: -1; }
+            .cp-detail-content { grid-template-columns: 1fr; gap: 1rem; }
             .cp-form-row { grid-template-columns: 1fr; }
             .cp-cat-grid { grid-template-columns: repeat(2, 1fr); }
-            .cp-carousel img, .cp-carousel video { height: 220px; }
+            .cp-carousel { margin-bottom: 1rem; }
+            .cp-carousel img, .cp-carousel video { height: 200px; }
         }
         @media(max-width:640px) {
             .cp-cat-scroll { flex-wrap: nowrap; }
@@ -788,15 +788,17 @@ const renderDetail = (c) => {
                     ${isCreator ? '<span class="cp-badge" style="background:rgba(245,158,11,0.2);color:#f59e0b"><i class="fa-solid fa-user"></i> Your Campaign</span>' : ''}
                 </div>
 
+                <!-- Title (visible immediately on mobile) -->
+                <h1 class="text-2xl font-bold text-white mb-1">${c.title}</h1>
+                <p class="text-sm text-zinc-500 mb-3">
+                    Created by <a href="${EXPLORER_ADDRESS}${c.creator}" target="_blank" class="text-amber-500 hover:text-amber-400">${fmtAddr(c.creator)}</a>
+                </p>
+
                 ${renderCarousel(c)}
 
                 <div class="cp-detail-content">
-                    <!-- Main Content -->
+                    <!-- Description -->
                     <div class="cp-card-base p-6">
-                        <h1 class="text-2xl font-bold text-white mb-2">${c.title}</h1>
-                        <p class="text-sm text-zinc-500 mb-4">
-                            Created by <a href="${EXPLORER_ADDRESS}${c.creator}" target="_blank" class="text-amber-500 hover:text-amber-400">${fmtAddr(c.creator)}</a>
-                        </p>
                         <p class="text-zinc-400 leading-relaxed whitespace-pre-wrap">${linkifyText(c.description || c.metadataUri || 'No description provided.')}</p>
                     </div>
 
