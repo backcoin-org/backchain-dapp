@@ -35,7 +35,7 @@ function getIrysUploader() {
             const { Uploader } = await import('@irys/upload');
             const { Ethereum } = await import('@irys/upload-ethereum');
             return Uploader(Ethereum)
-                .withWallet(process.env.IRYS_PRIVATE_KEY)
+                .withWallet(process.env.IRYS_PRIVATE_KEY.trim())
                 .withRpc('https://ethereum-sepolia-rpc.publicnode.com')
                 .devnet();
         })();
