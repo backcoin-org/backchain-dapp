@@ -164,45 +164,42 @@ export async function getPublicAirdropData() {
     const dataRef = doc(db, "airdrop_public_data", "data_v1");
     const dataSnap = await getDoc(dataRef);
 
+    // Load daily tasks from dedicated collection (same source admin writes to)
+    let activeTasks = [];
+    try {
+        const tasksCol = collection(db, "daily_tasks");
+        const tasksSnap = await getDocs(tasksCol);
+        const now = Date.now();
+        activeTasks = tasksSnap.docs.map(d => {
+            const td = d.data();
+            const startDate = td.startDate?.toDate ? td.startDate.toDate() : (td.startDate ? new Date(td.startDate) : null);
+            const endDate = td.endDate?.toDate ? td.endDate.toDate() : (td.endDate ? new Date(td.endDate) : null);
+            return { ...td, id: d.id, startDate, endDate };
+        }).filter(task => {
+            if (!task.id) return false;
+            const startTime = task.startDate ? task.startDate.getTime() : 0;
+            const endTime = task.endDate ? task.endDate.getTime() : Infinity;
+            return startTime <= now && now < endTime;
+        });
+    } catch (e) {
+        console.warn("Could not load daily_tasks collection:", e.message);
+    }
+
     if (dataSnap.exists()) {
         const data = dataSnap.data();
 
-        // Processa e valida as tarefas diárias
-        const tasks = (data.dailyTasks || []).map(task => {
-            // Garante que timestamps sejam objetos Date
-            const startDate = task.startDate?.toDate ? task.startDate.toDate() : (task.startDate ? new Date(task.startDate) : null);
-            const endDate = task.endDate?.toDate ? task.endDate.toDate() : (task.endDate ? new Date(task.endDate) : null);
-            return {
-                ...task,
-                id: task.id || null, // Garante que a tarefa tenha um ID
-                startDate: startDate instanceof Date && !isNaN(startDate) ? startDate : null, // Valida Date
-                endDate: endDate instanceof Date && !isNaN(endDate) ? endDate : null,       // Valida Date
-            };
-        }).filter(task => task.id); // Remove tarefas sem ID
-
-        const now = Date.now();
-
-        // Filtra apenas tarefas ativas (agora >= início E agora < fim)
-        const activeTasks = tasks.filter(task => {
-             const startTime = task.startDate ? task.startDate.getTime() : 0; // Início padrão: sempre ativo
-             const endTime = task.endDate ? task.endDate.getTime() : Infinity; // Fim padrão: nunca expira
-             return startTime <= now && now < endTime;
-        });
-
-        // Retorna os dados públicos, garantindo que objetos existam
         return {
-            config: data.config || { ugcBasePoints: {} }, // Garante config e ugcBasePoints
+            config: data.config || { ugcBasePoints: {} },
             leaderboards: data.leaderboards || { top100ByPoints: [], top100ByPosts: [], lastUpdated: null },
-            dailyTasks: activeTasks, // Lista de tarefas ativas e validadas
-            platformUsageConfig: data.platformUsageConfig || null // Config de Platform Usage
+            dailyTasks: activeTasks,
+            platformUsageConfig: data.platformUsageConfig || null
         };
     } else {
-        // Se o documento não existe, retorna valores padrão
         console.warn("Public airdrop data document 'airdrop_public_data/data_v1' not found. Returning defaults.");
         return {
             config: { isActive: false, roundName: "Loading...", ugcBasePoints: {} },
             leaderboards: { top100ByPoints: [], top100ByPosts: [], lastUpdated: null },
-            dailyTasks: [],
+            dailyTasks: activeTasks,
             platformUsageConfig: null
         };
     }
