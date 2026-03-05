@@ -1964,18 +1964,18 @@ export const AirdropPage = {
         }
 
         try {
-            const minLoadingTime = new Promise(resolve => setTimeout(resolve, 1500));
+            // Core data (Firebase) — blocks UI
+            await loadAirdropData();
 
-            await Promise.all([loadAirdropData(), loadAgoraData(), loadClaimData(), minLoadingTime]);
-
+            // Show UI immediately
             const loader = document.getElementById('loading-state');
             const mainArea = document.getElementById('airdrop-main');
             const content = document.getElementById('main-content');
 
             if(loader) {
-                loader.style.transition = 'opacity 0.5s ease-out';
+                loader.style.transition = 'opacity 0.3s ease-out';
                 loader.style.opacity = '0';
-                await new Promise(resolve => setTimeout(resolve, 500));
+                await new Promise(resolve => setTimeout(resolve, 300));
                 loader.classList.add('hidden');
             }
 
@@ -1986,6 +1986,11 @@ export const AirdropPage = {
             }
 
             checkAndShowVerificationModal();
+
+            // Secondary data (on-chain) — load in background, refresh UI when done
+            Promise.all([loadAgoraData(), loadClaimData()]).then(() => {
+                if (document.getElementById('main-content')) updateContent();
+            }).catch(() => {});
 
         } catch (e) {
             console.error(e);
