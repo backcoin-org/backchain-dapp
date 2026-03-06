@@ -180,10 +180,14 @@ export function resolveContentUrl(uri) {
         return `https://gateway.irys.xyz/${txId}`;
     }
 
-    // ipfs://CID → IPFS gateway
+    // ipfs://CID → IPFS gateway (detect Arweave TX IDs stored with wrong ipfs:// prefix)
     if (trimmed.startsWith('ipfs://')) {
         const cid = trimmed.slice(7);
-        return `${IPFS_GATEWAYS[0]}${cid}`;
+        if (cid.startsWith('Qm') || cid.startsWith('bafy')) {
+            return `${IPFS_GATEWAYS[0]}${cid}`;
+        }
+        // Not an IPFS CID — likely an Arweave/Irys TX ID stored with wrong prefix
+        return `https://gateway.irys.xyz/${cid}`;
     }
 
     // IPFS CID detection: starts with Qm (CIDv0, 46 chars) or bafy (CIDv1)

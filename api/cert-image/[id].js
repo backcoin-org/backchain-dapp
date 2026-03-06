@@ -68,7 +68,12 @@ function resolveUri(uri) {
     if (!uri) return null;
     const t = uri.trim();
     if (t.startsWith('http://') || t.startsWith('https://')) return t;
-    if (t.startsWith('ipfs://')) return t.slice(7); // return just the CID
+    if (t.startsWith('ipfs://')) {
+        const cid = t.slice(7);
+        // Detect Arweave TX IDs stored with wrong ipfs:// prefix
+        if (cid.startsWith('Qm') || cid.startsWith('bafy')) return cid;
+        return `${ARWEAVE_GATEWAY}/${cid}`;
+    }
     if (t.startsWith('ar://')) {
         const id = t.slice(5);
         if (id.startsWith('Qm') || id.startsWith('bafy')) return id; // IPFS CID
@@ -76,6 +81,8 @@ function resolveUri(uri) {
     }
     if (/^Qm[1-9A-HJ-NP-Za-km-z]{44}/.test(t) || t.startsWith('bafy'))
         return t; // bare CID
+    // Bare Arweave/Irys TX ID
+    if (/^[a-zA-Z0-9_-]{43,44}$/.test(t)) return `${ARWEAVE_GATEWAY}/${t}`;
     return null;
 }
 

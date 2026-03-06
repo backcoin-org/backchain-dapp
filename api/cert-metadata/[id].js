@@ -37,7 +37,12 @@ function resolveUri(uri) {
     if (!uri) return null;
     const trimmed = uri.trim();
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
-    if (trimmed.startsWith('ipfs://')) return `${IPFS_GATEWAY}${trimmed.slice(7)}`;
+    if (trimmed.startsWith('ipfs://')) {
+        const cid = trimmed.slice(7);
+        if (cid.startsWith('Qm') || cid.startsWith('bafy')) return `${IPFS_GATEWAY}${cid}`;
+        // Arweave TX ID stored with wrong ipfs:// prefix
+        return `${ARWEAVE_GATEWAY}/${cid}`;
+    }
     if (trimmed.startsWith('ar://')) {
         const id = trimmed.slice(5);
         if (id.startsWith('Qm') || id.startsWith('bafy')) return `${IPFS_GATEWAY}${id}`;
@@ -45,6 +50,7 @@ function resolveUri(uri) {
     }
     if (/^Qm[1-9A-HJ-NP-Za-km-z]{44}/.test(trimmed) || trimmed.startsWith('bafy'))
         return `${IPFS_GATEWAY}${trimmed}`;
+    if (/^[a-zA-Z0-9_-]{43,44}$/.test(trimmed)) return `${ARWEAVE_GATEWAY}/${trimmed}`;
     return null;
 }
 

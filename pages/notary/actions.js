@@ -266,7 +266,7 @@ export async function handleMint() {
         showOverlay('minting');
 
         const meta = JSON.stringify({
-            uri: `ipfs://${uploadResult.id}`,
+            uri: `ar://${uploadResult.id}`,
             name: NT.wizFile.name,
             size: NT.wizFile.size,
             type: NT.wizFile.type,
@@ -350,7 +350,7 @@ export async function handleRegisterAsset() {
                     { name: 'File-Name', value: NT.assetWizFile.name }
                 ]
             });
-            uploadUri = `ipfs://${uploadResult.id}`;
+            uploadUri = `ar://${uploadResult.id}`;
             console.log('[NotaryPage] Asset doc upload:', uploadResult.url);
             if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>${t('notary.actions.registering')}`;
         }
