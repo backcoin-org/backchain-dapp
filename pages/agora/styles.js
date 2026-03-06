@@ -403,6 +403,9 @@ export function injectStyles() {
         .bc-tiktok-action.liked { color:var(--bc-red); }
         .bc-tiktok-action i { font-size:24px; filter:drop-shadow(0 1px 3px rgba(0,0,0,0.5)); }
         .bc-tiktok-action span { font-size:11px; font-weight:600; }
+        .bc-tiktok-follow-badge { position:absolute; bottom:-4px; left:50%; transform:translateX(-50%); width:18px; height:18px; border-radius:50%; background:var(--bc-accent); color:#000; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:900; border:2px solid rgba(0,0,0,0.6); cursor:pointer; }
+        .bc-tiktok-follow-badge.bc-tiktok-following { background:var(--bc-green); }
+        .bc-tiktok-action:has(.bc-tiktok-follow-badge) { position:relative; margin-bottom:4px; }
         .bc-tiktok-avatar { width:40px; height:40px; border-radius:50%; background:linear-gradient(135deg,var(--bc-accent),#fbbf24); display:flex; align-items:center; justify-content:center; font-weight:700; color:#000; font-size:14px; border:2px solid #fff; overflow:hidden; }
         .bc-tiktok-avatar img { width:100%; height:100%; object-fit:cover; }
 
@@ -517,10 +520,10 @@ export function injectStyles() {
         .bc-new-posts-pill:hover { transform:translateX(-50%) scale(1.05); }
         @keyframes bc-slideDown { from { opacity:0; transform:translateX(-50%) translateY(-20px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
 
-        .bc-fab { position:fixed; bottom:80px; right:max(16px, calc((100vw - 640px)/2 + 16px)); width:52px; height:52px; border-radius:50%; background:linear-gradient(135deg,var(--bc-accent),#d97706); color:#000; border:none; font-size:22px; cursor:pointer; z-index:400; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 20px rgba(245,158,11,0.4); transition:all 0.2s; }
+        .bc-fab { position:fixed; bottom:80px; left:max(16px, calc((100vw - 640px)/2 + 16px)); width:48px; height:48px; border-radius:50%; background:linear-gradient(135deg,var(--bc-accent),#d97706); color:#000; border:none; font-size:20px; cursor:pointer; z-index:400; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 20px rgba(245,158,11,0.4); transition:all 0.2s; }
         .bc-fab:hover { transform:scale(1.08); box-shadow:0 6px 28px rgba(245,158,11,0.5); }
         .bc-fab:active { transform:scale(0.95); }
-        @media (max-width:1023px) { .bc-fab { bottom:80px; right:16px; } }
+        @media (max-width:1023px) { .bc-fab { bottom:80px; left:16px; } }
 
         /* AppKit/Web3Modal overrides — more subtle backdrop */
         w3m-modal, appkit-modal { --w3m-z-index: 9999 !important; }

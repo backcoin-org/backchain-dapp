@@ -237,11 +237,17 @@ function _renderTikTokCard(post, i) {
         bgStyle = `background:linear-gradient(145deg, hsl(${hue},50%,22%) 0%, hsl(${(hue+40)%360},40%,12%) 50%, hsl(${(hue+80)%360},35%,8%) 100%);`;
     }
 
+    // Follow state
+    const isOwn = post.author?.toLowerCase() === State.userAddress?.toLowerCase();
+    const isFollowing = BC.following.has(post.author?.toLowerCase());
+
     // Actions sidebar (shared by both layouts)
     const actionsSidebar = `
         <div class="bc-tiktok-actions">
             <div class="bc-tiktok-action" onclick="event.stopPropagation(); AgoraPage.viewProfile('${post.author}')">
                 <div class="bc-tiktok-avatar">${renderAvatar(post.author)}</div>
+                ${State.isConnected && !isOwn && !isFollowing ? `<div class="bc-tiktok-follow-badge" onclick="event.stopPropagation(); AgoraPage.follow('${post.author}')"><i class="fa-solid fa-plus"></i></div>` : ''}
+                ${isFollowing && !isOwn ? `<div class="bc-tiktok-follow-badge bc-tiktok-following"><i class="fa-solid fa-check"></i></div>` : ''}
             </div>
             <div class="bc-tiktok-action ${isLiked ? 'liked' : ''}" onclick="event.stopPropagation(); AgoraPage.like('${post.id}')">
                 <i class="${isLiked ? 'fa-solid' : 'fa-regular'} fa-heart"></i>
