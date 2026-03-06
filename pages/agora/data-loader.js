@@ -1,5 +1,6 @@
 // pages/agora/data-loader.js
-// Agora V13 — Data loading from smart contract
+// Agora V14 — Data loading from Firebase (indexed by backchain-indexer-service)
+// Falls back to on-chain queryFilter only if Firebase is unavailable.
 // ============================================================================
 
 const ethers = window.ethers;
@@ -7,69 +8,23 @@ const ethers = window.ethers;
 import { State } from '../../state.js';
 import { agoraABI } from '../../config.js';
 import { BackchatTx } from '../../modules/transactions/index.js';
-import { calculateFeeClientSide } from '../../modules/core/index.js';
+import { calculateFeeClientSide, chunkedQueryFilter } from '../../modules/core/index.js';
 import { NetworkManager } from '../../modules/core/index.js';
 import { LiveStream } from '../../modules/webrtc-live.js';
 import { BC, getAgoraAddress, EVENTS_LOOKBACK } from './state.js';
 import { parseMetadata, parsePostContent } from './utils.js';
+import { db } from '../../modules/firebase-auth-service.js';
+import { collection, getDocs, query, where, orderBy, limit, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 
 // ============================================================================
-// CHUNKED QUERY — RPCs limit eth_getLogs to ~50K blocks
+// CONTRACT ACCESS (for on-chain reads like hasLiked, getUserProfile)
 // ============================================================================
 
-const MAX_BLOCK_RANGE = 45000;
-let _cachedLatestBlock = null;
-let _cachedBlockTime = 0;
-
-async function getLatestBlock() {
-    // Cache for 30s to avoid extra RPC calls
-    if (_cachedLatestBlock && Date.now() - _cachedBlockTime < 30000) return _cachedLatestBlock;
-    try {
-        const provider = State.publicProvider || new ethers.JsonRpcProvider(NetworkManager.getCurrentRpcUrl());
-        _cachedLatestBlock = await provider.getBlockNumber();
-        _cachedBlockTime = Date.now();
-        return _cachedLatestBlock;
-    } catch {
-        return EVENTS_LOOKBACK + 100000; // fallback estimate
-    }
-}
-
-async function chunkedQueryFilter(contract, filter, fromBlock) {
-    const toBlock = await getLatestBlock();
-    const range = toBlock - fromBlock;
-    // If range fits in one call, do it directly
-    if (range <= MAX_BLOCK_RANGE) {
-        return contract.queryFilter(filter, fromBlock, toBlock);
-    }
-    // Split into chunks
-    const results = [];
-    for (let start = fromBlock; start <= toBlock; start += MAX_BLOCK_RANGE) {
-        const end = Math.min(start + MAX_BLOCK_RANGE - 1, toBlock);
-        try {
-            const chunk = await contract.queryFilter(filter, start, end);
-            results.push(...chunk);
-        } catch (e) {
-            console.warn(`[Agora] queryFilter chunk ${start}-${end} failed:`, e.message);
-        }
-    }
-    return results;
-}
-
-// ============================================================================
-// CONTRACT ACCESS
-// ============================================================================
-
-/**
- * Returns contract for READ operations (queryFilter, view calls).
- * Always prefers publicProvider to avoid Magic/embedded wallet RPC limits
- * (e.g. 50K block range cap on eth_getLogs).
- */
 export function getContract() {
     if (State.agoraContractPublic) return State.agoraContractPublic;
     const addr = getAgoraAddress();
     if (!addr) return null;
     if (State.publicProvider) return new ethers.Contract(addr, agoraABI, State.publicProvider);
-    // Last resort: signer contract (may have RPC limits for embedded wallets)
     if (State.agoraContract) return State.agoraContract;
     return null;
 }
@@ -106,7 +61,7 @@ export async function loadFees() {
 }
 
 // ============================================================================
-// USER STATUS
+// USER STATUS (still on-chain — real-time accuracy)
 // ============================================================================
 
 export async function loadUserStatus() {
@@ -126,10 +81,29 @@ export async function loadUserStatus() {
 }
 
 // ============================================================================
-// GLOBAL STATS
+// GLOBAL STATS — Firebase first, on-chain fallback
 // ============================================================================
 
 export async function loadGlobalStats() {
+    try {
+        // Try Firebase first (indexed stats)
+        const statsDoc = await getDoc(doc(db, 'agora_stats', 'global'));
+        if (statsDoc.exists()) {
+            const data = statsDoc.data();
+            BC.globalStats = {
+                totalPosts: data.totalPosts || 0,
+                totalReplies: data.totalReplies || 0,
+                totalReposts: data.totalReposts || 0,
+                totalProfiles: data.totalProfiles || 0,
+                totalLikes: data.totalLikes || 0,
+                totalFollows: data.totalFollows || 0,
+            };
+            return;
+        }
+    } catch (e) {
+        console.warn('[Agora] Firebase stats unavailable, falling back to on-chain:', e.message);
+    }
+    // Fallback: on-chain
     try {
         BC.globalStats = await BackchatTx.getGlobalStats();
     } catch (e) {
@@ -138,25 +112,21 @@ export async function loadGlobalStats() {
 }
 
 // ============================================================================
-// PROFILES
+// PROFILES — Firebase (agora_users collection)
 // ============================================================================
 
 export async function loadProfiles() {
     try {
-        const contract = getContract();
-        if (!contract) { BC.hasProfile = false; return; }
+        // Read all profiles from Firebase
+        const usersSnap = await getDocs(collection(db, 'agora_users'));
 
-        const [createEvents, updateEvents] = await Promise.all([
-            chunkedQueryFilter(contract, contract.filters.ProfileCreated(), EVENTS_LOOKBACK).catch(() => []),
-            chunkedQueryFilter(contract, contract.filters.ProfileUpdated(), EVENTS_LOOKBACK).catch(() => [])
-        ]);
-
-        for (const ev of createEvents) {
-            const addr = ev.args.user.toLowerCase();
-            const meta = parseMetadata(ev.args.metadataURI);
+        for (const docSnap of usersSnap.docs) {
+            const data = docSnap.data();
+            const addr = (data.address || docSnap.id).toLowerCase();
+            const meta = parseMetadata(data.metadataURI || '');
             BC.profiles.set(addr, {
-                username: ev.args.username,
-                metadataURI: ev.args.metadataURI || '',
+                username: data.username || '',
+                metadataURI: data.metadataURI || '',
                 displayName: meta.displayName,
                 bio: meta.bio,
                 avatar: meta.avatar,
@@ -165,30 +135,21 @@ export async function loadProfiles() {
                 location: meta.location,
                 links: meta.links
             });
+            // Store follow counts from indexed data
+            if (data.followerCount != null || data.followingCount != null) {
+                BC.followCounts.set(addr, {
+                    followers: data.followerCount || 0,
+                    following: data.followingCount || 0
+                });
+            }
         }
 
-        for (const ev of updateEvents) {
-            const addr = ev.args.user.toLowerCase();
-            const existing = BC.profiles.get(addr);
-            if (!existing) continue;
-            const meta = parseMetadata(ev.args.metadataURI);
-            BC.profiles.set(addr, {
-                ...existing,
-                metadataURI: ev.args.metadataURI || '',
-                displayName: meta.displayName || existing.displayName,
-                bio: meta.bio,
-                avatar: meta.avatar || existing.avatar,
-                banner: meta.banner || existing.banner,
-                language: meta.language || existing.language,
-                location: meta.location,
-                links: meta.links.length > 0 ? meta.links : (existing.links || [])
-            });
-        }
-
+        // Check current user's profile
         if (State.isConnected && State.userAddress) {
             const myAddr = State.userAddress.toLowerCase();
             let myProfile = BC.profiles.get(myAddr);
             if (!myProfile) {
+                // Try on-chain as fallback (in case indexer hasn't caught up)
                 try {
                     const profile = await BackchatTx.getUserProfile(State.userAddress);
                     if (profile && profile.usernameHash && profile.usernameHash !== ethers.ZeroHash) {
@@ -223,7 +184,7 @@ export async function loadProfiles() {
 }
 
 // ============================================================================
-// SOCIAL GRAPH
+// SOCIAL GRAPH — Firebase (agora_follows collection)
 // ============================================================================
 
 export async function loadSocialGraph() {
@@ -232,21 +193,25 @@ export async function loadSocialGraph() {
     BC.followCounts = new Map();
 
     if (!State.isConnected || !State.userAddress) return;
-    try {
-        const contract = getContract();
-        if (!contract) return;
-        const followEvents = await chunkedQueryFilter(contract, contract.filters.Followed(), EVENTS_LOOKBACK).catch(() => []);
-        const unfollowEvents = await chunkedQueryFilter(contract, contract.filters.Unfollowed(), EVENTS_LOOKBACK).catch(() => []);
-        const myAddr = State.userAddress.toLowerCase();
+    const myAddr = State.userAddress.toLowerCase();
 
-        for (const ev of followEvents) {
-            if (ev.args.follower?.toLowerCase() === myAddr) BC.following.add(ev.args.followed?.toLowerCase());
-            if (ev.args.followed?.toLowerCase() === myAddr) BC.followers.add(ev.args.follower?.toLowerCase());
+    try {
+        // My following
+        const followingSnap = await getDocs(
+            query(collection(db, 'agora_follows'), where('follower', '==', myAddr))
+        );
+        for (const d of followingSnap.docs) {
+            BC.following.add(d.data().followed);
         }
-        for (const ev of unfollowEvents) {
-            if (ev.args.follower?.toLowerCase() === myAddr) BC.following.delete(ev.args.followed?.toLowerCase());
-            if (ev.args.followed?.toLowerCase() === myAddr) BC.followers.delete(ev.args.follower?.toLowerCase());
+
+        // My followers
+        const followersSnap = await getDocs(
+            query(collection(db, 'agora_follows'), where('followed', '==', myAddr))
+        );
+        for (const d of followersSnap.docs) {
+            BC.followers.add(d.data().follower);
         }
+
         console.log(`[Agora] Social graph: following=${BC.following.size}, followers=${BC.followers.size}`);
     } catch (e) {
         console.warn('[Agora] Failed to load social graph:', e.message);
@@ -254,22 +219,19 @@ export async function loadSocialGraph() {
 }
 
 // ============================================================================
-// BLOCKED AUTHORS
+// BLOCKED AUTHORS — Firebase (agora_blocks collection)
 // ============================================================================
 
 export async function loadBlockedAuthors() {
     if (!State.isConnected || !State.userAddress) return;
+    const myAddr = State.userAddress.toLowerCase();
+
     try {
-        const contract = getContract();
-        if (!contract) return;
-        const reportEvents = await chunkedQueryFilter(contract, contract.filters.PostReported(), EVENTS_LOOKBACK).catch(() => []);
-        const myAddr = State.userAddress.toLowerCase();
-        for (const ev of reportEvents) {
-            if (ev.args.reporter?.toLowerCase() === myAddr) {
-                const postId = ev.args.postId.toString();
-                const post = BC.postsById.get(postId);
-                if (post?.author) BC.blockedAuthors.add(post.author.toLowerCase());
-            }
+        const blocksSnap = await getDocs(
+            query(collection(db, 'agora_blocks'), where('blocker', '==', myAddr))
+        );
+        for (const d of blocksSnap.docs) {
+            BC.blockedAuthors.add(d.data().blocked);
         }
         console.log(`[Agora] Blocked authors: ${BC.blockedAuthors.size}`);
     } catch (e) {
@@ -278,7 +240,7 @@ export async function loadBlockedAuthors() {
 }
 
 // ============================================================================
-// POSTS (with smart feed algorithm)
+// POSTS — Firebase (agora_posts collection) with smart feed algorithm
 // ============================================================================
 
 export async function loadPosts() {
@@ -286,35 +248,23 @@ export async function loadPosts() {
     BC._render();
 
     try {
-        const backchatAddress = getAgoraAddress();
-        if (!backchatAddress) {
-            console.warn('[Agora] No contract address found');
-            BC.contractAvailable = false;
+        BC.contractAvailable = !!getAgoraAddress();
+        if (!BC.contractAvailable) {
             BC.error = 'Agora contract not deployed yet.';
             return;
         }
-        const contract = getContract();
-        if (!contract) {
-            console.warn('[Agora] getContract() returned null — publicProvider:', !!State.publicProvider, 'agoraContractPublic:', !!State.agoraContractPublic);
-            BC.contractAvailable = false;
-            BC.error = 'Could not connect to Agora contract';
-            return;
-        }
-        BC.contractAvailable = true;
-        const latestBlock = await getLatestBlock();
-        console.log(`[Agora] Loading posts: blocks ${EVENTS_LOOKBACK}→${latestBlock} (range: ${latestBlock - EVENTS_LOOKBACK})`);
 
-        let [postEvents, replyEvents, repostEvents] = await Promise.all([
-            chunkedQueryFilter(contract, contract.filters.PostCreated(), EVENTS_LOOKBACK).catch(e => { console.warn('[Agora] PostCreated query failed:', e.message); return []; }),
-            chunkedQueryFilter(contract, contract.filters.ReplyCreated(), EVENTS_LOOKBACK).catch(e => { console.warn('[Agora] ReplyCreated query failed:', e.message); return []; }),
-            chunkedQueryFilter(contract, contract.filters.RepostCreated(), EVENTS_LOOKBACK).catch(e => { console.warn('[Agora] RepostCreated query failed:', e.message); return []; })
-        ]);
-        console.log(`[Agora] Events found: ${postEvents.length} posts, ${replyEvents.length} replies, ${repostEvents.length} reposts`);
+        console.log('[Agora] Loading posts from Firebase...');
 
-        const allEventItems = [];
-        for (const ev of postEvents.slice(-80)) allEventItems.push({ ev, type: 'post' });
-        for (const ev of replyEvents.slice(-60)) allEventItems.push({ ev, type: 'reply' });
-        for (const ev of repostEvents.slice(-30)) allEventItems.push({ ev, type: 'repost' });
+        // Read posts from Firebase — last 200 non-deleted, ordered by timestamp
+        const postsSnap = await getDocs(
+            query(
+                collection(db, 'agora_posts'),
+                where('deleted', '==', false),
+                orderBy('timestamp', 'desc'),
+                limit(200)
+            )
+        );
 
         const allItems = [];
         const feedPosts = [];
@@ -324,62 +274,45 @@ export async function loadPosts() {
         BC.repostCountMap = new Map();
         BC.likesMap = new Map();
 
-        // Batch reads via getPostsBatch
-        const allPostIds = allEventItems.map(({ ev }) => ev.args.postId || ev.args.newPostId);
-        const allMetadata = [];
-        for (let i = 0; i < allPostIds.length; i += 20) {
-            const batchIds = allPostIds.slice(i, i + 20);
-            try {
-                const batchResult = await BackchatTx.getPostsBatch(batchIds);
-                allMetadata.push(...batchResult);
-            } catch {
-                for (const pid of batchIds) {
-                    try { allMetadata.push(await BackchatTx.getPost(pid)); } catch { allMetadata.push(null); }
-                }
-            }
-        }
-
-        for (let j = 0; j < allEventItems.length; j++) {
-            const { ev, type } = allEventItems[j];
-            const meta = allMetadata[j];
-            const pid = (ev.args.postId || ev.args.newPostId).toString();
-
-            if (meta && meta.deleted) continue;
-
-            const timestamp = meta ? meta.createdAt : 0;
-            const likesCount = meta ? meta.likes : 0;
-            const superLikeETH = meta ? (meta.superLikeETH || 0n) : 0n;
-            const downvotesCount = meta ? meta.downvotes : 0;
-            const repliesCount = meta ? meta.replies : 0;
-            const repostsCount = meta ? meta.reposts : 0;
-            const editedAt = meta ? meta.editedAt : 0;
-            const postTag = meta ? meta.tag : 0;
+        for (const docSnap of postsSnap.docs) {
+            const data = docSnap.data();
+            const pid = data.postId || docSnap.id;
+            const type = data.type || 'post';
+            const timestamp = data.timestamp?.seconds || data.timestamp?.toDate?.()?.getTime?.() / 1000 || 0;
 
             if (type === 'post') {
-                const { text, media, mediaCID, isVideo } = parsePostContent(ev.args.contentHash || ev.args.content || '');
+                const { text, media, mediaCID, isVideo } = parsePostContent(data.contentHash || '');
                 const post = {
                     id: pid, type: 'post',
-                    author: ev.args.author || (meta ? meta.author : null),
+                    author: data.author,
                     content: text, media, mediaCID, isVideo,
-                    tag: ev.args.tag != null ? Number(ev.args.tag) : postTag,
-                    timestamp, superLikeETH, editedAt,
-                    likesCount, downvotesCount, repliesCount, repostsCount,
-                    txHash: ev.transactionHash
+                    tag: data.tag || 0,
+                    timestamp,
+                    superLikeETH: 0n, // Firebase stores as number, not BigInt
+                    editedAt: data.editedAt?.seconds || 0,
+                    likesCount: data.likes || 0,
+                    downvotesCount: data.downvotes || 0,
+                    repliesCount: data.replies || 0,
+                    repostsCount: data.reposts || 0,
+                    txHash: data.txHash
                 };
                 allItems.push(post);
                 feedPosts.push(post);
                 BC.postsById.set(pid, post);
             } else if (type === 'reply') {
-                const parentId = ev.args.parentId.toString();
-                const { text, media, mediaCID, isVideo } = parsePostContent(ev.args.contentHash || ev.args.content || '');
+                const parentId = data.parentId;
+                const { text, media, mediaCID, isVideo } = parsePostContent(data.contentHash || '');
                 const reply = {
                     id: pid, type: 'reply', parentId,
-                    author: ev.args.author || (meta ? meta.author : null),
+                    author: data.author,
                     content: text, media, mediaCID, isVideo,
-                    tag: ev.args.tag != null ? Number(ev.args.tag) : postTag,
-                    timestamp, superLikeETH, editedAt,
-                    likesCount, downvotesCount,
-                    txHash: ev.transactionHash
+                    tag: data.tag || 0,
+                    timestamp,
+                    superLikeETH: 0n,
+                    editedAt: data.editedAt?.seconds || 0,
+                    likesCount: data.likes || 0,
+                    downvotesCount: data.downvotes || 0,
+                    txHash: data.txHash
                 };
                 allItems.push(reply);
                 BC.postsById.set(pid, reply);
@@ -387,12 +320,12 @@ export async function loadPosts() {
                 BC.replies.get(parentId).push(reply);
                 BC.replyCountMap.set(parentId, (BC.replyCountMap.get(parentId) || 0) + 1);
             } else if (type === 'repost') {
-                const originalPostId = ev.args.originalId?.toString() || ev.args.originalPostId?.toString() || '0';
+                const originalPostId = data.originalPostId || '0';
                 const repost = {
                     id: pid, type: 'repost', originalPostId,
-                    author: ev.args.author || ev.args.reposter,
+                    author: data.author,
                     timestamp, superLikeETH: 0n, editedAt: 0,
-                    txHash: ev.transactionHash
+                    txHash: data.txHash
                 };
                 allItems.push(repost);
                 feedPosts.push(repost);
@@ -401,18 +334,23 @@ export async function loadPosts() {
             }
         }
 
-        // Check user likes
+        console.log(`[Agora] Firebase: ${postsSnap.size} docs → ${feedPosts.length} feed posts, ${allItems.length} total items`);
+
+        // Check user likes (still on-chain — Firebase doesn't track per-user likes)
         if (State.isConnected && State.userAddress) {
-            const postIds = allItems.filter(p => p.type !== 'repost').map(p => p.id);
-            for (let i = 0; i < postIds.length; i += 10) {
-                const batch = postIds.slice(i, i + 10);
-                const results = await Promise.all(
-                    batch.map(pid => contract.hasLiked(pid, State.userAddress).catch(() => false))
-                );
-                for (let j = 0; j < batch.length; j++) {
-                    if (results[j]) {
-                        if (!BC.likesMap.has(batch[j])) BC.likesMap.set(batch[j], new Set());
-                        BC.likesMap.get(batch[j]).add(State.userAddress.toLowerCase());
+            const contract = getContract();
+            if (contract) {
+                const postIds = allItems.filter(p => p.type !== 'repost').map(p => p.id);
+                for (let i = 0; i < postIds.length; i += 10) {
+                    const batch = postIds.slice(i, i + 10);
+                    const results = await Promise.all(
+                        batch.map(pid => contract.hasLiked(pid, State.userAddress).catch(() => false))
+                    );
+                    for (let j = 0; j < batch.length; j++) {
+                        if (results[j]) {
+                            if (!BC.likesMap.has(batch[j])) BC.likesMap.set(batch[j], new Set());
+                            BC.likesMap.get(batch[j]).add(State.userAddress.toLowerCase());
+                        }
                     }
                 }
             }
@@ -435,8 +373,7 @@ export async function loadPosts() {
             const likes = post.likesCount || 0;
             const replies = post.repliesCount || BC.replyCountMap.get(post.id) || 0;
             const reposts = post.repostsCount || BC.repostCountMap.get(post.id) || 0;
-            const superETH = Number(ethers.formatEther(post.superLikeETH || 0n));
-            const engagement = likes + replies * 2 + reposts * 1.5 + Math.min(superETH * 100, 200);
+            const engagement = likes + replies * 2 + reposts * 1.5;
             return recency + followBonus + langBonus + engagement;
         }
 
@@ -456,11 +393,10 @@ export async function loadPosts() {
             .filter(p => p.type !== 'repost'))
             .map(p => {
                 const ageH = Math.max((nowSec - p.timestamp) / 3600, 0.5);
-                const ethVal = Number(ethers.formatEther(p.superLikeETH || 0n));
                 const likes = p.likesCount || 0;
                 const replies = p.repliesCount || BC.replyCountMap.get(p.id) || 0;
                 const reposts = p.repostsCount || BC.repostCountMap.get(p.id) || 0;
-                const base = 1 + likes * 0.5 + replies * 1.0 + reposts * 0.8 + ethVal * 50;
+                const base = 1 + likes * 0.5 + replies * 1.0 + reposts * 0.8;
                 p._trendScore = base / Math.sqrt(ageH);
                 return p;
             })

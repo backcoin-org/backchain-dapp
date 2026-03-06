@@ -22,6 +22,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+export { db };
 
 let currentUser = null; // Armazena o usuário Firebase autenticado (para PERMISSÕES)
 let currentWalletAddress = null; // A "chave primária" real do usuário
