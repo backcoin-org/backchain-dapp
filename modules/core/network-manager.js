@@ -56,10 +56,22 @@ export const NETWORK_CONFIG = {
 };
 
 /**
- * RPC endpoints in priority order (Sepolia — public RPCs)
- * Nota: Alchemy key é Arbitrum-only, usar public RPCs para Sepolia
+ * RPC endpoints in priority order (Sepolia)
+ * Alchemy key from VITE_ALCHEMY_API_KEY (if configured)
  */
+import { CONFIG } from '../../config.js';
+
+const _alchemyKey = CONFIG?.alchemy?.apiKey;
+const _alchemyUrl = _alchemyKey ? `https://eth-sepolia.g.alchemy.com/v2/${_alchemyKey}` : null;
+
 const RPC_ENDPOINTS = [
+    ...(_alchemyUrl ? [{
+        name: 'Alchemy',
+        getUrl: () => _alchemyUrl,
+        priority: 0,
+        isPublic: false,
+        isPaid: true
+    }] : []),
     {
         name: 'PublicNode',
         getUrl: () => 'https://ethereum-sepolia-rpc.publicnode.com',
@@ -85,7 +97,7 @@ let healthCheckInterval = null;
 let lastHealthCheck = null;
 let consecutiveFailures = 0;
 let lastMetaMaskUpdate = 0;
-let useAlchemyOnly = true; // V1.3: Flag to prefer Alchemy
+let useAlchemyOnly = !!_alchemyUrl; // V1.3: Flag to prefer Alchemy
 
 const MAX_CONSECUTIVE_FAILURES = 3;
 const HEALTH_CHECK_INTERVAL = 30000; // 30 seconds
@@ -95,7 +107,7 @@ const ALCHEMY_RETRY_DELAY = 2000; // V1.3: Wait before retrying Alchemy
 
 /** Helper: returns Alchemy RPC URL or null if no key configured */
 function getAlchemyUrl() {
-    return RPC_ENDPOINTS[0].getUrl();
+    return _alchemyUrl;
 }
 
 // ============================================================================
@@ -670,6 +682,20 @@ export const NetworkManager = {
         }
 
         return new ethers.JsonRpcProvider(this.getCurrentRpcUrl());
+    },
+
+    /**
+     * Gets an alternative RPC URL different from the current one (for retry logic)
+     * @returns {string|null} Fallback RPC URL or null if none available
+     */
+    getFallbackRpcUrl() {
+        const currentUrl = this.getCurrentRpcUrl();
+        const endpoints = this.getAvailableEndpoints();
+        for (const ep of endpoints) {
+            const url = ep.getUrl();
+            if (url !== currentUrl) return url;
+        }
+        return null;
     },
 
     /**

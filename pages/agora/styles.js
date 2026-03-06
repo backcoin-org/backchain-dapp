@@ -369,7 +369,7 @@ export function injectStyles() {
         /* Discover Mode Toggle */
         .bc-discover-mode-toggle { display:inline-flex; gap:2px; background:var(--bc-bg3); border-radius:8px; padding:2px; margin-left:12px; vertical-align:middle; }
         .bc-mode-btn { width:30px; height:28px; border:none; background:transparent; color:var(--bc-text-3); cursor:pointer; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:13px; transition:all var(--bc-transition); }
-        .bc-mode-btn.active { background:var(--bc-accent); color:#000; }
+        .bc-mode-btn.active { background:var(--bc-bg2); color:var(--bc-accent); }
         .bc-mode-btn:hover:not(.active) { color:var(--bc-text); }
 
         /* TikTok Feed — desktop: only Agora header (~100px); mobile: header + bottom tabs (64px) */

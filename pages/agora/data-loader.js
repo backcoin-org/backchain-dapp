@@ -8,6 +8,7 @@ import { State } from '../../state.js';
 import { agoraABI } from '../../config.js';
 import { BackchatTx } from '../../modules/transactions/index.js';
 import { calculateFeeClientSide } from '../../modules/core/index.js';
+import { NetworkManager } from '../../modules/core/index.js';
 import { LiveStream } from '../../modules/webrtc-live.js';
 import { BC, getAgoraAddress, EVENTS_LOOKBACK } from './state.js';
 import { parseMetadata, parsePostContent } from './utils.js';
@@ -251,11 +252,31 @@ export async function loadPosts() {
         }
         BC.contractAvailable = true;
 
-        const [postEvents, replyEvents, repostEvents] = await Promise.all([
-            contract.queryFilter(contract.filters.PostCreated(), EVENTS_LOOKBACK).catch(e => { console.warn('[Agora] PostCreated query failed:', e.message); return []; }),
-            contract.queryFilter(contract.filters.ReplyCreated(), EVENTS_LOOKBACK).catch(e => { console.warn('[Agora] ReplyCreated query failed:', e.message); return []; }),
-            contract.queryFilter(contract.filters.RepostCreated(), EVENTS_LOOKBACK).catch(e => { console.warn('[Agora] RepostCreated query failed:', e.message); return []; })
-        ]);
+        // Query events with RPC fallback — if primary returns 0 results, retry on alternate RPC
+        async function queryEvents(c) {
+            return Promise.all([
+                c.queryFilter(c.filters.PostCreated(), EVENTS_LOOKBACK).catch(e => { console.warn('[Agora] PostCreated query failed:', e.message); return []; }),
+                c.queryFilter(c.filters.ReplyCreated(), EVENTS_LOOKBACK).catch(e => { console.warn('[Agora] ReplyCreated query failed:', e.message); return []; }),
+                c.queryFilter(c.filters.RepostCreated(), EVENTS_LOOKBACK).catch(e => { console.warn('[Agora] RepostCreated query failed:', e.message); return []; })
+            ]);
+        }
+
+        let [postEvents, replyEvents, repostEvents] = await queryEvents(contract);
+
+        // If zero results, retry with fallback RPC
+        if (postEvents.length === 0 && replyEvents.length === 0) {
+            try {
+                const fallbackUrl = NetworkManager.getFallbackRpcUrl();
+                if (fallbackUrl) {
+                    console.log('[Agora] Zero events on primary RPC, retrying with fallback...');
+                    const fallbackProvider = new ethers.JsonRpcProvider(fallbackUrl);
+                    const fallbackContract = new ethers.Contract(backchatAddress, agoraABI, fallbackProvider);
+                    [postEvents, replyEvents, repostEvents] = await queryEvents(fallbackContract);
+                }
+            } catch (e) {
+                console.warn('[Agora] Fallback RPC also failed:', e.message);
+            }
+        }
         console.log(`[Agora] Events found: ${postEvents.length} posts, ${replyEvents.length} replies, ${repostEvents.length} reposts`);
 
         const allEventItems = [];
