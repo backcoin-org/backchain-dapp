@@ -106,14 +106,13 @@ async function handleCertificate(notary, certId, res) {
     const certDate = new Date(Number(result.timestamp) * 1000).toISOString();
     const shortHash = `${result.documentHash.slice(0, 10)}...${result.documentHash.slice(-8)}`;
 
-    // Use first-party image proxy — MetaMask fetches from backcoin.org, which
-    // redirects to the IPFS/Arweave gateway. More reliable than direct gateway URLs.
-    const hasStoredImage = !!resolveUri(meta.uri);
+    // Resolve image URL directly — avoids CDN cache issues with the proxy endpoint
+    const resolvedImage = resolveUri(meta.uri);
 
     const metadata = {
         name: meta.desc || `Notary Certificate #${certId}`,
         description: `Backchain Notary Certificate #${certId}. ${docTypeName} document certified on opBNB.${meta.name ? ` File: ${meta.name}.` : ''} Hash: ${shortHash}`,
-        image: hasStoredImage ? `https://backcoin.org/api/cert-image/${certId}` : `https://backcoin.org/assets/bkc_logo_3d.png`,
+        image: resolvedImage || `https://backcoin.org/assets/bkc_logo_3d.png`,
         external_url: `https://backcoin.org/#notary`,
         attributes: [
             { trait_type: 'Token Type', value: 'Certificate' },
@@ -139,12 +138,12 @@ async function handleAsset(notary, tokenId, res) {
     const assetTypeName = ASSET_TYPE_NAMES[Number(result.assetType)] || 'Other';
     const regDate = new Date(Number(result.registeredAt) * 1000).toISOString();
 
-    const hasStoredImage = !!resolveUri(meta.uri);
+    const resolvedImage = resolveUri(meta.uri);
 
     const metadata = {
         name: meta.desc || `Registered ${assetTypeName} #${tokenId}`,
         description: `Backchain Digital Notary — ${assetTypeName} asset registered on opBNB. Token #${tokenId}. ${Number(result.transferCount)} transfers, ${Number(result.annotationCount)} annotations.`,
-        image: hasStoredImage ? `https://backcoin.org/api/cert-image/${tokenId}` : `https://backcoin.org/assets/bkc_logo_3d.png`,
+        image: resolvedImage || `https://backcoin.org/assets/bkc_logo_3d.png`,
         external_url: `https://backcoin.org/#notary`,
         attributes: [
             { trait_type: 'Token Type', value: 'Asset' },
