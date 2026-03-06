@@ -17,12 +17,18 @@ import { parseMetadata, parsePostContent } from './utils.js';
 // CONTRACT ACCESS
 // ============================================================================
 
+/**
+ * Returns contract for READ operations (queryFilter, view calls).
+ * Always prefers publicProvider to avoid Magic/embedded wallet RPC limits
+ * (e.g. 50K block range cap on eth_getLogs).
+ */
 export function getContract() {
-    if (State.agoraContract) return State.agoraContract;
     if (State.agoraContractPublic) return State.agoraContractPublic;
     const addr = getAgoraAddress();
     if (!addr) return null;
     if (State.publicProvider) return new ethers.Contract(addr, agoraABI, State.publicProvider);
+    // Last resort: signer contract (may have RPC limits for embedded wallets)
+    if (State.agoraContract) return State.agoraContract;
     return null;
 }
 
