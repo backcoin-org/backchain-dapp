@@ -669,7 +669,14 @@ export async function addToWallet(tokenId) {
         return;
     }
 
-    const imageUrl = `https://backcoin.org/api/cert-image/${tokenId}`;
+    // Try direct gateway URL first (faster + no proxy cache issues), fallback to API proxy
+    let imageUrl = `https://backcoin.org/api/cert-image/${tokenId}`;
+    const cert = (NT.certificates || []).find(c => String(c.id) === String(tokenId))
+              || (NT.assets || []).find(a => String(a.id) === String(tokenId));
+    if (cert?.ipfs) {
+        const directUrl = resolveStorageUrl(cert.ipfs);
+        if (directUrl) imageUrl = directUrl;
+    }
 
     _addToWalletBusy = true;
     try {
