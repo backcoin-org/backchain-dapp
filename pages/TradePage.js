@@ -678,12 +678,10 @@ function renderSwapCard() {
     const poolAddr = getPoolAddress() || '0x0000000000000000000000000000000000000000';
     const fromSym = TS.direction === 'buy' ? 'BNB' : 'BKC';
     const toSym = TS.direction === 'buy' ? 'BKC' : 'BNB';
-    const fromIcon = TS.direction === 'buy'
-        ? '<i class="fa-brands fa-ethereum" style="font-size:20px;color:#627eea"></i>'
-        : '<img src="./assets/bkc_logo_3d.png" style="width:28px;height:28px;border-radius:50%">';
-    const toIcon = TS.direction === 'buy'
-        ? '<img src="./assets/bkc_logo_3d.png" style="width:28px;height:28px;border-radius:50%">'
-        : '<i class="fa-brands fa-ethereum" style="font-size:20px;color:#627eea"></i>';
+    const bnbIcon = '<img src="./assets/icon_opbnb.svg" style="width:22px;height:22px" alt="BNB">';
+    const bkcIcon = '<img src="./assets/bkc_logo_3d.png" style="width:28px;height:28px;border-radius:50%">';
+    const fromIcon = TS.direction === 'buy' ? bnbIcon : bkcIcon;
+    const toIcon = TS.direction === 'buy' ? bkcIcon : bnbIcon;
 
     container.innerHTML = `
     <div class="trade-shell">

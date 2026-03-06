@@ -114,7 +114,7 @@ function renderModeToggle() {
                 <i class="fa-solid fa-list"></i>
             </button>
             <button class="bc-mode-btn ${BC.feedMode === 'tiktok' ? 'active' : ''}" onclick="AgoraPage.setFeedMode('tiktok')" title="Vertical scroll">
-                <i class="fa-solid fa-clapperboard"></i>
+                <i class="fa-solid fa-film"></i>
             </button>
         </div>`;
 }
@@ -314,7 +314,7 @@ export function renderDiscover() {
                 <i class="fa-solid fa-list"></i>
             </button>
             <button class="bc-mode-btn ${BC.feedMode === 'tiktok' ? 'active' : ''}" onclick="AgoraPage.setFeedMode('tiktok')" title="Vertical scroll">
-                <i class="fa-solid fa-clapperboard"></i>
+                <i class="fa-solid fa-film"></i>
             </button>
         </div>`;
 
