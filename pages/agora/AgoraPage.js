@@ -199,6 +199,28 @@ function _initDoubleTap() {
 }
 _initDoubleTap();
 
+// Scroll-hide header (hide on scroll down, show on scroll up — like Twitter/Instagram)
+let _scrollLastY = 0;
+function _initScrollHide() {
+    window.addEventListener('scroll', () => {
+        const header = document.querySelector('.bc-header');
+        if (!header) return;
+        // Don't hide on detail views (back button must stay visible)
+        if (['post-detail', 'user-profile', 'profile-setup'].includes(BC.view)) {
+            header.classList.remove('bc-header--hidden');
+            return;
+        }
+        const y = window.scrollY;
+        if (y > 80 && y - _scrollLastY > 8) {
+            header.classList.add('bc-header--hidden');
+        } else if (_scrollLastY - y > 8) {
+            header.classList.remove('bc-header--hidden');
+        }
+        _scrollLastY = y;
+    }, { passive: true });
+}
+_initScrollHide();
+
 // Connect BC._render to renderContent so modules can trigger re-renders
 BC._render = () => { renderContent(); _observeVideos(); _observeSentinel(); };
 

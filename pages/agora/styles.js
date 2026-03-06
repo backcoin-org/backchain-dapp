@@ -33,7 +33,8 @@ export function injectStyles() {
         .bc-shell { max-width:640px; margin:0 auto; min-height:100vh; background:var(--bc-bg); position:relative; }
 
         /* Header */
-        .bc-header { position:sticky; top:0; z-index:200; background:rgba(10,10,12,0.85); backdrop-filter:blur(20px) saturate(1.4); -webkit-backdrop-filter:blur(20px) saturate(1.4); border-bottom:1px solid var(--bc-border); }
+        .bc-header { position:sticky; top:0; z-index:200; background:rgba(10,10,12,0.85); backdrop-filter:blur(20px) saturate(1.4); -webkit-backdrop-filter:blur(20px) saturate(1.4); border-bottom:1px solid var(--bc-border); transition:transform 0.3s ease; }
+        .bc-header--hidden { transform:translateY(-100%); }
         .bc-header-bar { display:flex; align-items:center; justify-content:space-between; padding:10px 16px; }
         .bc-brand { display:flex; align-items:center; gap:10px; }
         .bc-brand-icon { width:34px; height:34px; border-radius:10px; object-fit:contain; }
