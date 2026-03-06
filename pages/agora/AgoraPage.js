@@ -408,15 +408,12 @@ function renderCartBar() {
             </div>`;
     }
 
-    // Collapsed: floating pill
+    // Collapsed: floating pill — click opens cart
     return `
         <div class="bc-cart-pill" onclick="AgoraPage.toggleCart()">
+            <i class="fa-solid fa-layer-group" style="color:var(--bc-accent);font-size:14px;"></i>
             <span class="bc-cart-badge" id="bc-cart-badge">${count}</span>
-            <button class="bc-cart-submit-btn" onclick="event.stopPropagation(); AgoraPage.submitCart()" ${BC.cartSubmitting ? 'disabled' : ''}>
-                ${BC.cartSubmitting
-                    ? `<i class="fa-solid fa-spinner fa-spin"></i>`
-                    : `<i class="fa-solid fa-link"></i> ${t('agora.cart.submit')}`}
-            </button>
+            <span style="font-size:12px;color:var(--bc-text-2);font-weight:600;">${count} ${count === 1 ? t('agora.cart.action') : t('agora.cart.actions')}</span>
         </div>`;
 }
 

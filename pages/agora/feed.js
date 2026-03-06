@@ -242,9 +242,14 @@ function _renderTikTokCard(post, i) {
     const isFollowing = BC.following.has(post.author?.toLowerCase());
 
     // Actions sidebar (shared by both layouts)
-    const followBtn = State.isConnected && !isOwn && !isFollowing
-        ? `<div class="bc-tiktok-follow-btn" onclick="event.stopPropagation(); AgoraPage.follow('${post.author}')"><i class="fa-solid fa-plus"></i></div>`
-        : '';
+    let followBtn = '';
+    if (State.isConnected && !isOwn) {
+        if (isFollowing) {
+            followBtn = `<div class="bc-tiktok-follow-btn following" onclick="event.stopPropagation(); AgoraPage.unfollow('${post.author}')"><i class="fa-solid fa-check"></i></div>`;
+        } else {
+            followBtn = `<div class="bc-tiktok-follow-btn" onclick="event.stopPropagation(); AgoraPage.follow('${post.author}')"><i class="fa-solid fa-plus"></i></div>`;
+        }
+    }
 
     const actionsSidebar = `
         <div class="bc-tiktok-actions">

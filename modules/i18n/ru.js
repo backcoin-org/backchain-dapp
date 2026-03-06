@@ -1788,7 +1788,7 @@ export default {
             title: 'Корзина действий',
             empty: 'Корзина пуста',
             total: 'Итого',
-            submit: 'Отправить все',
+            submit: 'Зарегистрировать в блокчейне',
             clear: 'Очистить',
             notOnChainYet: 'Ещё не зарегистрировано в блокчейне',
             actionsNotOnChain: '<strong>{count} действие(й)</strong> ещё не в блокчейне',

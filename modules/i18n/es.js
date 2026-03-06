@@ -1788,7 +1788,7 @@ export default {
             title: 'Carrito de Acciones',
             empty: 'Carrito vacío',
             total: 'Total',
-            submit: 'Enviar Todo',
+            submit: 'Registrar en Blockchain',
             clear: 'Limpiar',
             notOnChainYet: 'No registrado en blockchain aún',
             actionsNotOnChain: '<strong>{count} acción(es)</strong> no registradas en blockchain aún',

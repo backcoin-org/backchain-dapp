@@ -1790,7 +1790,7 @@ export default {
             title: 'Action Cart',
             empty: 'Cart is empty',
             total: 'Total',
-            submit: 'Submit All',
+            submit: 'Register on Blockchain',
             clear: 'Clear',
             notOnChainYet: 'Not registered on blockchain yet',
             actionsNotOnChain: '<strong>{count} action(s)</strong> not on blockchain yet',

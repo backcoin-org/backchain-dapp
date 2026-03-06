@@ -1788,7 +1788,7 @@ export default {
             title: '액션 카트',
             empty: '카트가 비어 있습니다',
             total: '합계',
-            submit: '전체 제출',
+            submit: '블록체인에 등록',
             clear: '비우기',
             notOnChainYet: '아직 블록체인에 등록되지 않음',
             actionsNotOnChain: '<strong>{count}개 작업</strong>이 아직 블록체인에 없음',

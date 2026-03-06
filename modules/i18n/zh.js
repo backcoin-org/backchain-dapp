@@ -1788,7 +1788,7 @@ export default {
             title: '操作购物车',
             empty: '购物车为空',
             total: '合计',
-            submit: '全部提交',
+            submit: '注册到区块链',
             clear: '清空',
             notOnChainYet: '尚未注册到区块链',
             actionsNotOnChain: '<strong>{count} 个操作</strong>尚未上链',

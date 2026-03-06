@@ -404,7 +404,8 @@ export function injectStyles() {
         .bc-tiktok-action i { font-size:24px; filter:drop-shadow(0 1px 3px rgba(0,0,0,0.5)); }
         .bc-tiktok-action span { font-size:11px; font-weight:600; }
         .bc-tiktok-avatar-wrap { position:relative; display:flex; flex-direction:column; align-items:center; margin-bottom:6px; }
-        .bc-tiktok-follow-btn { position:absolute; bottom:-8px; left:50%; transform:translateX(-50%); width:22px; height:22px; border-radius:50%; background:#fe2c55; color:#fff; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:900; border:2px solid #111; cursor:pointer; z-index:3; transition:transform 0.15s; }
+        .bc-tiktok-follow-btn { position:absolute; bottom:-8px; left:50%; transform:translateX(-50%); width:22px; height:22px; border-radius:50%; background:#fe2c55; color:#fff; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:900; border:2px solid #111; cursor:pointer; z-index:3; transition:all 0.15s; }
+        .bc-tiktok-follow-btn.following { background:var(--bc-green); font-size:10px; }
         .bc-tiktok-follow-btn:hover { transform:translateX(-50%) scale(1.15); }
         .bc-tiktok-avatar { width:40px; height:40px; border-radius:50%; background:linear-gradient(135deg,var(--bc-accent),#fbbf24); display:flex; align-items:center; justify-content:center; font-weight:700; color:#000; font-size:14px; border:2px solid #fff; overflow:hidden; }
         .bc-tiktok-avatar img { width:100%; height:100%; object-fit:cover; }
