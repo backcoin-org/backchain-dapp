@@ -1,6 +1,6 @@
 // pages/agora/data-loader.js
-// Agora V14 — Data loading from Firebase (indexed by backchain-indexer-service)
-// Falls back to on-chain queryFilter only if Firebase is unavailable.
+// Agora V15 — Data loading via Backend API (backchain-backand Cloud Functions)
+// Indexer → Firestore (backchain-backand) → API → Frontend
 // ============================================================================
 
 const ethers = window.ethers;
@@ -8,13 +8,54 @@ const ethers = window.ethers;
 import { State } from '../../state.js';
 import { agoraABI } from '../../config.js';
 import { BackchatTx } from '../../modules/transactions/index.js';
-import { calculateFeeClientSide, chunkedQueryFilter } from '../../modules/core/index.js';
-import { NetworkManager } from '../../modules/core/index.js';
+import { calculateFeeClientSide } from '../../modules/core/index.js';
 import { LiveStream } from '../../modules/webrtc-live.js';
-import { BC, getAgoraAddress, EVENTS_LOOKBACK } from './state.js';
+import { BC, getAgoraAddress } from './state.js';
 import { parseMetadata, parsePostContent } from './utils.js';
-import { db } from '../../modules/firebase-auth-service.js';
-import { collection, getDocs, query, where, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+
+// ============================================================================
+// API CONFIGURATION
+// ============================================================================
+
+const AGORA_API = 'https://us-central1-backchain-backand.cloudfunctions.net/getAgoraFeed';
+const API_TIMEOUT = 10000;
+
+let _feedCache = null;
+let _feedCacheTime = 0;
+const FEED_CACHE_MS = 30000; // 30s cache
+
+async function fetchAgoraFeed(userAddress) {
+    const now = Date.now();
+    if (_feedCache && (now - _feedCacheTime) < FEED_CACHE_MS) {
+        return _feedCache;
+    }
+
+    const url = userAddress
+        ? `${AGORA_API}?user=${userAddress.toLowerCase()}`
+        : AGORA_API;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), API_TIMEOUT);
+
+    try {
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeout);
+        if (!res.ok) throw new Error(`API ${res.status}`);
+        const data = await res.json();
+        _feedCache = data;
+        _feedCacheTime = now;
+        return data;
+    } catch (e) {
+        clearTimeout(timeout);
+        throw e;
+    }
+}
+
+// Invalidate cache after actions (post, like, etc.)
+export function invalidateFeedCache() {
+    _feedCache = null;
+    _feedCacheTime = 0;
+}
 
 // ============================================================================
 // CONTRACT ACCESS (for on-chain reads like hasLiked, getUserProfile)
@@ -81,27 +122,25 @@ export async function loadUserStatus() {
 }
 
 // ============================================================================
-// GLOBAL STATS — Firebase first, on-chain fallback
+// GLOBAL STATS — from API feed data, on-chain fallback
 // ============================================================================
 
 export async function loadGlobalStats() {
     try {
-        // Try Firebase first (indexed stats)
-        const statsDoc = await getDoc(doc(db, 'agora_stats', 'global'));
-        if (statsDoc.exists()) {
-            const data = statsDoc.data();
+        const feed = await fetchAgoraFeed(State.userAddress);
+        if (feed.stats) {
             BC.globalStats = {
-                totalPosts: data.totalPosts || 0,
-                totalReplies: data.totalReplies || 0,
-                totalReposts: data.totalReposts || 0,
-                totalProfiles: data.totalProfiles || 0,
-                totalLikes: data.totalLikes || 0,
-                totalFollows: data.totalFollows || 0,
+                totalPosts: feed.stats.totalPosts || 0,
+                totalReplies: feed.stats.totalReplies || 0,
+                totalReposts: feed.stats.totalReposts || 0,
+                totalProfiles: feed.stats.totalProfiles || 0,
+                totalLikes: feed.stats.totalLikes || 0,
+                totalFollows: feed.stats.totalFollows || 0,
             };
             return;
         }
     } catch (e) {
-        console.warn('[Agora] Firebase stats unavailable, falling back to on-chain:', e.message);
+        console.warn('[Agora] API stats unavailable, falling back to on-chain:', e.message);
     }
     // Fallback: on-chain
     try {
@@ -112,17 +151,16 @@ export async function loadGlobalStats() {
 }
 
 // ============================================================================
-// PROFILES — Firebase (agora_users collection)
+// PROFILES — from API feed data
 // ============================================================================
 
 export async function loadProfiles() {
     try {
-        // Read all profiles from Firebase
-        const usersSnap = await getDocs(collection(db, 'agora_users'));
+        const feed = await fetchAgoraFeed(State.userAddress);
 
-        for (const docSnap of usersSnap.docs) {
-            const data = docSnap.data();
-            const addr = (data.address || docSnap.id).toLowerCase();
+        for (const data of (feed.profiles || [])) {
+            const addr = (data.address || '').toLowerCase();
+            if (!addr) continue;
             const meta = parseMetadata(data.metadataURI || '');
             BC.profiles.set(addr, {
                 username: data.username || '',
@@ -135,7 +173,6 @@ export async function loadProfiles() {
                 location: meta.location,
                 links: meta.links
             });
-            // Store follow counts from indexed data
             if (data.followerCount != null || data.followingCount != null) {
                 BC.followCounts.set(addr, {
                     followers: data.followerCount || 0,
@@ -184,7 +221,7 @@ export async function loadProfiles() {
 }
 
 // ============================================================================
-// SOCIAL GRAPH — Firebase (agora_follows collection)
+// SOCIAL GRAPH — from API feed data
 // ============================================================================
 
 export async function loadSocialGraph() {
@@ -193,25 +230,15 @@ export async function loadSocialGraph() {
     BC.followCounts = new Map();
 
     if (!State.isConnected || !State.userAddress) return;
-    const myAddr = State.userAddress.toLowerCase();
 
     try {
-        // My following
-        const followingSnap = await getDocs(
-            query(collection(db, 'agora_follows'), where('follower', '==', myAddr))
-        );
-        for (const d of followingSnap.docs) {
-            BC.following.add(d.data().followed);
+        const feed = await fetchAgoraFeed(State.userAddress);
+        for (const addr of (feed.following || [])) {
+            BC.following.add(addr);
         }
-
-        // My followers
-        const followersSnap = await getDocs(
-            query(collection(db, 'agora_follows'), where('followed', '==', myAddr))
-        );
-        for (const d of followersSnap.docs) {
-            BC.followers.add(d.data().follower);
+        for (const addr of (feed.followers || [])) {
+            BC.followers.add(addr);
         }
-
         console.log(`[Agora] Social graph: following=${BC.following.size}, followers=${BC.followers.size}`);
     } catch (e) {
         console.warn('[Agora] Failed to load social graph:', e.message);
@@ -219,19 +246,16 @@ export async function loadSocialGraph() {
 }
 
 // ============================================================================
-// BLOCKED AUTHORS — Firebase (agora_blocks collection)
+// BLOCKED AUTHORS — from API feed data
 // ============================================================================
 
 export async function loadBlockedAuthors() {
     if (!State.isConnected || !State.userAddress) return;
-    const myAddr = State.userAddress.toLowerCase();
 
     try {
-        const blocksSnap = await getDocs(
-            query(collection(db, 'agora_blocks'), where('blocker', '==', myAddr))
-        );
-        for (const d of blocksSnap.docs) {
-            BC.blockedAuthors.add(d.data().blocked);
+        const feed = await fetchAgoraFeed(State.userAddress);
+        for (const addr of (feed.blocks || [])) {
+            BC.blockedAuthors.add(addr);
         }
         console.log(`[Agora] Blocked authors: ${BC.blockedAuthors.size}`);
     } catch (e) {
@@ -240,7 +264,7 @@ export async function loadBlockedAuthors() {
 }
 
 // ============================================================================
-// POSTS — Firebase (agora_posts collection) with smart feed algorithm
+// POSTS — from API feed data + smart feed algorithm
 // ============================================================================
 
 export async function loadPosts() {
@@ -254,11 +278,10 @@ export async function loadPosts() {
             return;
         }
 
-        console.log('[Agora] Loading posts from Firebase...');
+        console.log('[Agora] Loading posts from API...');
 
-        // Read all posts from Firebase, sort/filter client-side
-        // (avoids Firestore composite index requirements)
-        const postsSnap = await getDocs(collection(db, 'agora_posts'));
+        const feed = await fetchAgoraFeed(State.userAddress);
+        const rawPosts = feed.posts || [];
 
         const allItems = [];
         const feedPosts = [];
@@ -268,12 +291,10 @@ export async function loadPosts() {
         BC.repostCountMap = new Map();
         BC.likesMap = new Map();
 
-        for (const docSnap of postsSnap.docs) {
-            const data = docSnap.data();
-            if (data.deleted) continue; // skip deleted posts
-            const pid = data.postId || docSnap.id;
+        for (const data of rawPosts) {
+            const pid = data.postId;
             const type = data.type || 'post';
-            const timestamp = data.timestamp?.seconds || data.timestamp?.toDate?.()?.getTime?.() / 1000 || 0;
+            const timestamp = data.timestamp || 0;
 
             if (type === 'post') {
                 const { text, media, mediaCID, isVideo } = parsePostContent(data.contentHash || '');
@@ -283,8 +304,8 @@ export async function loadPosts() {
                     content: text, media, mediaCID, isVideo,
                     tag: data.tag || 0,
                     timestamp,
-                    superLikeETH: 0n, // Firebase stores as number, not BigInt
-                    editedAt: data.editedAt?.seconds || 0,
+                    superLikeETH: 0n,
+                    editedAt: data.editedAt || 0,
                     likesCount: data.likes || 0,
                     downvotesCount: data.downvotes || 0,
                     repliesCount: data.replies || 0,
@@ -304,7 +325,7 @@ export async function loadPosts() {
                     tag: data.tag || 0,
                     timestamp,
                     superLikeETH: 0n,
-                    editedAt: data.editedAt?.seconds || 0,
+                    editedAt: data.editedAt || 0,
                     likesCount: data.likes || 0,
                     downvotesCount: data.downvotes || 0,
                     txHash: data.txHash
@@ -329,9 +350,9 @@ export async function loadPosts() {
             }
         }
 
-        console.log(`[Agora] Firebase: ${postsSnap.size} docs → ${feedPosts.length} feed posts, ${allItems.length} total items`);
+        console.log(`[Agora] API: ${rawPosts.length} docs → ${feedPosts.length} feed posts, ${allItems.length} total items`);
 
-        // Check user likes (still on-chain — Firebase doesn't track per-user likes)
+        // Check user likes (still on-chain — API doesn't track per-user likes)
         if (State.isConnected && State.userAddress) {
             const contract = getContract();
             if (contract) {

@@ -12,7 +12,7 @@ import { irysUploadFile, t } from '../../modules/core/index.js';
 import { LiveStream } from '../../modules/webrtc-live.js';
 import { BC, getMaxContent, getOperatorAddress, MEDIA_LIMITS, GALLERY_MAX_ITEMS, SOCIAL_LINK_TYPES } from './state.js';
 import { getProfileName, getProfileUsername, getIPFSUrl } from './utils.js';
-import { loadPosts } from './data-loader.js';
+import { loadPosts, invalidateFeedCache } from './data-loader.js';
 
 // ============================================================================
 // NAVIGATION
@@ -106,7 +106,7 @@ export async function doCreatePost() {
             BC.composeTag = 0;
             BC.isPosting = false;
             showToast(t('agora.toast.postCreated'), 'success');
-            await loadPosts();
+            invalidateFeedCache(); await loadPosts();
         },
         onError: () => {
             BC.isPosting = false;
@@ -130,7 +130,7 @@ export async function doCreateReply(parentId) {
         onSuccess: async () => {
             if (input) input.value = '';
             showToast(t('agora.toast.replyPosted'), 'success');
-            await loadPosts();
+            invalidateFeedCache(); await loadPosts();
             BC._render();
         }
     });
@@ -145,7 +145,7 @@ export async function doRepost(originalPostId) {
         onSuccess: async () => {
             closeModal('repost');
             showToast(t('agora.toast.reposted'), 'success');
-            await loadPosts();
+            invalidateFeedCache(); await loadPosts();
         }
     });
 }
@@ -177,7 +177,7 @@ export async function doSuperLike(postId, amount) {
         operator: getOperatorAddress(),
         onSuccess: async () => {
             showToast(t('agora.toast.superLiked'), 'success');
-            await loadPosts();
+            invalidateFeedCache(); await loadPosts();
         }
     });
 }
@@ -201,7 +201,7 @@ export async function doDeletePost(postId) {
         postId,
         onSuccess: async () => {
             showToast(t('agora.toast.deleteSuccess'), 'success');
-            await loadPosts();
+            invalidateFeedCache(); await loadPosts();
         }
     });
 }
@@ -219,7 +219,7 @@ export async function doEditPost(postId) {
         onSuccess: async () => {
             showToast(t('agora.toast.postEdited'), 'success');
             closeModal('edit-post');
-            await loadPosts();
+            invalidateFeedCache(); await loadPosts();
             BC._render();
         },
         onError: (err) => {
@@ -261,7 +261,7 @@ export async function doPinPost(postId) {
         postId,
         onSuccess: async () => {
             showToast(t('agora.toast.postPinned'), 'success');
-            await loadPosts();
+            invalidateFeedCache(); await loadPosts();
         }
     });
 }
@@ -494,7 +494,7 @@ export async function confirmChangeTag() {
         newTag: _changeTagNewTag,
         onSuccess: async () => {
             showToast(t('agora.toast.tagChanged'), 'success');
-            await loadPosts();
+            invalidateFeedCache(); await loadPosts();
         }
     });
 }
@@ -719,7 +719,7 @@ export async function endLive() {
     const vodCID = await _uploadVOD();
     if (vodCID) {
         console.log('[Agora] VOD saved with CID:', vodCID);
-        await loadPosts();
+        invalidateFeedCache(); await loadPosts();
     }
 }
 
@@ -911,7 +911,7 @@ export async function submitCart() {
             BC.cartSubmitting = false;
             _saveCart();
             showToast(t('agora.toast.batchSuccess', {count: String(items.length)}), 'success');
-            await loadPosts();
+            invalidateFeedCache(); await loadPosts();
             BC._render();
         },
         onError: (err) => {
