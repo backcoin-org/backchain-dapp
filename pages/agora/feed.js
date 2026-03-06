@@ -242,12 +242,15 @@ function _renderTikTokCard(post, i) {
     const isFollowing = BC.following.has(post.author?.toLowerCase());
 
     // Actions sidebar (shared by both layouts)
+    const followBtn = State.isConnected && !isOwn && !isFollowing
+        ? `<div class="bc-tiktok-follow-btn" onclick="event.stopPropagation(); AgoraPage.follow('${post.author}')"><i class="fa-solid fa-plus"></i></div>`
+        : '';
+
     const actionsSidebar = `
         <div class="bc-tiktok-actions">
-            <div class="bc-tiktok-action" onclick="event.stopPropagation(); AgoraPage.viewProfile('${post.author}')">
-                <div class="bc-tiktok-avatar">${renderAvatar(post.author)}</div>
-                ${State.isConnected && !isOwn && !isFollowing ? `<div class="bc-tiktok-follow-badge" onclick="event.stopPropagation(); AgoraPage.follow('${post.author}')"><i class="fa-solid fa-plus"></i></div>` : ''}
-                ${isFollowing && !isOwn ? `<div class="bc-tiktok-follow-badge bc-tiktok-following"><i class="fa-solid fa-check"></i></div>` : ''}
+            <div class="bc-tiktok-avatar-wrap">
+                <div class="bc-tiktok-avatar" onclick="event.stopPropagation(); AgoraPage.viewProfile('${post.author}')">${renderAvatar(post.author)}</div>
+                ${followBtn}
             </div>
             <div class="bc-tiktok-action ${isLiked ? 'liked' : ''}" onclick="event.stopPropagation(); AgoraPage.like('${post.id}')">
                 <i class="${isLiked ? 'fa-solid' : 'fa-regular'} fa-heart"></i>
@@ -277,6 +280,7 @@ function _renderTikTokCard(post, i) {
                 <span class="bc-tiktok-quote-close">\u201D</span>
             </div>
             <div class="bc-tiktok-overlay" style="background:none;">
+                ${actionsSidebar}
                 <div class="bc-tiktok-bottom">
                     <div class="bc-tiktok-info">
                         <div class="bc-tiktok-author" onclick="event.stopPropagation(); AgoraPage.viewProfile('${post.author}')">
@@ -284,7 +288,6 @@ function _renderTikTokCard(post, i) {
                             <span class="bc-tiktok-time">${formatTimeAgo(post.timestamp)}</span>
                         </div>
                     </div>
-                    ${actionsSidebar}
                 </div>
             </div>
         </div>`;
@@ -296,6 +299,7 @@ function _renderTikTokCard(post, i) {
             ${isVid && mediaUrl ? `<video class="bc-tiktok-video" src="${mediaUrl}" playsinline muted loop preload="metadata" data-post-video="${post.id}"></video>` : ''}
             ${!isVid && mediaUrl ? `<div class="bc-tiktok-img-overlay"></div>` : ''}
             <div class="bc-tiktok-overlay">
+                ${actionsSidebar}
                 <div class="bc-tiktok-bottom">
                     <div class="bc-tiktok-info">
                         <div class="bc-tiktok-author" onclick="event.stopPropagation(); AgoraPage.viewProfile('${post.author}')">
@@ -304,7 +308,6 @@ function _renderTikTokCard(post, i) {
                         </div>
                         ${fullText ? `<div class="bc-tiktok-caption" data-caption-id="${post.id}" onclick="event.stopPropagation(); AgoraPage.toggleCaption('${post.id}')">${fullText}${isLong ? `<span class="bc-tiktok-more"> ${t('agora.more')}</span>` : ''}</div>` : ''}
                     </div>
-                    ${actionsSidebar}
                 </div>
             </div>
         </div>`;

@@ -389,7 +389,7 @@ export function injectStyles() {
         .bc-tiktok-video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
         .bc-tiktok-img-overlay { position:absolute; inset:0; background:linear-gradient(transparent 40%, rgba(0,0,0,0.7)); z-index:1; }
         .bc-tiktok-overlay { position:absolute; inset:0; z-index:2; display:flex; flex-direction:column; justify-content:flex-end; background:linear-gradient(transparent 50%, rgba(0,0,0,0.6) 80%, rgba(0,0,0,0.85)); pointer-events:none; }
-        .bc-tiktok-bottom { display:flex; align-items:flex-end; gap:12px; padding:20px 16px 20px; pointer-events:auto; }
+        .bc-tiktok-bottom { display:flex; align-items:flex-end; gap:12px; padding:20px 16px 20px; padding-right:56px; pointer-events:auto; }
         .bc-tiktok-info { flex:1; min-width:0; }
         .bc-tiktok-author { font-size:15px; color:#fff; cursor:pointer; display:flex; align-items:center; gap:8px; }
         .bc-tiktok-author strong { font-weight:700; }
@@ -397,15 +397,15 @@ export function injectStyles() {
         .bc-tiktok-caption { font-size:14px; color:rgba(255,255,255,0.85); line-height:1.4; margin-top:6px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; cursor:pointer; }
         .bc-tiktok-caption.expanded { -webkit-line-clamp:unset; display:block; max-height:50vh; overflow-y:auto; }
         .bc-tiktok-more { color:var(--bc-text-3); font-weight:600; font-size:13px; }
-        .bc-tiktok-actions { display:flex; flex-direction:column; align-items:center; gap:18px; flex-shrink:0; }
+        .bc-tiktok-actions { position:absolute; right:8px; bottom:100px; z-index:5; display:flex; flex-direction:column; align-items:center; gap:16px; pointer-events:auto; }
         .bc-tiktok-action { display:flex; flex-direction:column; align-items:center; gap:2px; color:rgba(255,255,255,0.85); cursor:pointer; transition:all 0.15s; }
         .bc-tiktok-action:hover { transform:scale(1.15); }
         .bc-tiktok-action.liked { color:var(--bc-red); }
         .bc-tiktok-action i { font-size:24px; filter:drop-shadow(0 1px 3px rgba(0,0,0,0.5)); }
         .bc-tiktok-action span { font-size:11px; font-weight:600; }
-        .bc-tiktok-follow-badge { position:absolute; bottom:-4px; left:50%; transform:translateX(-50%); width:18px; height:18px; border-radius:50%; background:var(--bc-accent); color:#000; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:900; border:2px solid rgba(0,0,0,0.6); cursor:pointer; }
-        .bc-tiktok-follow-badge.bc-tiktok-following { background:var(--bc-green); }
-        .bc-tiktok-action:has(.bc-tiktok-follow-badge) { position:relative; margin-bottom:4px; }
+        .bc-tiktok-avatar-wrap { position:relative; display:flex; flex-direction:column; align-items:center; margin-bottom:6px; }
+        .bc-tiktok-follow-btn { position:absolute; bottom:-8px; left:50%; transform:translateX(-50%); width:22px; height:22px; border-radius:50%; background:#fe2c55; color:#fff; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:900; border:2px solid #111; cursor:pointer; z-index:3; transition:transform 0.15s; }
+        .bc-tiktok-follow-btn:hover { transform:translateX(-50%) scale(1.15); }
         .bc-tiktok-avatar { width:40px; height:40px; border-radius:50%; background:linear-gradient(135deg,var(--bc-accent),#fbbf24); display:flex; align-items:center; justify-content:center; font-weight:700; color:#000; font-size:14px; border:2px solid #fff; overflow:hidden; }
         .bc-tiktok-avatar img { width:100%; height:100%; object-fit:cover; }
 
@@ -417,7 +417,7 @@ export function injectStyles() {
         .bc-tiktok-quote-close { align-self:flex-end; margin-top:8px; }
         .bc-tiktok-hero-content { font-size:17px; line-height:1.7; color:rgba(255,255,255,0.92); max-height:55vh; overflow-y:auto; white-space:pre-wrap; word-break:break-word; text-shadow:0 1px 4px rgba(0,0,0,0.4); }
         .bc-tiktok-hero-short { font-size:24px; font-weight:600; line-height:1.5; }
-        .bc-tiktok-textonly .bc-tiktok-bottom { background:linear-gradient(transparent, rgba(0,0,0,0.5)); padding-top:40px; }
+        .bc-tiktok-textonly .bc-tiktok-bottom { background:linear-gradient(transparent, rgba(0,0,0,0.5)); padding-top:40px; padding-right:56px; }
 
         /* Double-tap like animation */
         @keyframes bc-float-heart { 0% { opacity:1; transform:scale(0) translateY(0); } 30% { opacity:1; transform:scale(1.2) translateY(-20px); } 100% { opacity:0; transform:scale(0.8) translateY(-120px); } }
