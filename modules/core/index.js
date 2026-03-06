@@ -186,6 +186,43 @@ export async function getGasPriceOverrides() {
     return { gasPrice: feeData.gasPrice || feeData.maxFeePerGas || 100000000n };
 }
 
+/**
+ * Chunked queryFilter — most RPCs limit eth_getLogs to ~50K blocks.
+ * Automatically splits large ranges into safe chunks.
+ *
+ * @param {ethers.Contract} contract - Contract instance
+ * @param {ethers.EventFilter} filter - Event filter
+ * @param {number} fromBlock - Start block
+ * @param {number} [toBlock] - End block (defaults to latest)
+ * @returns {Promise<Array>} Array of event logs
+ */
+export async function chunkedQueryFilter(contract, filter, fromBlock, toBlock) {
+    const MAX_RANGE = 45000;
+    if (!toBlock) {
+        try {
+            const provider = contract.runner?.provider || NetworkManager.getProvider();
+            toBlock = await provider.getBlockNumber();
+        } catch {
+            toBlock = fromBlock + 100000;
+        }
+    }
+    const range = toBlock - fromBlock;
+    if (range <= MAX_RANGE) {
+        return contract.queryFilter(filter, fromBlock, toBlock);
+    }
+    const results = [];
+    for (let start = fromBlock; start <= toBlock; start += MAX_RANGE) {
+        const end = Math.min(start + MAX_RANGE - 1, toBlock);
+        try {
+            const chunk = await contract.queryFilter(filter, start, end);
+            results.push(...chunk);
+        } catch (e) {
+            console.warn(`[chunkedQuery] ${start}-${end} failed:`, e.message);
+        }
+    }
+    return results;
+}
+
 // ============================================================================
 // CONVENIENCE IMPORTS (Re-exports for easy access)
 // ============================================================================

@@ -127,8 +127,9 @@ async function loadCertificatesFromContract() {
                 const contract = new ethers.Contract(addresses.notary, NOTARY_ABI_EVENTS, provider);
                 const fromBlock = 10_313_523;
 
+                const { chunkedQueryFilter } = await import('../../modules/core/index.js');
                 const transferFilter = contract.filters.CertificateTransferred(null, null, State.userAddress);
-                const transferEvents = await contract.queryFilter(transferFilter, fromBlock);
+                const transferEvents = await chunkedQueryFilter(contract, transferFilter, fromBlock);
 
                 const receivedHashes = new Set(transferEvents.map(ev => ev.args.documentHash.toLowerCase()));
 
@@ -259,7 +260,8 @@ async function loadRecentNotarizations() {
 
     const fromBlock = 10_313_523;
 
-    const events = await contract.queryFilter(filter, fromBlock);
+    const { chunkedQueryFilter } = await import('../../modules/core/index.js');
+    const events = await chunkedQueryFilter(contract, filter, fromBlock);
 
     // Get 20 most recent
     const recent = events.slice(-20).reverse();

@@ -1028,7 +1028,8 @@ export async function loadUserFortuneHistory(userAddress, limit = 20) {
         // V9: GameRevealed(gameId, player, grossWager, prizeWon, tierMask, matchCount, operator)
         const filter = contract.filters.GameRevealed(null, userAddress);
         // V12 deploy block — avoids negative fromBlock issues on public RPCs
-        const events = await contract.queryFilter(filter, 10_313_523);
+        const { chunkedQueryFilter } = await import('./core/index.js');
+        const events = await chunkedQueryFilter(contract, filter, 10_313_523);
 
         const games = events.slice(-limit).reverse().map(event => {
             const args = event.args;

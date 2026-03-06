@@ -535,10 +535,26 @@ async function loadAgoraData() {
         const provider = NetworkManager.getProvider();
         const contract = new window.ethers.Contract(agora, agoraABI, provider);
 
+        // Chunked queryFilter — RPCs limit eth_getLogs to ~50K blocks
+        const MAX_RANGE = 45000;
+        let latestBlock;
+        try { latestBlock = await provider.getBlockNumber(); } catch { latestBlock = EVENTS_LOOKBACK + 100000; }
+
+        async function chunkedQuery(filter, from) {
+            const range = latestBlock - from;
+            if (range <= MAX_RANGE) return contract.queryFilter(filter, from, latestBlock);
+            const results = [];
+            for (let s = from; s <= latestBlock; s += MAX_RANGE) {
+                const e = Math.min(s + MAX_RANGE - 1, latestBlock);
+                try { results.push(...await contract.queryFilter(filter, s, e)); } catch {}
+            }
+            return results;
+        }
+
         // Query profile + post events in parallel (indexed by user address)
         const [profileEvents, postEvents] = await Promise.all([
-            contract.queryFilter(contract.filters.ProfileCreated(State.userAddress), EVENTS_LOOKBACK).catch(() => []),
-            contract.queryFilter(contract.filters.PostCreated(null, State.userAddress), EVENTS_LOOKBACK).catch(() => [])
+            chunkedQuery(contract.filters.ProfileCreated(State.userAddress), EVENTS_LOOKBACK).catch(() => []),
+            chunkedQuery(contract.filters.PostCreated(null, State.userAddress), EVENTS_LOOKBACK).catch(() => [])
         ]);
 
         if (profileEvents.length > 0) {

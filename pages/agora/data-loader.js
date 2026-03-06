@@ -14,6 +14,48 @@ import { BC, getAgoraAddress, EVENTS_LOOKBACK } from './state.js';
 import { parseMetadata, parsePostContent } from './utils.js';
 
 // ============================================================================
+// CHUNKED QUERY — RPCs limit eth_getLogs to ~50K blocks
+// ============================================================================
+
+const MAX_BLOCK_RANGE = 45000;
+let _cachedLatestBlock = null;
+let _cachedBlockTime = 0;
+
+async function getLatestBlock() {
+    // Cache for 30s to avoid extra RPC calls
+    if (_cachedLatestBlock && Date.now() - _cachedBlockTime < 30000) return _cachedLatestBlock;
+    try {
+        const provider = State.publicProvider || new ethers.JsonRpcProvider(NetworkManager.getCurrentRpcUrl());
+        _cachedLatestBlock = await provider.getBlockNumber();
+        _cachedBlockTime = Date.now();
+        return _cachedLatestBlock;
+    } catch {
+        return EVENTS_LOOKBACK + 100000; // fallback estimate
+    }
+}
+
+async function chunkedQueryFilter(contract, filter, fromBlock) {
+    const toBlock = await getLatestBlock();
+    const range = toBlock - fromBlock;
+    // If range fits in one call, do it directly
+    if (range <= MAX_BLOCK_RANGE) {
+        return contract.queryFilter(filter, fromBlock, toBlock);
+    }
+    // Split into chunks
+    const results = [];
+    for (let start = fromBlock; start <= toBlock; start += MAX_BLOCK_RANGE) {
+        const end = Math.min(start + MAX_BLOCK_RANGE - 1, toBlock);
+        try {
+            const chunk = await contract.queryFilter(filter, start, end);
+            results.push(...chunk);
+        } catch (e) {
+            console.warn(`[Agora] queryFilter chunk ${start}-${end} failed:`, e.message);
+        }
+    }
+    return results;
+}
+
+// ============================================================================
 // CONTRACT ACCESS
 // ============================================================================
 
@@ -105,8 +147,8 @@ export async function loadProfiles() {
         if (!contract) { BC.hasProfile = false; return; }
 
         const [createEvents, updateEvents] = await Promise.all([
-            contract.queryFilter(contract.filters.ProfileCreated(), EVENTS_LOOKBACK).catch(() => []),
-            contract.queryFilter(contract.filters.ProfileUpdated(), EVENTS_LOOKBACK).catch(() => [])
+            chunkedQueryFilter(contract, contract.filters.ProfileCreated(), EVENTS_LOOKBACK).catch(() => []),
+            chunkedQueryFilter(contract, contract.filters.ProfileUpdated(), EVENTS_LOOKBACK).catch(() => [])
         ]);
 
         for (const ev of createEvents) {
@@ -193,8 +235,8 @@ export async function loadSocialGraph() {
     try {
         const contract = getContract();
         if (!contract) return;
-        const followEvents = await contract.queryFilter(contract.filters.Followed(), EVENTS_LOOKBACK).catch(() => []);
-        const unfollowEvents = await contract.queryFilter(contract.filters.Unfollowed(), EVENTS_LOOKBACK).catch(() => []);
+        const followEvents = await chunkedQueryFilter(contract, contract.filters.Followed(), EVENTS_LOOKBACK).catch(() => []);
+        const unfollowEvents = await chunkedQueryFilter(contract, contract.filters.Unfollowed(), EVENTS_LOOKBACK).catch(() => []);
         const myAddr = State.userAddress.toLowerCase();
 
         for (const ev of followEvents) {
@@ -220,7 +262,7 @@ export async function loadBlockedAuthors() {
     try {
         const contract = getContract();
         if (!contract) return;
-        const reportEvents = await contract.queryFilter(contract.filters.PostReported(), EVENTS_LOOKBACK).catch(() => []);
+        const reportEvents = await chunkedQueryFilter(contract, contract.filters.PostReported(), EVENTS_LOOKBACK).catch(() => []);
         const myAddr = State.userAddress.toLowerCase();
         for (const ev of reportEvents) {
             if (ev.args.reporter?.toLowerCase() === myAddr) {
@@ -246,43 +288,27 @@ export async function loadPosts() {
     try {
         const backchatAddress = getAgoraAddress();
         if (!backchatAddress) {
+            console.warn('[Agora] No contract address found');
             BC.contractAvailable = false;
             BC.error = 'Agora contract not deployed yet.';
             return;
         }
         const contract = getContract();
         if (!contract) {
+            console.warn('[Agora] getContract() returned null — publicProvider:', !!State.publicProvider, 'agoraContractPublic:', !!State.agoraContractPublic);
             BC.contractAvailable = false;
             BC.error = 'Could not connect to Agora contract';
             return;
         }
         BC.contractAvailable = true;
+        const latestBlock = await getLatestBlock();
+        console.log(`[Agora] Loading posts: blocks ${EVENTS_LOOKBACK}→${latestBlock} (range: ${latestBlock - EVENTS_LOOKBACK})`);
 
-        // Query events with RPC fallback — if primary returns 0 results, retry on alternate RPC
-        async function queryEvents(c) {
-            return Promise.all([
-                c.queryFilter(c.filters.PostCreated(), EVENTS_LOOKBACK).catch(e => { console.warn('[Agora] PostCreated query failed:', e.message); return []; }),
-                c.queryFilter(c.filters.ReplyCreated(), EVENTS_LOOKBACK).catch(e => { console.warn('[Agora] ReplyCreated query failed:', e.message); return []; }),
-                c.queryFilter(c.filters.RepostCreated(), EVENTS_LOOKBACK).catch(e => { console.warn('[Agora] RepostCreated query failed:', e.message); return []; })
-            ]);
-        }
-
-        let [postEvents, replyEvents, repostEvents] = await queryEvents(contract);
-
-        // If zero results, retry with fallback RPC
-        if (postEvents.length === 0 && replyEvents.length === 0) {
-            try {
-                const fallbackUrl = NetworkManager.getFallbackRpcUrl();
-                if (fallbackUrl) {
-                    console.log('[Agora] Zero events on primary RPC, retrying with fallback...');
-                    const fallbackProvider = new ethers.JsonRpcProvider(fallbackUrl);
-                    const fallbackContract = new ethers.Contract(backchatAddress, agoraABI, fallbackProvider);
-                    [postEvents, replyEvents, repostEvents] = await queryEvents(fallbackContract);
-                }
-            } catch (e) {
-                console.warn('[Agora] Fallback RPC also failed:', e.message);
-            }
-        }
+        let [postEvents, replyEvents, repostEvents] = await Promise.all([
+            chunkedQueryFilter(contract, contract.filters.PostCreated(), EVENTS_LOOKBACK).catch(e => { console.warn('[Agora] PostCreated query failed:', e.message); return []; }),
+            chunkedQueryFilter(contract, contract.filters.ReplyCreated(), EVENTS_LOOKBACK).catch(e => { console.warn('[Agora] ReplyCreated query failed:', e.message); return []; }),
+            chunkedQueryFilter(contract, contract.filters.RepostCreated(), EVENTS_LOOKBACK).catch(e => { console.warn('[Agora] RepostCreated query failed:', e.message); return []; })
+        ]);
         console.log(`[Agora] Events found: ${postEvents.length} posts, ${replyEvents.length} replies, ${repostEvents.length} reposts`);
 
         const allEventItems = [];
