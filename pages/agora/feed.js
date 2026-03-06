@@ -315,8 +315,39 @@ export function renderDiscover() {
             </button>
         </div>`;
 
+    const searchBar = `
+        <div class="bc-search-bar">
+            <div class="bc-search-input-wrap">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input id="bc-search-input" class="bc-search-input" type="text" placeholder="${t('agora.search.placeholder')}" value="${escapeHtml(BC.searchQuery)}" onkeydown="if(event.key==='Enter'){AgoraPage.searchPosts(this.value)}" />
+                ${BC.searchQuery ? `<button class="bc-search-clear" onclick="AgoraPage.searchPosts('')"><i class="fa-solid fa-xmark"></i></button>` : ''}
+            </div>
+        </div>`;
+
+    // Search results mode
+    if (BC.searchQuery) {
+        if (BC.isSearching) {
+            return searchBar + `<div class="bc-loading" style="padding:40px;"><div class="bc-spinner"></div></div>`;
+        }
+        if (BC.searchResults.length === 0) {
+            return searchBar + `
+                <div class="bc-empty" style="padding:40px 20px;">
+                    <div class="bc-empty-glyph"><i class="fa-solid fa-magnifying-glass"></i></div>
+                    <div class="bc-empty-title">${t('agora.search.noResults')}</div>
+                    <div class="bc-empty-text">${t('agora.search.tryAnother')}</div>
+                </div>`;
+        }
+        return searchBar + `
+            <div class="bc-discover-header">
+                <h2><i class="fa-solid fa-magnifying-glass"></i> ${t('agora.search.resultsFor', { query: escapeHtml(BC.searchQuery) })} ${modeToggle}</h2>
+                <p>${BC.searchResults.length} ${BC.searchResults.length === 1 ? t('agora.search.result') : t('agora.search.results')}</p>
+            </div>
+            ${BC.searchResults.map((post, i) => renderPost(post, i)).join('')}`;
+    }
+
+    // Default discover (trending)
     if (BC.trendingPosts.length === 0) {
-        return `
+        return searchBar + `
             <div class="bc-discover-header">
                 <h2><i class="fa-solid fa-fire"></i> ${t('agora.discover')} ${modeToggle}</h2>
                 <p>${t('agora.discoverRankedBy')}</p>
@@ -329,13 +360,13 @@ export function renderDiscover() {
     }
 
     if (BC.feedMode === 'tiktok') {
-        return `
+        return searchBar + `
             <div class="bc-tiktok-feed" data-tiktok-feed>
                 ${BC.trendingPosts.map((post, i) => _renderTikTokCard(post, i)).join('')}
             </div>`;
     }
 
-    return `
+    return searchBar + `
         <div class="bc-discover-header">
             <h2><i class="fa-solid fa-fire"></i> ${t('agora.discover')} ${modeToggle}</h2>
             <p>${t('agora.discoverRankedBy')}</p>

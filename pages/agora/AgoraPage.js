@@ -8,7 +8,7 @@ import { t } from '../../modules/core/index.js';
 import { BC, getMaxContent } from './state.js';
 import { getProfileName, getInitials, escapeHtml, linkifyContent } from './utils.js';
 import { injectStyles } from './styles.js';
-import { loadFees, loadUserStatus, loadGlobalStats, loadProfiles, loadPosts, loadMorePosts, loadSocialGraph, loadBlockedAuthors, loadActiveRooms, invalidateFeedCache } from './data-loader.js';
+import { loadFees, loadUserStatus, loadGlobalStats, loadProfiles, loadPosts, loadMorePosts, loadSocialGraph, loadBlockedAuthors, loadActiveRooms, invalidateFeedCache, searchPosts as doSearch } from './data-loader.js';
 import { navigateView, goBack, doCreatePost, doCreateReply, doLike, doFollow, doUnfollow, doDeletePost, doPinPost, doBlockUser, doUnblockUser, handleImageSelect, removeImage, onWizUsernameInput, doCreateProfile, goLive, endLive, watchLive, leaveLive, sharePost, closeModal, togglePostMenu, openChangeTag, selectNewTag, confirmChangeTag, restoreCart, removeFromCart, clearCart, toggleCart, submitCart, getCartFeeTotal } from './actions.js';
 import { renderCompose } from './composer.js';
 import { renderFeed, renderDiscover, renderTagBar, renderLanguageBar, renderSortBar, renderLiveStreamBar } from './feed.js';
@@ -715,6 +715,12 @@ export const AgoraPage = {
         render();
         _observeVideos();
         _observeSentinel();
+    },
+
+    async searchPosts(query) {
+        BC.activeTab = 'discover';
+        BC.view = 'discover';
+        await doSearch(query);
     },
 
     setWizLanguage(code) {

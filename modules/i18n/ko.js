@@ -1550,6 +1550,14 @@ export default {
         discoverEmpty: '아직 트렌딩 게시글 없음',
         discoverSubtext: '첫 게시글을 작성하세요! 게시글은 참여도로 순위가 매겨집니다 — 좋아요, 답글, 슈퍼 좋아요가 노출도를 높입니다.',
         discoverRankedBy: '참여도 순 — 좋아요, 답글, 리포스트 & 슈퍼 좋아요',
+        search: {
+            placeholder: '게시글과 사용자 검색...',
+            noResults: '결과 없음',
+            tryAnother: '다른 검색어를 시도하세요',
+            resultsFor: '"{query}" 검색 결과',
+            result: '개 결과',
+            results: '개 결과',
+        },
         loadingPosts: '게시글 로딩 중...',
         noMorePosts: '더 이상 게시글 없음',
         loadMore: '더 보기',
@@ -1796,6 +1804,10 @@ export default {
             replyPlaceholder: '답글을 작성하세요...',
             reply: '답글',
             replyFree: '텍스트 답글: 무료 (가스만)',
+            like: '좋아요',
+            likes: '좋아요',
+            replyCount: '답글',
+            beFirst: '첫 답글을 작성하세요!',
         },
 
         // Upgrade hint

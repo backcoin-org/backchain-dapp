@@ -150,6 +150,10 @@ export const BC = {
     feedHasMore: true,   // API has more pages
     feedLoadingMore: false, // Loading next page
     newPostsCount: 0,    // Number of new posts since last refresh
+    // Search
+    searchQuery: '',
+    searchResults: [],
+    isSearching: false,
     // Stats
     globalStats: null,
     // UI flags

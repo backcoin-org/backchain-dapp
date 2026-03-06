@@ -1206,6 +1206,14 @@ export default {
         discoverEmpty: 'Nenhum post em destaque no momento.',
         discoverSubtext: 'Seja o primeiro a postar! Posts são ranqueados por engajamento — likes, respostas e Super Likes aumentam a visibilidade.',
         discoverRankedBy: 'Ranqueado por engajamento — likes, respostas, reposts e Super Likes',
+        search: {
+            placeholder: 'Buscar posts e usuários...',
+            noResults: 'Nenhum resultado encontrado',
+            tryAnother: 'Tente outro termo de busca',
+            resultsFor: 'Resultados para "{query}"',
+            result: 'resultado',
+            results: 'resultados',
+        },
         loadingPosts: 'Carregando posts...',
         noMorePosts: 'Sem mais posts',
         loadMore: 'Carregar Mais',
@@ -1437,7 +1445,11 @@ export default {
             replyingTo: 'Respondendo a {name}',
             replyPlaceholder: 'Escreva uma resposta...',
             reply: 'Responder',
-            replyFree: 'Respostas em texto: GRÁTIS (só gas)'
+            replyFree: 'Respostas em texto: GRÁTIS (só gas)',
+            like: 'Curtida',
+            likes: 'Curtidas',
+            replyCount: 'Resposta',
+            beFirst: 'Seja o primeiro a responder!',
         },
         upgrade: {
             charsWithTier: 'Até {limit} caracteres com'

@@ -27,7 +27,7 @@ let _feedCaches = new Map(); // key → { data, time }
 let _pendingFetches = new Map(); // key → Promise
 
 function _cacheKey(params) {
-    return `${params.sort || 'smart'}|${params.tag ?? -1}|${params.lang || ''}|${params.offset || 0}`;
+    return `${params.sort || 'smart'}|${params.tag ?? -1}|${params.lang || ''}|${params.offset || 0}|${params.q || ''}`;
 }
 
 async function fetchAgoraFeed(userAddress, params = {}) {
@@ -56,6 +56,7 @@ async function _doFetchAgoraFeed(userAddress, params = {}) {
     if (params.lang) qp.set('lang', params.lang);
     qp.set('limit', String(params.limit || PAGE_SIZE));
     if (params.offset) qp.set('offset', String(params.offset));
+    if (params.q) qp.set('q', params.q);
 
     const url = `${AGORA_API}?${qp.toString()}`;
     const controller = new AbortController();
@@ -491,6 +492,37 @@ export async function loadMorePosts() {
         console.warn('[Agora] Failed to load more posts:', e.message);
     } finally {
         BC.feedLoadingMore = false;
+        BC._render();
+    }
+}
+
+// ============================================================================
+// SEARCH
+// ============================================================================
+
+export async function searchPosts(query) {
+    const q = (query || '').trim();
+    BC.searchQuery = q;
+    if (!q) {
+        BC.searchResults = [];
+        BC.isSearching = false;
+        BC._render();
+        return;
+    }
+    BC.isSearching = true;
+    BC._render();
+
+    try {
+        const feed = await fetchAgoraFeed(State.userAddress, { sort: 'top', q, limit: 50 });
+        const rawPosts = feed.posts || [];
+        const { feedPosts, allItems } = _parsePosts(rawPosts);
+        BC.searchResults = feedPosts;
+        console.log(`[Agora] Search "${q}": ${feedPosts.length} results`);
+    } catch (e) {
+        console.warn('[Agora] Search failed:', e.message);
+        BC.searchResults = [];
+    } finally {
+        BC.isSearching = false;
         BC._render();
     }
 }

@@ -1550,6 +1550,14 @@ export default {
         discoverEmpty: 'Sin posts en tendencia aún',
         discoverSubtext: '¡Sé el primero en publicar! Los posts se clasifican por engagement — likes, respuestas y Super Likes aumentan la visibilidad.',
         discoverRankedBy: 'Clasificados por engagement — likes, respuestas, reposts y Super Likes',
+        search: {
+            placeholder: 'Buscar posts y usuarios...',
+            noResults: 'Sin resultados',
+            tryAnother: 'Intenta con otro término',
+            resultsFor: 'Resultados para "{query}"',
+            result: 'resultado',
+            results: 'resultados',
+        },
         loadingPosts: 'Cargando posts...',
         noMorePosts: 'No hay más posts',
         loadMore: 'Cargar Más',
@@ -1796,6 +1804,10 @@ export default {
             replyPlaceholder: 'Escribe una respuesta...',
             reply: 'Responder',
             replyFree: 'Respuestas de texto: GRATIS (solo gas)',
+            like: 'Me gusta',
+            likes: 'Me gusta',
+            replyCount: 'Respuesta',
+            beFirst: '¡Sé el primero en responder!',
         },
 
         // Upgrade hint

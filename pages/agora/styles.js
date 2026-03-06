@@ -514,6 +514,47 @@ export function injectStyles() {
         /* AppKit/Web3Modal overrides — more subtle backdrop */
         w3m-modal, appkit-modal { --w3m-z-index: 9999 !important; }
 
+        /* Link previews */
+        .bc-link-preview { display:flex; flex-direction:column; margin:8px 20px 0; border:1px solid var(--bc-border); border-radius:var(--bc-radius); overflow:hidden; text-decoration:none; color:var(--bc-text-2); transition:border-color 0.15s; }
+        .bc-link-preview:hover { border-color:var(--bc-accent); }
+        .bc-link-thumb { position:relative; width:100%; aspect-ratio:16/9; overflow:hidden; background:var(--bc-bg3); }
+        .bc-link-thumb img { width:100%; height:100%; object-fit:cover; }
+        .bc-link-play { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:44px; height:44px; border-radius:50%; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; color:#fff; font-size:16px; }
+        .bc-link-info { display:flex; align-items:center; gap:8px; padding:10px 14px; font-size:13px; }
+        .bc-link-favicon { width:16px; height:16px; border-radius:2px; flex-shrink:0; }
+        .bc-link-domain { font-weight:600; color:var(--bc-text-2); display:flex; align-items:center; gap:6px; }
+        .bc-link-url { color:var(--bc-text-3); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+        /* Search bar */
+        .bc-search-bar { padding:12px 16px; border-bottom:1px solid var(--bc-border); }
+        .bc-search-input-wrap { display:flex; align-items:center; gap:10px; background:var(--bc-bg3); border:1px solid var(--bc-border-h); border-radius:24px; padding:8px 16px; }
+        .bc-search-input-wrap i { color:var(--bc-text-3); font-size:14px; flex-shrink:0; }
+        .bc-search-input { flex:1; background:none; border:none; outline:none; color:var(--bc-text); font-size:14px; font-family:inherit; }
+        .bc-search-input::placeholder { color:var(--bc-text-3); }
+        .bc-search-clear { background:none; border:none; color:var(--bc-text-3); cursor:pointer; padding:2px 4px; font-size:14px; }
+        .bc-search-clear:hover { color:var(--bc-text); }
+
+        /* Post Detail V2 — engagement bar + threaded replies + sticky compose */
+        .bc-engagement-bar { display:flex; flex-wrap:wrap; gap:12px 20px; padding:14px 20px; border-bottom:1px solid var(--bc-border); background:var(--bc-bg2); }
+        .bc-stat-item { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--bc-text-2); }
+        .bc-stat-item strong { color:var(--bc-text); font-weight:700; }
+        .bc-thread-replies { padding-bottom:100px; }
+        .bc-thread-item { position:relative; padding-left:20px; }
+        .bc-thread-line { position:absolute; left:32px; top:0; bottom:0; width:2px; background:var(--bc-border); }
+        .bc-thread-last .bc-thread-line { bottom:50%; }
+        .bc-thread-more { padding:8px 20px 8px 40px; font-size:12px; color:var(--bc-accent); cursor:pointer; display:flex; align-items:center; gap:6px; }
+        .bc-thread-more:hover { text-decoration:underline; }
+        .bc-reply-compose-sticky { position:fixed; bottom:0; left:0; right:0; z-index:200; background:var(--bc-bg2); border-top:1px solid var(--bc-border); padding:10px 16px; padding-bottom:max(10px, env(safe-area-inset-bottom)); }
+        .bc-reply-compose-inner { display:flex; align-items:flex-end; gap:10px; max-width:640px; margin:0 auto; }
+        .bc-reply-avatar { flex-shrink:0; }
+        .bc-reply-avatar img, .bc-reply-avatar .bc-avatar { width:32px; height:32px; }
+        .bc-reply-input-v2 { flex:1; min-height:36px; max-height:120px; background:var(--bc-bg3); border:1px solid var(--bc-border-h); border-radius:20px; color:var(--bc-text); font-size:14px; padding:8px 16px; resize:none; outline:none; font-family:inherit; line-height:1.4; }
+        .bc-reply-input-v2:focus { border-color:rgba(245,158,11,0.5); }
+        .bc-reply-send-v2 { flex-shrink:0; width:36px; height:36px; border-radius:50%; background:var(--bc-accent); color:#000; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:15px; transition:all 0.15s; }
+        .bc-reply-send-v2:hover { transform:scale(1.08); }
+        .bc-reply-send-v2:active { transform:scale(0.95); }
+        @media (min-width:1024px) { .bc-reply-compose-sticky { left:auto; width:640px; left:50%; transform:translateX(-50%); } }
+
         /* Mobile: cart bar above bottom tabs */
         @media (max-width: 1023px) {
             .bc-cart-bar { bottom:64px; }

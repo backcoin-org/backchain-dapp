@@ -1550,6 +1550,14 @@ export default {
         discoverEmpty: 'No trending posts yet',
         discoverSubtext: 'Be the first to post! Posts are ranked by engagement — likes, replies, and Super Likes boost visibility.',
         discoverRankedBy: 'Ranked by engagement — likes, replies, reposts & Super Likes',
+        search: {
+            placeholder: 'Search posts and users...',
+            noResults: 'No results found',
+            tryAnother: 'Try a different search term',
+            resultsFor: 'Results for "{query}"',
+            result: 'result',
+            results: 'results',
+        },
         loadingPosts: 'Loading posts...',
         noMorePosts: 'No more posts',
         loadMore: 'Load More',
@@ -1798,6 +1806,10 @@ export default {
             replyPlaceholder: 'Write a reply...',
             reply: 'Reply',
             replyFree: 'Text replies: FREE (gas only)',
+            like: 'Like',
+            likes: 'Likes',
+            replyCount: 'Reply',
+            beFirst: 'Be the first to reply!',
         },
 
         // Upgrade hint

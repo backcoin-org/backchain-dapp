@@ -89,6 +89,51 @@ function _renderPostMedia(post) {
 }
 
 // ============================================================================
+// LINK PREVIEW (lightweight, client-side)
+// ============================================================================
+
+const URL_RE = /https?:\/\/[^\s<]+/g;
+const YT_RE = /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([\w-]{11})/;
+const TWITTER_RE = /(?:twitter\.com|x\.com)\/\w+\/status\/(\d+)/;
+
+function _renderLinkPreview(post) {
+    if (!post.content) return '';
+    const urls = post.content.match(URL_RE);
+    if (!urls || urls.length === 0) return '';
+    const url = urls[0];
+
+    try {
+        const parsed = new URL(url);
+        const domain = parsed.hostname.replace(/^www\./, '');
+
+        // YouTube — show thumbnail
+        const ytMatch = url.match(YT_RE);
+        if (ytMatch) {
+            const vid = ytMatch[1];
+            return `<a class="bc-link-preview bc-link-yt" href="${escapeHtml(url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">
+                <div class="bc-link-thumb"><img src="https://img.youtube.com/vi/${vid}/mqdefault.jpg" alt="YouTube" loading="lazy"><div class="bc-link-play"><i class="fa-solid fa-play"></i></div></div>
+                <div class="bc-link-info"><span class="bc-link-domain"><i class="fa-brands fa-youtube" style="color:#FF0000"></i> YouTube</span></div>
+            </a>`;
+        }
+
+        // Twitter/X
+        const twMatch = url.match(TWITTER_RE);
+        if (twMatch) {
+            return `<a class="bc-link-preview" href="${escapeHtml(url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">
+                <div class="bc-link-info"><span class="bc-link-domain"><i class="fa-brands fa-x-twitter"></i> ${domain}</span><span class="bc-link-url">${escapeHtml(parsed.pathname)}</span></div>
+            </a>`;
+        }
+
+        // Generic URL
+        return `<a class="bc-link-preview" href="${escapeHtml(url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">
+            <div class="bc-link-info"><img class="bc-link-favicon" src="https://www.google.com/s2/favicons?domain=${domain}&sz=32" alt="" loading="lazy"><span class="bc-link-domain">${escapeHtml(domain)}</span><span class="bc-link-url">${escapeHtml(parsed.pathname.length > 40 ? parsed.pathname.slice(0, 40) + '...' : parsed.pathname)}</span></div>
+        </a>`;
+    } catch {
+        return '';
+    }
+}
+
+// ============================================================================
 // POST MENU
 // ============================================================================
 
@@ -190,6 +235,7 @@ export function renderPost(post, index = 0, options = {}) {
             </div>
             ${_renderPostBody(post, options)}
             ${_renderPostMedia(post)}
+            ${_renderLinkPreview(post)}
             <div class="bc-actions" onclick="event.stopPropagation()">
                 <button class="bc-action act-reply" onclick="AgoraPage.openReply('${post.id}')" title="${t('agora.postCard.reply')}">
                     <i class="fa-regular fa-comment"></i>${replyCount > 0 ? `<span class="count">${replyCount}</span>` : ''}

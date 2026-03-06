@@ -1550,6 +1550,14 @@ export default {
         discoverEmpty: '暂无热门帖子',
         discoverSubtext: '成为第一个发布者！帖子按互动排名 — 点赞、回复和超级点赞提升曝光度。',
         discoverRankedBy: '按互动排名 — 点赞、回复、转发 & 超级点赞',
+        search: {
+            placeholder: '搜索帖子和用户...',
+            noResults: '未找到结果',
+            tryAnother: '尝试其他搜索词',
+            resultsFor: '"{query}" 的搜索结果',
+            result: '个结果',
+            results: '个结果',
+        },
         loadingPosts: '加载帖子中...',
         noMorePosts: '没有更多帖子',
         loadMore: '加载更多',
@@ -1796,6 +1804,10 @@ export default {
             replyPlaceholder: '写一条回复...',
             reply: '回复',
             replyFree: '文字回复：免费（仅gas费）',
+            like: '赞',
+            likes: '赞',
+            replyCount: '回复',
+            beFirst: '成为第一个回复的人！',
         },
 
         // Upgrade hint
