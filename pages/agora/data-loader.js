@@ -14,7 +14,7 @@ import { LiveStream } from '../../modules/webrtc-live.js';
 import { BC, getAgoraAddress, EVENTS_LOOKBACK } from './state.js';
 import { parseMetadata, parsePostContent } from './utils.js';
 import { db } from '../../modules/firebase-auth-service.js';
-import { collection, getDocs, query, where, orderBy, limit, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+import { collection, getDocs, query, where, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 
 // ============================================================================
 // CONTRACT ACCESS (for on-chain reads like hasLiked, getUserProfile)
@@ -256,15 +256,9 @@ export async function loadPosts() {
 
         console.log('[Agora] Loading posts from Firebase...');
 
-        // Read posts from Firebase — last 200 ordered by timestamp
-        // (filter deleted client-side to avoid composite index requirement)
-        const postsSnap = await getDocs(
-            query(
-                collection(db, 'agora_posts'),
-                orderBy('timestamp', 'desc'),
-                limit(200)
-            )
-        );
+        // Read all posts from Firebase, sort/filter client-side
+        // (avoids Firestore composite index requirements)
+        const postsSnap = await getDocs(collection(db, 'agora_posts'));
 
         const allItems = [];
         const feedPosts = [];
