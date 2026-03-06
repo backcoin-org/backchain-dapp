@@ -256,11 +256,11 @@ export async function loadPosts() {
 
         console.log('[Agora] Loading posts from Firebase...');
 
-        // Read posts from Firebase — last 200 non-deleted, ordered by timestamp
+        // Read posts from Firebase — last 200 ordered by timestamp
+        // (filter deleted client-side to avoid composite index requirement)
         const postsSnap = await getDocs(
             query(
                 collection(db, 'agora_posts'),
-                where('deleted', '==', false),
                 orderBy('timestamp', 'desc'),
                 limit(200)
             )
@@ -276,6 +276,7 @@ export async function loadPosts() {
 
         for (const docSnap of postsSnap.docs) {
             const data = docSnap.data();
+            if (data.deleted) continue; // skip deleted posts
             const pid = data.postId || docSnap.id;
             const type = data.type || 'post';
             const timestamp = data.timestamp?.seconds || data.timestamp?.toDate?.()?.getTime?.() / 1000 || 0;
