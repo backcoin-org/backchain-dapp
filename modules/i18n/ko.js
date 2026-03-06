@@ -1543,6 +1543,8 @@ export default {
         },
 
         // Feed
+        newPost: '새 게시물',
+        newPosts: '새 게시물',
         feedEmpty: '아직 게시글이 없습니다. 첫 게시글을 작성하세요!',
         feedEmptySubtext: '멈출 수 없는 소셜 네트워크에서 첫 게시글을 작성하세요!',
         discoverEmpty: '아직 트렌딩 게시글 없음',
@@ -1664,6 +1666,7 @@ export default {
         },
         sort: {
             forYou: '추천',
+            following: '팔로잉',
             new: '최신',
             top: '인기',
         },

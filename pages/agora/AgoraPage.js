@@ -220,8 +220,136 @@ function _initScrollHide() {
 }
 _initScrollHide();
 
+// Pull-to-refresh (mobile touch gesture)
+let _ptr = { startY: 0, pulling: false, el: null };
+const PTR_THRESHOLD = 80;
+
+function _initPullToRefresh() {
+    document.addEventListener('touchstart', (e) => {
+        if (window.scrollY > 5 || BC.view !== 'feed') return;
+        _ptr.startY = e.touches[0].clientY;
+        _ptr.pulling = true;
+    }, { passive: true });
+
+    document.addEventListener('touchmove', (e) => {
+        if (!_ptr.pulling) return;
+        const dy = e.touches[0].clientY - _ptr.startY;
+        if (dy < 0) { _ptr.pulling = false; return; }
+        if (!_ptr.el) {
+            _ptr.el = document.createElement('div');
+            _ptr.el.className = 'bc-ptr-indicator';
+            const content = document.getElementById('backchat-content');
+            if (content) content.parentElement?.insertBefore(_ptr.el, content);
+        }
+        const progress = Math.min(dy / PTR_THRESHOLD, 1);
+        _ptr.el.style.height = Math.min(dy * 0.5, 60) + 'px';
+        _ptr.el.style.opacity = String(progress);
+        _ptr.el.innerHTML = progress >= 1
+            ? `<i class="fa-solid fa-arrows-rotate"></i>`
+            : `<i class="fa-solid fa-arrow-down" style="transform:rotate(${180 * progress}deg)"></i>`;
+    }, { passive: true });
+
+    document.addEventListener('touchend', async () => {
+        if (!_ptr.pulling) return;
+        const el = _ptr.el;
+        _ptr.pulling = false;
+        _ptr.el = null;
+        if (!el) return;
+        const h = parseFloat(el.style.height) || 0;
+        if (h >= PTR_THRESHOLD * 0.5) {
+            el.innerHTML = `<div class="bc-spinner" style="width:20px;height:20px;"></div>`;
+            el.style.height = '40px';
+            invalidateFeedCache();
+            BC.newPostsCount = 0;
+            document.getElementById('bc-new-posts-pill')?.remove();
+            await loadPosts();
+            _updateLastSeenTs();
+            _observeVideos();
+            _observeSentinel();
+        }
+        el.style.height = '0';
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 200);
+    }, { passive: true });
+}
+_initPullToRefresh();
+
 // Connect BC._render to renderContent so modules can trigger re-renders
 BC._render = () => { renderContent(); _observeVideos(); _observeSentinel(); };
+
+// ============================================================================
+// NEW POSTS NOTIFICATION
+// ============================================================================
+
+const LAST_SEEN_KEY = 'agora_last_seen_ts';
+let _pollInterval = null;
+
+function _getLastSeenTs() {
+    return parseInt(localStorage.getItem(LAST_SEEN_KEY) || '0', 10);
+}
+
+function _updateLastSeenTs() {
+    const newest = BC.posts[0]?.timestamp || Math.floor(Date.now() / 1000);
+    localStorage.setItem(LAST_SEEN_KEY, String(newest));
+    BC.newPostsCount = 0;
+}
+
+async function _checkNewPosts() {
+    if (!document.getElementById('agora')?.classList.contains('active')) return;
+    if (BC.view !== 'feed') return;
+    try {
+        const res = await fetch(`https://us-central1-backchain-backand.cloudfunctions.net/getAgoraFeed?limit=1&sort=new`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const latestTs = data.posts?.[0]?.timestamp || 0;
+        const lastSeen = _getLastSeenTs();
+        if (latestTs > lastSeen && lastSeen > 0) {
+            // Count new posts from total
+            const total = data.total || 0;
+            const oldTotal = BC.posts.length + (BC.allItems.length - BC.posts.length);
+            const newCount = Math.max(0, total - oldTotal);
+            if (newCount > 0) {
+                BC.newPostsCount = newCount;
+                _renderNewPostsPill();
+            }
+        }
+    } catch {}
+}
+
+function _renderNewPostsPill() {
+    let pill = document.getElementById('bc-new-posts-pill');
+    if (BC.newPostsCount <= 0) {
+        if (pill) pill.remove();
+        return;
+    }
+    if (!pill) {
+        pill = document.createElement('button');
+        pill.id = 'bc-new-posts-pill';
+        pill.className = 'bc-new-posts-pill';
+        pill.onclick = async () => {
+            pill.remove();
+            BC.newPostsCount = 0;
+            invalidateFeedCache();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            await loadPosts();
+            _updateLastSeenTs();
+            _observeVideos();
+            _observeSentinel();
+        };
+        const container = document.getElementById('backchat-content');
+        if (container) container.parentElement?.insertBefore(pill, container);
+    }
+    pill.innerHTML = `<i class="fa-solid fa-arrow-up"></i> ${BC.newPostsCount} ${BC.newPostsCount === 1 ? t('agora.newPost') : t('agora.newPosts')}`;
+}
+
+function _startPolling() {
+    _stopPolling();
+    _pollInterval = setInterval(_checkNewPosts, 60000); // Check every 60s
+}
+
+function _stopPolling() {
+    if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
+}
 
 // Mobile: reload data when returning from MetaMask app (tab becomes visible again)
 let _lastVisibilityRefresh = 0;
@@ -511,6 +639,8 @@ export const AgoraPage = {
         ]);
         await loadBlockedAuthors();
         restoreCart();
+        _updateLastSeenTs();
+        _startPolling();
         renderContent();
         _observeVideos();
         _observeSentinel();
@@ -518,6 +648,7 @@ export const AgoraPage = {
     },
 
     cleanup() {
+        _stopPolling();
         _restoreDappHeader();
     },
 

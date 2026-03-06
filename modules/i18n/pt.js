@@ -1199,6 +1199,8 @@ export default {
             newPost: 'Novo Post',
             createProfileBanner: 'Crie seu perfil para ter um username e começar a postar'
         },
+        newPost: 'novo post',
+        newPosts: 'novos posts',
         feedEmpty: 'Nenhum post ainda. Seja o primeiro!',
         feedEmptySubtext: 'Seja o primeiro a postar na rede social imparável!',
         discoverEmpty: 'Nenhum post em destaque no momento.',
@@ -1312,6 +1314,7 @@ export default {
         },
         sort: {
             forYou: 'Para Você',
+            following: 'Seguindo',
             new: 'Novos',
             top: 'Top',
         },

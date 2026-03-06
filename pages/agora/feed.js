@@ -51,9 +51,10 @@ export function renderLanguageBar() {
 
 export function renderSortBar() {
     const sorts = [
-        { id: 'smart', icon: 'fa-wand-magic-sparkles', label: t('agora.sort.forYou') },
-        { id: 'new',   icon: 'fa-clock',              label: t('agora.sort.new') },
-        { id: 'top',   icon: 'fa-arrow-trend-up',     label: t('agora.sort.top') },
+        { id: 'smart',     icon: 'fa-wand-magic-sparkles', label: t('agora.sort.forYou') },
+        { id: 'following', icon: 'fa-user-group',          label: t('agora.sort.following') },
+        { id: 'new',       icon: 'fa-clock',               label: t('agora.sort.new') },
+        { id: 'top',       icon: 'fa-arrow-trend-up',      label: t('agora.sort.top') },
     ];
     return `<div class="bc-sort-bar">
         ${sorts.map(s => `<button class="bc-sort-pill ${BC.feedSort === s.id ? 'active' : ''}" onclick="AgoraPage.setFeedSort('${s.id}')"><i class="fa-solid ${s.icon}"></i> ${s.label}</button>`).join('')}

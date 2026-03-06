@@ -498,6 +498,14 @@ export function injectStyles() {
         .bc-disconnect-icon { font-size:11px !important; color:var(--bc-text-3) !important; margin-left:2px; transition:color var(--bc-transition); }
 
         /* FAB — Floating Action Button for compose */
+        /* Pull-to-Refresh */
+        .bc-ptr-indicator { display:flex; align-items:center; justify-content:center; overflow:hidden; transition:height 0.2s, opacity 0.2s; color:var(--bc-accent); font-size:18px; height:0; opacity:0; }
+
+        /* New Posts Pill */
+        .bc-new-posts-pill { position:fixed; top:120px; left:50%; transform:translateX(-50%); z-index:300; padding:8px 18px; border-radius:24px; background:var(--bc-accent); color:#000; border:none; font-size:13px; font-weight:700; cursor:pointer; box-shadow:0 4px 20px rgba(245,158,11,0.4); display:flex; align-items:center; gap:6px; animation:bc-slideDown 0.3s ease-out; }
+        .bc-new-posts-pill:hover { transform:translateX(-50%) scale(1.05); }
+        @keyframes bc-slideDown { from { opacity:0; transform:translateX(-50%) translateY(-20px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+
         .bc-fab { position:fixed; bottom:80px; right:max(16px, calc((100vw - 640px)/2 + 16px)); width:52px; height:52px; border-radius:50%; background:linear-gradient(135deg,var(--bc-accent),#d97706); color:#000; border:none; font-size:22px; cursor:pointer; z-index:400; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 20px rgba(245,158,11,0.4); transition:all 0.2s; }
         .bc-fab:hover { transform:scale(1.08); box-shadow:0 6px 28px rgba(245,158,11,0.5); }
         .bc-fab:active { transform:scale(0.95); }

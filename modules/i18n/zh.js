@@ -1543,6 +1543,8 @@ export default {
         },
 
         // Feed
+        newPost: '条新帖子',
+        newPosts: '条新帖子',
         feedEmpty: '暂无帖子。成为第一个发布者！',
         feedEmptySubtext: '成为不可阻挡的社交网络上的第一个发布者！',
         discoverEmpty: '暂无热门帖子',
@@ -1664,6 +1666,7 @@ export default {
         },
         sort: {
             forYou: '推荐',
+            following: '关注',
             new: '最新',
             top: '热门',
         },

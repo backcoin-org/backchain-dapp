@@ -1543,6 +1543,8 @@ export default {
         },
 
         // Feed
+        newPost: 'new post',
+        newPosts: 'new posts',
         feedEmpty: 'No posts yet. Be the first!',
         feedEmptySubtext: 'Be the first to post on the unstoppable social network!',
         discoverEmpty: 'No trending posts yet',
@@ -1666,6 +1668,7 @@ export default {
         // Sort
         sort: {
             forYou: 'For You',
+            following: 'Following',
             new: 'New',
             top: 'Top',
         },

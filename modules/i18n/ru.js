@@ -1543,6 +1543,8 @@ export default {
         },
 
         // Feed
+        newPost: 'новый пост',
+        newPosts: 'новых постов',
         feedEmpty: 'Постов пока нет. Будьте первым!',
         feedEmptySubtext: 'Будьте первым, кто опубликует в неостановимой соцсети!',
         discoverEmpty: 'Трендовых постов пока нет',
@@ -1664,6 +1666,7 @@ export default {
         },
         sort: {
             forYou: 'Для вас',
+            following: 'Подписки',
             new: 'Новые',
             top: 'Топ',
         },

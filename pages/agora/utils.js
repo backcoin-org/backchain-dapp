@@ -8,6 +8,9 @@ import { State } from '../../state.js';
 import { resolveContentUrl } from '../../modules/core/index.js';
 import { BC, TAGS } from './state.js';
 
+// Avatar URL cache — avoids re-resolving IPFS/Irys URLs on every render
+const _avatarCache = new Map(); // CID → resolved URL
+
 // ============================================================================
 // TEXT & ADDRESS
 // ============================================================================
@@ -133,14 +136,20 @@ export function getInitials(address) {
 export function getProfileAvatar(address) {
     if (!address) return '';
     const profile = BC.profiles.get(address.toLowerCase());
-    return profile?.avatar ? getIPFSUrl(profile.avatar) : '';
+    const cid = profile?.avatar;
+    if (!cid) return '';
+    // Check cache first
+    if (_avatarCache.has(cid)) return _avatarCache.get(cid);
+    const url = getIPFSUrl(cid);
+    if (url) _avatarCache.set(cid, url);
+    return url;
 }
 
 export function renderAvatar(address) {
     const url = getProfileAvatar(address);
     const username = getProfileUsername(address);
     const fallback = username ? username.charAt(0).toUpperCase() : getInitials(address);
-    if (url) return `<img src="${url}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.outerHTML='${fallback}'">`;
+    if (url) return `<img src="${url}" alt="" loading="lazy" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.outerHTML='${fallback}'">`;
     return fallback;
 }
 
