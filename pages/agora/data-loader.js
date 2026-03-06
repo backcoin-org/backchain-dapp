@@ -18,10 +18,11 @@ import { parseMetadata, parsePostContent } from './utils.js';
 // ============================================================================
 
 const AGORA_API = 'https://us-central1-backchain-backand.cloudfunctions.net/getAgoraFeed';
-const API_TIMEOUT = 10000;
+const API_TIMEOUT = 15000; // 15s (Cloud Function cold start can be slow)
 
 let _feedCache = null;
 let _feedCacheTime = 0;
+let _pendingFetch = null; // Deduplicates concurrent requests
 const FEED_CACHE_MS = 30000; // 30s cache
 
 async function fetchAgoraFeed(userAddress) {
@@ -30,6 +31,16 @@ async function fetchAgoraFeed(userAddress) {
         return _feedCache;
     }
 
+    // If a fetch is already in flight, reuse it instead of creating a new one
+    if (_pendingFetch) return _pendingFetch;
+
+    _pendingFetch = _doFetchAgoraFeed(userAddress).finally(() => {
+        _pendingFetch = null;
+    });
+    return _pendingFetch;
+}
+
+async function _doFetchAgoraFeed(userAddress) {
     const url = userAddress
         ? `${AGORA_API}?user=${userAddress.toLowerCase()}`
         : AGORA_API;
@@ -43,7 +54,7 @@ async function fetchAgoraFeed(userAddress) {
         if (!res.ok) throw new Error(`API ${res.status}`);
         const data = await res.json();
         _feedCache = data;
-        _feedCacheTime = now;
+        _feedCacheTime = Date.now();
         return data;
     } catch (e) {
         clearTimeout(timeout);
