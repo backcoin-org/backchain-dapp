@@ -18,6 +18,18 @@ import {
 
 let selectedPostForAction = null;
 
+function _setButtonLoading(btn, loading) {
+    if (!btn) return;
+    if (loading) {
+        btn._origHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('common.processing')}`;
+    } else {
+        btn.disabled = false;
+        if (btn._origHTML) btn.innerHTML = btn._origHTML;
+    }
+}
+
 // ============================================================================
 // RENDER ALL MODALS
 // ============================================================================
@@ -278,8 +290,11 @@ export function openSuperLike(postId) {
 
 export async function confirmSuperLike() {
     const amount = document.getElementById('superlike-amount')?.value || '0.001';
-    closeModal('superlike');
+    const btn = document.querySelector('#modal-superlike .bc-btn-primary');
+    _setButtonLoading(btn, true);
     await doSuperLike(selectedPostForAction, amount);
+    _setButtonLoading(btn, false);
+    closeModal('superlike');
 }
 
 export function openDownvote(postId) {
@@ -293,23 +308,50 @@ export async function confirmDownvote() {
 }
 
 export function openBadge() { document.getElementById('modal-badge')?.classList.add('active'); }
-export async function confirmBadge(tier = 0) { await doObtainBadge(tier); }
+export async function confirmBadge(tier = 0) {
+    // Disable all badge buttons during TX
+    const btns = document.querySelectorAll('#modal-badge .bc-badge-option');
+    btns.forEach(b => b.disabled = true);
+    await doObtainBadge(tier);
+    btns.forEach(b => b.disabled = false);
+}
 
 export function openBoost() { document.getElementById('modal-boost')?.classList.add('active'); }
 export async function confirmBoost() {
     const days = parseInt(document.getElementById('boost-days')?.value || '7', 10);
-    closeModal('boost');
+    const btn = document.querySelector('#modal-boost .bc-btn-primary');
+    _setButtonLoading(btn, true);
     await doBoostProfile(days);
+    _setButtonLoading(btn, false);
+    closeModal('boost');
 }
 
 export function openReport(postId) { selectedPostForAction = postId; document.getElementById('modal-report')?.classList.add('active'); }
-export async function confirmReport(category) { await doReportPost(selectedPostForAction, category); }
+export async function confirmReport(category) {
+    // Disable all report buttons during TX
+    const btns = document.querySelectorAll('#modal-report .bc-btn');
+    btns.forEach(b => b.disabled = true);
+    await doReportPost(selectedPostForAction, category);
+    btns.forEach(b => b.disabled = false);
+    closeModal('report');
+}
 
 export function openBoostPost(postId) { selectedPostForAction = postId; document.getElementById('modal-boost-post')?.classList.add('active'); }
-export async function confirmBoostPost(tier) { await doBoostPost(selectedPostForAction, tier); }
+export async function confirmBoostPost(tier) {
+    const btns = document.querySelectorAll('#modal-boost-post .bc-btn');
+    btns.forEach(b => b.disabled = true);
+    await doBoostPost(selectedPostForAction, tier);
+    btns.forEach(b => b.disabled = false);
+}
 
 export function openTip(postId) { selectedPostForAction = postId; document.getElementById('modal-tip')?.classList.add('active'); }
-export async function confirmTip() { await doTipPost(selectedPostForAction); }
+export async function confirmTip() {
+    const btn = document.querySelector('#modal-tip .bc-btn-primary');
+    _setButtonLoading(btn, true);
+    await doTipPost(selectedPostForAction);
+    _setButtonLoading(btn, false);
+    closeModal('tip');
+}
 
 export function openEditPost(postId) {
     selectedPostForAction = postId;

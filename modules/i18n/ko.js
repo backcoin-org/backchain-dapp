@@ -1662,6 +1662,11 @@ export default {
             alpha: '알파',
             dev: '개발',
         },
+        sort: {
+            forYou: '추천',
+            new: '최신',
+            top: '인기',
+        },
 
         // Modals
         modals: {

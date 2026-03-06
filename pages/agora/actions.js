@@ -19,25 +19,29 @@ import { loadPosts, invalidateFeedCache } from './data-loader.js';
 // ============================================================================
 
 export function navigateView(view, data) {
-    BC.viewHistory.push({ view: BC.view, activeTab: BC.activeTab, selectedPost: BC.selectedPost, selectedProfile: BC.selectedProfile });
+    BC.viewHistory.push({ view: BC.view, activeTab: BC.activeTab, selectedPost: BC.selectedPost, selectedProfile: BC.selectedProfile, scrollY: window.scrollY });
     BC.view = view;
     if (data?.post) BC.selectedPost = data.post;
     if (data?.profile) BC.selectedProfile = data.profile;
     BC._render();
+    window.scrollTo(0, 0);
 }
 
 export function goBack() {
+    let restoreScroll = 0;
     if (BC.viewHistory.length > 0) {
         const prev = BC.viewHistory.pop();
         BC.view = prev.view;
         BC.activeTab = prev.activeTab || BC.view;
         BC.selectedPost = prev.selectedPost;
         BC.selectedProfile = prev.selectedProfile;
+        restoreScroll = prev.scrollY || 0;
     } else {
         BC.view = 'feed';
         BC.activeTab = 'feed';
     }
     BC._render();
+    requestAnimationFrame(() => window.scrollTo(0, restoreScroll));
 }
 
 // ============================================================================

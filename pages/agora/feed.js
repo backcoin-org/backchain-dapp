@@ -8,8 +8,6 @@ import { renderPost } from './post-card.js';
 import { resolveContentUrl, t } from '../../modules/core/index.js';
 import { getProfileName, renderAvatar, formatETH, formatTimeAgo, escapeHtml } from './utils.js';
 
-const FEED_PAGE_SIZE = 20;
-
 // ============================================================================
 // TAG & LANGUAGE BARS
 // ============================================================================
@@ -45,6 +43,21 @@ export function renderLanguageBar() {
     }
     html += `</div>`;
     return html;
+}
+
+// ============================================================================
+// SORT BAR (For You / New / Top)
+// ============================================================================
+
+export function renderSortBar() {
+    const sorts = [
+        { id: 'smart', icon: 'fa-wand-magic-sparkles', label: t('agora.sort.forYou') },
+        { id: 'new',   icon: 'fa-clock',              label: t('agora.sort.new') },
+        { id: 'top',   icon: 'fa-arrow-trend-up',     label: t('agora.sort.top') },
+    ];
+    return `<div class="bc-sort-bar">
+        ${sorts.map(s => `<button class="bc-sort-pill ${BC.feedSort === s.id ? 'active' : ''}" onclick="AgoraPage.setFeedSort('${s.id}')"><i class="fa-solid ${s.icon}"></i> ${s.label}</button>`).join('')}
+    </div>`;
 }
 
 // ============================================================================
@@ -130,29 +143,10 @@ export function renderFeed() {
     }
     if (BC.isLoading) return renderSkeleton();
 
-    let filteredPosts = BC.posts;
+    // Posts already filtered server-side by tag/lang/sort
+    const posts = BC.posts;
 
-    // Language filter
-    if (BC.selectedLanguage) {
-        filteredPosts = filteredPosts.filter(p => {
-            const author = p.type === 'repost' ? BC.postsById.get(p.originalPostId)?.author : p.author;
-            const profile = BC.profiles.get(author?.toLowerCase());
-            return profile?.language === BC.selectedLanguage;
-        });
-    }
-
-    // Tag filter
-    if (BC.selectedTag >= 0) {
-        filteredPosts = filteredPosts.filter(p => {
-            if (p.type === 'repost') {
-                const orig = BC.postsById.get(p.originalPostId);
-                return orig && orig.tag === BC.selectedTag;
-            }
-            return p.tag === BC.selectedTag;
-        });
-    }
-
-    if (filteredPosts.length === 0) {
+    if (posts.length === 0) {
         const tagName = BC.selectedTag >= 0 ? TAGS[BC.selectedTag]?.name || '' : '';
         if (BC.selectedTag >= 0) {
             return `<div class="bc-empty">
@@ -189,21 +183,23 @@ export function renderFeed() {
         </div>`;
     }
 
-    // Infinite scroll — render only (feedPage+1)*PAGE_SIZE posts
-    const limit = (BC.feedPage + 1) * FEED_PAGE_SIZE;
-    const visible = filteredPosts.slice(0, limit);
-    const hasMore = filteredPosts.length > limit;
-
     // TikTok mode for Feed tab
     if (BC.feedMode === 'tiktok') {
-        return `<div class="bc-tiktok-feed" data-tiktok-feed>
-                ${visible.map((post, i) => _renderTikTokCard(post, i)).join('')}
+        let html = `<div class="bc-tiktok-feed" data-tiktok-feed>
+                ${posts.map((post, i) => _renderTikTokCard(post, i)).join('')}
             </div>`;
+        if (BC.feedHasMore) {
+            html += `<div class="bc-feed-sentinel" data-sentinel="feed"><div class="bc-loading"><div class="bc-spinner"></div></div></div>`;
+        }
+        return html;
     }
 
-    let html = visible.map((post, i) => renderPost(post, i)).join('');
-    if (hasMore) {
+    let html = posts.map((post, i) => renderPost(post, i)).join('');
+    if (BC.feedHasMore) {
         html += `<div class="bc-feed-sentinel" data-sentinel="feed"><div class="bc-loading"><div class="bc-spinner"></div></div></div>`;
+    }
+    if (BC.feedLoadingMore) {
+        html += `<div class="bc-loading" style="padding:20px;"><div class="bc-spinner"></div></div>`;
     }
     return html;
 }

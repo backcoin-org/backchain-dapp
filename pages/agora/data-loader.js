@@ -19,32 +19,45 @@ import { parseMetadata, parsePostContent } from './utils.js';
 
 const AGORA_API = 'https://us-central1-backchain-backand.cloudfunctions.net/getAgoraFeed';
 const API_TIMEOUT = 15000; // 15s (Cloud Function cold start can be slow)
-
-let _feedCache = null;
-let _feedCacheTime = 0;
-let _pendingFetch = null; // Deduplicates concurrent requests
 const FEED_CACHE_MS = 30000; // 30s cache
+const PAGE_SIZE = 30;
 
-async function fetchAgoraFeed(userAddress) {
-    const now = Date.now();
-    if (_feedCache && (now - _feedCacheTime) < FEED_CACHE_MS) {
-        return _feedCache;
-    }
+// Cache keyed by params string
+let _feedCaches = new Map(); // key → { data, time }
+let _pendingFetches = new Map(); // key → Promise
 
-    // If a fetch is already in flight, reuse it instead of creating a new one
-    if (_pendingFetch) return _pendingFetch;
-
-    _pendingFetch = _doFetchAgoraFeed(userAddress).finally(() => {
-        _pendingFetch = null;
-    });
-    return _pendingFetch;
+function _cacheKey(params) {
+    return `${params.sort || 'smart'}|${params.tag ?? -1}|${params.lang || ''}|${params.offset || 0}`;
 }
 
-async function _doFetchAgoraFeed(userAddress) {
-    const url = userAddress
-        ? `${AGORA_API}?user=${userAddress.toLowerCase()}`
-        : AGORA_API;
+async function fetchAgoraFeed(userAddress, params = {}) {
+    const key = _cacheKey(params);
+    const now = Date.now();
+    const cached = _feedCaches.get(key);
+    if (cached && (now - cached.time) < FEED_CACHE_MS) {
+        return cached.data;
+    }
 
+    // Deduplicate concurrent requests for same key
+    if (_pendingFetches.has(key)) return _pendingFetches.get(key);
+
+    const promise = _doFetchAgoraFeed(userAddress, params).finally(() => {
+        _pendingFetches.delete(key);
+    });
+    _pendingFetches.set(key, promise);
+    return promise;
+}
+
+async function _doFetchAgoraFeed(userAddress, params = {}) {
+    const qp = new URLSearchParams();
+    if (userAddress) qp.set('user', userAddress.toLowerCase());
+    if (params.sort && params.sort !== 'smart') qp.set('sort', params.sort);
+    if (params.tag != null && params.tag >= 0) qp.set('tag', String(params.tag));
+    if (params.lang) qp.set('lang', params.lang);
+    qp.set('limit', String(params.limit || PAGE_SIZE));
+    if (params.offset) qp.set('offset', String(params.offset));
+
+    const url = `${AGORA_API}?${qp.toString()}`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), API_TIMEOUT);
 
@@ -53,8 +66,8 @@ async function _doFetchAgoraFeed(userAddress) {
         clearTimeout(timeout);
         if (!res.ok) throw new Error(`API ${res.status}`);
         const data = await res.json();
-        _feedCache = data;
-        _feedCacheTime = Date.now();
+        const key = _cacheKey(params);
+        _feedCaches.set(key, { data, time: Date.now() });
         return data;
     } catch (e) {
         clearTimeout(timeout);
@@ -62,10 +75,10 @@ async function _doFetchAgoraFeed(userAddress) {
     }
 }
 
-// Invalidate cache after actions (post, like, etc.)
+// Invalidate all cached pages after actions (post, like, etc.)
 export function invalidateFeedCache() {
-    _feedCache = null;
-    _feedCacheTime = 0;
+    _feedCaches.clear();
+    _pendingFetches.clear();
 }
 
 // ============================================================================
@@ -138,7 +151,7 @@ export async function loadUserStatus() {
 
 export async function loadGlobalStats() {
     try {
-        const feed = await fetchAgoraFeed(State.userAddress);
+        const feed = await fetchAgoraFeed(State.userAddress, { sort: BC.feedSort, tag: BC.selectedTag, lang: BC.selectedLanguage || '' });
         if (feed.stats) {
             BC.globalStats = {
                 totalPosts: feed.stats.totalPosts || 0,
@@ -167,7 +180,7 @@ export async function loadGlobalStats() {
 
 export async function loadProfiles() {
     try {
-        const feed = await fetchAgoraFeed(State.userAddress);
+        const feed = await fetchAgoraFeed(State.userAddress, { sort: BC.feedSort, tag: BC.selectedTag, lang: BC.selectedLanguage || '' });
 
         for (const data of (feed.profiles || [])) {
             const addr = (data.address || '').toLowerCase();
@@ -243,7 +256,7 @@ export async function loadSocialGraph() {
     if (!State.isConnected || !State.userAddress) return;
 
     try {
-        const feed = await fetchAgoraFeed(State.userAddress);
+        const feed = await fetchAgoraFeed(State.userAddress, { sort: BC.feedSort, tag: BC.selectedTag, lang: BC.selectedLanguage || '' });
         for (const addr of (feed.following || [])) {
             BC.following.add(addr);
         }
@@ -264,7 +277,7 @@ export async function loadBlockedAuthors() {
     if (!State.isConnected || !State.userAddress) return;
 
     try {
-        const feed = await fetchAgoraFeed(State.userAddress);
+        const feed = await fetchAgoraFeed(State.userAddress, { sort: BC.feedSort, tag: BC.selectedTag, lang: BC.selectedLanguage || '' });
         for (const addr of (feed.blocks || [])) {
             BC.blockedAuthors.add(addr);
         }
@@ -278,6 +291,90 @@ export async function loadBlockedAuthors() {
 // POSTS — from API feed data + smart feed algorithm
 // ============================================================================
 
+function _parsePosts(rawPosts) {
+    const allItems = [];
+    const feedPosts = [];
+
+    for (const data of rawPosts) {
+        const pid = data.postId;
+        const type = data.type || 'post';
+        const timestamp = data.timestamp || 0;
+
+        if (type === 'post') {
+            const { text, media, mediaCID, isVideo } = parsePostContent(data.contentHash || '');
+            const post = {
+                id: pid, type: 'post',
+                author: data.author,
+                content: text, media, mediaCID, isVideo,
+                tag: data.tag || 0,
+                timestamp,
+                superLikeETH: 0n,
+                editedAt: data.editedAt || 0,
+                likesCount: data.likes || 0,
+                downvotesCount: data.downvotes || 0,
+                repliesCount: data.replies || 0,
+                repostsCount: data.reposts || 0,
+                txHash: data.txHash
+            };
+            allItems.push(post);
+            feedPosts.push(post);
+            BC.postsById.set(pid, post);
+        } else if (type === 'reply') {
+            const parentId = data.parentId;
+            const { text, media, mediaCID, isVideo } = parsePostContent(data.contentHash || '');
+            const reply = {
+                id: pid, type: 'reply', parentId,
+                author: data.author,
+                content: text, media, mediaCID, isVideo,
+                tag: data.tag || 0,
+                timestamp,
+                superLikeETH: 0n,
+                editedAt: data.editedAt || 0,
+                likesCount: data.likes || 0,
+                downvotesCount: data.downvotes || 0,
+                txHash: data.txHash
+            };
+            allItems.push(reply);
+            BC.postsById.set(pid, reply);
+            if (!BC.replies.has(parentId)) BC.replies.set(parentId, []);
+            BC.replies.get(parentId).push(reply);
+            BC.replyCountMap.set(parentId, (BC.replyCountMap.get(parentId) || 0) + 1);
+        } else if (type === 'repost') {
+            const originalPostId = data.originalPostId || '0';
+            const repost = {
+                id: pid, type: 'repost', originalPostId,
+                author: data.author,
+                timestamp, superLikeETH: 0n, editedAt: 0,
+                txHash: data.txHash
+            };
+            allItems.push(repost);
+            feedPosts.push(repost);
+            BC.postsById.set(pid, repost);
+            BC.repostCountMap.set(originalPostId, (BC.repostCountMap.get(originalPostId) || 0) + 1);
+        }
+    }
+    return { allItems, feedPosts };
+}
+
+async function _checkUserLikes(items) {
+    if (!State.isConnected || !State.userAddress) return;
+    const contract = getContract();
+    if (!contract) return;
+    const postIds = items.filter(p => p.type !== 'repost').map(p => p.id);
+    for (let i = 0; i < postIds.length; i += 10) {
+        const batch = postIds.slice(i, i + 10);
+        const results = await Promise.all(
+            batch.map(pid => contract.hasLiked(pid, State.userAddress).catch(() => false))
+        );
+        for (let j = 0; j < batch.length; j++) {
+            if (results[j]) {
+                if (!BC.likesMap.has(batch[j])) BC.likesMap.set(batch[j], new Set());
+                BC.likesMap.get(batch[j]).add(State.userAddress.toLowerCase());
+            }
+        }
+    }
+}
+
 export async function loadPosts() {
     BC.isLoading = true;
     BC._render();
@@ -289,124 +386,33 @@ export async function loadPosts() {
             return;
         }
 
-        console.log('[Agora] Loading posts from API...');
+        const params = {
+            sort: BC.feedSort,
+            tag: BC.selectedTag >= 0 ? BC.selectedTag : undefined,
+            lang: BC.selectedLanguage || '',
+            limit: PAGE_SIZE,
+            offset: 0
+        };
 
-        const feed = await fetchAgoraFeed(State.userAddress);
+        console.log(`[Agora] Loading posts: sort=${params.sort}, tag=${params.tag ?? 'all'}, lang=${params.lang || 'all'}`);
+
+        const feed = await fetchAgoraFeed(State.userAddress, params);
         const rawPosts = feed.posts || [];
 
-        const allItems = [];
-        const feedPosts = [];
+        // Reset collections for fresh load
         BC.postsById = new Map();
         BC.replies = new Map();
         BC.replyCountMap = new Map();
         BC.repostCountMap = new Map();
         BC.likesMap = new Map();
 
-        for (const data of rawPosts) {
-            const pid = data.postId;
-            const type = data.type || 'post';
-            const timestamp = data.timestamp || 0;
-
-            if (type === 'post') {
-                const { text, media, mediaCID, isVideo } = parsePostContent(data.contentHash || '');
-                const post = {
-                    id: pid, type: 'post',
-                    author: data.author,
-                    content: text, media, mediaCID, isVideo,
-                    tag: data.tag || 0,
-                    timestamp,
-                    superLikeETH: 0n,
-                    editedAt: data.editedAt || 0,
-                    likesCount: data.likes || 0,
-                    downvotesCount: data.downvotes || 0,
-                    repliesCount: data.replies || 0,
-                    repostsCount: data.reposts || 0,
-                    txHash: data.txHash
-                };
-                allItems.push(post);
-                feedPosts.push(post);
-                BC.postsById.set(pid, post);
-            } else if (type === 'reply') {
-                const parentId = data.parentId;
-                const { text, media, mediaCID, isVideo } = parsePostContent(data.contentHash || '');
-                const reply = {
-                    id: pid, type: 'reply', parentId,
-                    author: data.author,
-                    content: text, media, mediaCID, isVideo,
-                    tag: data.tag || 0,
-                    timestamp,
-                    superLikeETH: 0n,
-                    editedAt: data.editedAt || 0,
-                    likesCount: data.likes || 0,
-                    downvotesCount: data.downvotes || 0,
-                    txHash: data.txHash
-                };
-                allItems.push(reply);
-                BC.postsById.set(pid, reply);
-                if (!BC.replies.has(parentId)) BC.replies.set(parentId, []);
-                BC.replies.get(parentId).push(reply);
-                BC.replyCountMap.set(parentId, (BC.replyCountMap.get(parentId) || 0) + 1);
-            } else if (type === 'repost') {
-                const originalPostId = data.originalPostId || '0';
-                const repost = {
-                    id: pid, type: 'repost', originalPostId,
-                    author: data.author,
-                    timestamp, superLikeETH: 0n, editedAt: 0,
-                    txHash: data.txHash
-                };
-                allItems.push(repost);
-                feedPosts.push(repost);
-                BC.postsById.set(pid, repost);
-                BC.repostCountMap.set(originalPostId, (BC.repostCountMap.get(originalPostId) || 0) + 1);
-            }
-        }
+        const { allItems, feedPosts } = _parsePosts(rawPosts);
 
         console.log(`[Agora] API: ${rawPosts.length} docs → ${feedPosts.length} feed posts, ${allItems.length} total items`);
 
-        // Check user likes (still on-chain — API doesn't track per-user likes)
-        if (State.isConnected && State.userAddress) {
-            const contract = getContract();
-            if (contract) {
-                const postIds = allItems.filter(p => p.type !== 'repost').map(p => p.id);
-                for (let i = 0; i < postIds.length; i += 10) {
-                    const batch = postIds.slice(i, i + 10);
-                    const results = await Promise.all(
-                        batch.map(pid => contract.hasLiked(pid, State.userAddress).catch(() => false))
-                    );
-                    for (let j = 0; j < batch.length; j++) {
-                        if (results[j]) {
-                            if (!BC.likesMap.has(batch[j])) BC.likesMap.set(batch[j], new Set());
-                            BC.likesMap.get(batch[j]).add(State.userAddress.toLowerCase());
-                        }
-                    }
-                }
-            }
-        }
+        await _checkUserLikes(allItems);
 
-        // Smart Feed Algorithm
-        const nowSec = Math.floor(Date.now() / 1000);
-        const myLang = BC.userProfile?.language || BC.wizLanguage || '';
-        const isConnected = State.isConnected && State.userAddress;
-
-        function feedScore(post) {
-            const author = (post.type === 'repost'
-                ? BC.postsById.get(post.originalPostId)?.author
-                : post.author)?.toLowerCase() || '';
-            const age = Math.max(nowSec - post.timestamp, 1);
-            const recency = 1000 / (1 + age / 21600);
-            const followBonus = (isConnected && BC.following.has(author)) ? 500 : 0;
-            const authorProfile = BC.profiles.get(author);
-            const langBonus = (myLang && authorProfile?.language === myLang) ? 300 : 0;
-            const likes = post.likesCount || 0;
-            const replies = post.repliesCount || BC.replyCountMap.get(post.id) || 0;
-            const reposts = post.repostsCount || BC.repostCountMap.get(post.id) || 0;
-            const engagement = likes + replies * 2 + reposts * 1.5;
-            return recency + followBonus + langBonus + engagement;
-        }
-
-        feedPosts.forEach(p => { p._score = feedScore(p); });
-        feedPosts.sort((a, b) => b._score - a._score);
-
+        // Filter blocked authors
         const filterBlocked = (posts) => {
             if (BC.blockedAuthors.size === 0) return posts;
             return posts.filter(p => !BC.blockedAuthors.has(p.author?.toLowerCase()));
@@ -414,8 +420,13 @@ export async function loadPosts() {
 
         BC.posts = filterBlocked(feedPosts);
         BC.allItems = allItems;
+        const apiTotal = feed.total || rawPosts.length;
+        BC.feedHasMore = (0 + rawPosts.length) < apiTotal;
+        BC.feedPage = 0;
 
-        // Discover: Engagement-ranked
+        // Discover: server returns sorted by engagement when sort=top
+        // For client-side discover tab, re-rank by trending score
+        const nowSec = Math.floor(Date.now() / 1000);
         BC.trendingPosts = filterBlocked([...allItems]
             .filter(p => p.type !== 'repost'))
             .map(p => {
@@ -429,12 +440,57 @@ export async function loadPosts() {
             })
             .sort((a, b) => b._trendScore - a._trendScore);
 
-        console.log(`[Agora] Loaded: ${BC.posts.length} feed posts, ${BC.allItems.length} total items, ${BC.trendingPosts.length} trending`);
+        console.log(`[Agora] Loaded: ${BC.posts.length} feed, ${BC.trendingPosts.length} trending, hasMore=${BC.feedHasMore}`);
     } catch (e) {
         console.error('[Agora] Failed to load posts:', e);
         BC.error = e.message;
     } finally {
         BC.isLoading = false;
+        BC._render();
+    }
+}
+
+// Load next page of posts (called by infinite scroll sentinel)
+export async function loadMorePosts() {
+    if (BC.feedLoadingMore || !BC.feedHasMore) return;
+    BC.feedLoadingMore = true;
+    BC._render();
+
+    try {
+        const offset = BC.posts.length;
+        const params = {
+            sort: BC.feedSort,
+            tag: BC.selectedTag >= 0 ? BC.selectedTag : undefined,
+            lang: BC.selectedLanguage || '',
+            limit: PAGE_SIZE,
+            offset
+        };
+
+        console.log(`[Agora] Loading more posts: offset=${offset}`);
+        const feed = await fetchAgoraFeed(State.userAddress, params);
+        const rawPosts = feed.posts || [];
+
+        if (rawPosts.length === 0) {
+            BC.feedHasMore = false;
+        } else {
+            const { allItems, feedPosts } = _parsePosts(rawPosts);
+            await _checkUserLikes(allItems);
+
+            const filterBlocked = (posts) => {
+                if (BC.blockedAuthors.size === 0) return posts;
+                return posts.filter(p => !BC.blockedAuthors.has(p.author?.toLowerCase()));
+            };
+
+            BC.posts.push(...filterBlocked(feedPosts));
+            BC.allItems.push(...allItems);
+            const apiTotal = feed.total || 0;
+            BC.feedHasMore = (offset + rawPosts.length) < apiTotal;
+            console.log(`[Agora] Loaded ${rawPosts.length} more posts, total=${BC.posts.length}, hasMore=${BC.feedHasMore}`);
+        }
+    } catch (e) {
+        console.warn('[Agora] Failed to load more posts:', e.message);
+    } finally {
+        BC.feedLoadingMore = false;
         BC._render();
     }
 }

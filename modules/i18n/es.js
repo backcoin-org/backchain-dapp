@@ -1662,6 +1662,11 @@ export default {
             alpha: 'Alpha',
             dev: 'Dev',
         },
+        sort: {
+            forYou: 'Para Ti',
+            new: 'Nuevos',
+            top: 'Top',
+        },
 
         // Modals
         modals: {

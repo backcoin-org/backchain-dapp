@@ -1662,6 +1662,11 @@ export default {
             alpha: 'Альфа',
             dev: 'Разработка',
         },
+        sort: {
+            forYou: 'Для вас',
+            new: 'Новые',
+            top: 'Топ',
+        },
 
         // Modals
         modals: {

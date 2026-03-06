@@ -8,10 +8,10 @@ import { t } from '../../modules/core/index.js';
 import { BC, getMaxContent } from './state.js';
 import { getProfileName, getInitials, escapeHtml, linkifyContent } from './utils.js';
 import { injectStyles } from './styles.js';
-import { loadFees, loadUserStatus, loadGlobalStats, loadProfiles, loadPosts, loadSocialGraph, loadBlockedAuthors, loadActiveRooms } from './data-loader.js';
+import { loadFees, loadUserStatus, loadGlobalStats, loadProfiles, loadPosts, loadMorePosts, loadSocialGraph, loadBlockedAuthors, loadActiveRooms, invalidateFeedCache } from './data-loader.js';
 import { navigateView, goBack, doCreatePost, doCreateReply, doLike, doFollow, doUnfollow, doDeletePost, doPinPost, doBlockUser, doUnblockUser, handleImageSelect, removeImage, onWizUsernameInput, doCreateProfile, goLive, endLive, watchLive, leaveLive, sharePost, closeModal, togglePostMenu, openChangeTag, selectNewTag, confirmChangeTag, restoreCart, removeFromCart, clearCart, toggleCart, submitCart, getCartFeeTotal } from './actions.js';
 import { renderCompose } from './composer.js';
-import { renderFeed, renderDiscover, renderTagBar, renderLanguageBar, renderLiveStreamBar } from './feed.js';
+import { renderFeed, renderDiscover, renderTagBar, renderLanguageBar, renderSortBar, renderLiveStreamBar } from './feed.js';
 import { renderProfile, renderUserProfile, renderProfileSetup } from './profile.js';
 import { renderPostDetail } from './post-detail.js';
 import { renderModals, openSuperLike, confirmSuperLike, openDownvote, confirmDownvote, openBadge, confirmBadge, openBoost, confirmBoost, openReport, confirmReport, openBoostPost, confirmBoostPost, openTip, confirmTip, openEditPost, confirmEditPost, previewAvatar, previewBanner, openRepostConfirm, confirmRepost, openEditProfile, confirmEditProfile, addSocialLink, removeSocialLink, updateLinkType, updateLinkUrl } from './modals.js';
@@ -97,7 +97,7 @@ function renderContent() {
     let content = '';
     switch (BC.view) {
         case 'feed':
-            content = renderFeed();
+            content = renderSortBar() + renderFeed();
             break;
 
         case 'discover':
@@ -116,7 +116,7 @@ function renderContent() {
             content = renderProfileSetup();
             break;
         default:
-            content = renderCompose() + renderLanguageBar() + renderTagBar() + renderFeed();
+            content = renderCompose() + renderLanguageBar() + renderTagBar() + renderSortBar() + renderFeed();
     }
     container.innerHTML = content;
     container.style.paddingBottom = BC.actionCart.length > 0 ? '80px' : '';
@@ -153,15 +153,14 @@ function _observeVideos() {
     });
 }
 
-// Infinite scroll sentinel observer
+// Infinite scroll sentinel observer — triggers server-side pagination
 function _observeSentinel() {
     if (BC._sentinelObserver) BC._sentinelObserver.disconnect();
     const sentinel = document.querySelector('[data-sentinel="feed"]');
     if (!sentinel) return;
-    BC._sentinelObserver = new IntersectionObserver((entries) => {
-        if (entries[0]?.isIntersecting) {
-            BC.feedPage++;
-            renderContent();
+    BC._sentinelObserver = new IntersectionObserver(async (entries) => {
+        if (entries[0]?.isIntersecting && !BC.feedLoadingMore) {
+            await loadMorePosts();
             _observeVideos();
             _observeSentinel();
         }
@@ -552,17 +551,31 @@ export const AgoraPage = {
         render();
     },
 
-    filterTag(tagId) {
+    async filterTag(tagId) {
         BC.selectedTag = tagId;
         BC.feedPage = 0;
-        renderContent();
+        invalidateFeedCache();
+        await loadPosts();
+        _observeVideos();
         _observeSentinel();
     },
 
-    filterLanguage(code) {
+    async filterLanguage(code) {
         BC.selectedLanguage = code;
         BC.feedPage = 0;
-        renderContent();
+        invalidateFeedCache();
+        await loadPosts();
+        _observeVideos();
+        _observeSentinel();
+    },
+
+    async setFeedSort(sort) {
+        if (BC.feedSort === sort) return;
+        BC.feedSort = sort;
+        BC.feedPage = 0;
+        invalidateFeedCache();
+        await loadPosts();
+        _observeVideos();
         _observeSentinel();
     },
 

@@ -1310,6 +1310,11 @@ export default {
             alpha: 'Alpha',
             dev: 'Dev'
         },
+        sort: {
+            forYou: 'Para Você',
+            new: 'Novos',
+            top: 'Top',
+        },
         modals: {
             superLike: {
                 title: 'Super Like',

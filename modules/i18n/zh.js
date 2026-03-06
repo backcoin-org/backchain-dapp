@@ -1662,6 +1662,11 @@ export default {
             alpha: '阿尔法',
             dev: '开发',
         },
+        sort: {
+            forYou: '推荐',
+            new: '最新',
+            top: '热门',
+        },
 
         // Modals
         modals: {

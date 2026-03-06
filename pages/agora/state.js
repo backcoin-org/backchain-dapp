@@ -146,6 +146,9 @@ export const BC = {
     // Infinite scroll & feed mode
     feedPage: 0,
     feedMode: 'tiktok',  // 'list' | 'tiktok'
+    feedSort: 'smart',   // 'smart' | 'new' | 'top'
+    feedHasMore: true,   // API has more pages
+    feedLoadingMore: false, // Loading next page
     // Stats
     globalStats: null,
     // UI flags

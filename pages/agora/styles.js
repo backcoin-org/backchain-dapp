@@ -58,6 +58,13 @@ export function injectStyles() {
         .bc-tag-pill.active { background:var(--bc-accent); border-color:var(--bc-accent); color:#000; box-shadow:0 0 10px rgba(245,158,11,0.25); }
         .bc-tag-pill i { font-size:11px; }
 
+        /* Sort Bar */
+        .bc-sort-bar { display:flex; gap:4px; padding:8px 20px; background:var(--bc-bg); border-bottom:1px solid var(--bc-border); }
+        .bc-sort-pill { padding:6px 14px; border-radius:20px; border:none; background:transparent; color:var(--bc-text-3); font-size:13px; font-weight:600; cursor:pointer; transition:all var(--bc-transition); display:flex; align-items:center; gap:5px; }
+        .bc-sort-pill:hover { color:var(--bc-text-2); background:var(--bc-bg3); }
+        .bc-sort-pill.active { color:var(--bc-accent); background:var(--bc-accent-glow); }
+        .bc-sort-pill i { font-size:11px; }
+
         /* Compose */
         .bc-compose { padding:20px; border-bottom:1px solid var(--bc-border); background:var(--bc-bg2); }
         .bc-compose-row { display:flex; gap:14px; }

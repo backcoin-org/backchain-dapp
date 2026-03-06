@@ -1663,6 +1663,13 @@ export default {
             dev: 'Dev',
         },
 
+        // Sort
+        sort: {
+            forYou: 'For You',
+            new: 'New',
+            top: 'Top',
+        },
+
         // Modals
         modals: {
             superLike: {
