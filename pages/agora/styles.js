@@ -481,8 +481,19 @@ export function injectStyles() {
         .bc-cart-item-remove { width:24px; height:24px; border-radius:50%; background:transparent; border:none; color:var(--bc-text-3); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:11px; transition:all var(--bc-transition); flex-shrink:0; }
         .bc-cart-item-remove:hover { background:rgba(239,68,68,0.1); color:var(--bc-red); }
 
-        .bc-cart-footer { padding:12px 20px; border-top:1px solid var(--bc-border); }
-        .bc-cart-warning { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--bc-accent); margin-top:8px; }
+        .bc-cart-footer { padding:12px 20px; border-top:1px solid var(--bc-border); display:flex; flex-direction:column; gap:4px; }
+        .bc-cart-fee { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--bc-accent); font-weight:600; }
+        .bc-cart-savings { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--bc-green); font-weight:600; }
+        .bc-cart-savings-inline { font-size:11px; color:var(--bc-green); font-weight:700; margin-left:4px; }
+        .bc-cart-warning { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--bc-text-3); }
+        @keyframes bc-cartPulse { 0%{transform:scale(1)} 50%{transform:scale(1.4)} 100%{transform:scale(1)} }
+        .bc-cart-badge.pulse { animation:bc-cartPulse 0.3s ease-out; }
+
+        /* Inline follow button on post cards */
+        .bc-follow-inline { padding:2px 8px; border-radius:16px; background:var(--bc-accent); color:#000; font-size:11px; font-weight:700; border:none; cursor:pointer; transition:all 0.15s; margin-left:2px; }
+        .bc-follow-inline:hover { transform:scale(1.05); box-shadow:0 2px 8px rgba(245,158,11,0.3); }
+        .bc-follow-inline:active { transform:scale(0.95); }
+        .bc-following-badge { font-size:11px; color:var(--bc-green); margin-left:2px; }
 
         /* Inline wallet button (Agora header) */
         .bc-wallet-inline { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:20px; border:1px solid var(--bc-border); background:transparent; color:var(--bc-text-2); font-size:12px; font-weight:600; cursor:pointer; transition:all var(--bc-transition); font-family:inherit; white-space:nowrap; }

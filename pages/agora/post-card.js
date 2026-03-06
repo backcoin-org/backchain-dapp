@@ -212,6 +212,8 @@ export function renderPost(post, index = 0, options = {}) {
     const isEdited = post.editedAt > 0;
     const animStyle = options.noAnimation ? '' : `style="animation-delay:${Math.min(index * 0.04, 0.4)}s"`;
     const tagInfo = getTagInfo(post.tag || 0);
+    const isOwn = post.author?.toLowerCase() === State.userAddress?.toLowerCase();
+    const isFollowing = BC.following.has(post.author?.toLowerCase());
 
     return `
         <div class="bc-post" data-post-id="${post.id}" ${animStyle} onclick="AgoraPage.viewPost('${post.id}')">
@@ -224,6 +226,8 @@ export function renderPost(post, index = 0, options = {}) {
                         <span class="bc-author-name" onclick="event.stopPropagation(); AgoraPage.viewProfile('${post.author}')">${authorName}</span>
                         ${badged ? `<i class="fa-solid fa-circle-check bc-verified-icon" title="${['Verified','Premium','Elite'][BC.badgeTier] || 'Verified'}" style="${BC.badgeTier === 2 ? 'color:#a855f7' : BC.badgeTier === 1 ? 'color:#f59e0b' : ''}"></i>` : ''}
                         ${username ? `<span class="bc-post-time">@${username}</span>` : ''}
+                        ${State.isConnected && !isOwn && !isFollowing ? `<button class="bc-follow-inline" onclick="event.stopPropagation(); AgoraPage.follow('${post.author}')"><i class="fa-solid fa-user-plus"></i></button>` : ''}
+                        ${isFollowing && !isOwn ? `<span class="bc-following-badge"><i class="fa-solid fa-check"></i></span>` : ''}
                         <span class="bc-post-time">&middot; ${formatTimeAgo(post.timestamp)}</span>
                         ${isEdited ? `<span class="bc-post-time bc-edited-hint" title="${t('agora.postCard.edited')} ${formatTimeAgo(post.editedAt)}">&#9998; ${t('agora.postCard.edited')}</span>` : ''}
                         ${post.tag > 0 ? `<span class="bc-tag-badge" style="color:${tagInfo.color};border-color:${tagInfo.color}30"><i class="fa-solid ${tagInfo.icon}"></i> ${tagInfo.name}</span>` : ''}

@@ -1792,6 +1792,10 @@ export default {
             clear: 'Очистить',
             notOnChainYet: 'Ещё не зарегистрировано в блокчейне',
             actionsNotOnChain: '<strong>{count} действие(й)</strong> ещё не в блокчейне',
+            action: 'действие',
+            actions: 'действий',
+            totalFee: 'Комиссия: {fee} ETH',
+            savings: 'Экономия ~{pct}% газа с батчингом',
         },
 
         // Post Detail

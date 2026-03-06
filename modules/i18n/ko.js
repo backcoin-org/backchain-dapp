@@ -1792,6 +1792,10 @@ export default {
             clear: '비우기',
             notOnChainYet: '아직 블록체인에 등록되지 않음',
             actionsNotOnChain: '<strong>{count}개 작업</strong>이 아직 블록체인에 없음',
+            action: '개 작업',
+            actions: '개 작업',
+            totalFee: '수수료: {fee} ETH',
+            savings: '배치로 ~{pct}% 가스 절약',
         },
 
         // Post Detail

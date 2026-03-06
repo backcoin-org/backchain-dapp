@@ -1435,7 +1435,11 @@ export default {
             submit: 'Enviar Tudo',
             clear: 'Limpar',
             notOnChainYet: 'Ainda não registrado na blockchain',
-            actionsNotOnChain: '<strong>{count} ação(ões)</strong> ainda não registrada(s) na blockchain'
+            actionsNotOnChain: '<strong>{count} ação(ões)</strong> ainda não registrada(s) na blockchain',
+            action: 'ação',
+            actions: 'ações',
+            totalFee: 'Taxa: {fee} ETH',
+            savings: 'Economizando ~{pct}% de gas com batching',
         },
         postDetail: {
             postNotFound: 'Post não encontrado',

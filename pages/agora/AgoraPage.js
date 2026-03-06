@@ -373,6 +373,12 @@ document.addEventListener('visibilitychange', () => {
 function renderCartBar() {
     if (BC.actionCart.length === 0) return '';
     const count = BC.actionCart.length;
+    const { formatted, likes, follows, downvotes } = getCartFeeTotal();
+
+    // Gas savings: batch = 300K + 150K/action vs individual = 200K/action
+    const individualGas = count * 200000;
+    const batchGas = 300000 + count * 150000;
+    const savingsPct = count > 1 ? Math.round((1 - batchGas / individualGas) * 100) : 0;
 
     const ICONS = { like: 'fa-heart', follow: 'fa-user-plus', downvote: 'fa-arrow-down' };
     const ICON_CLASS = { like: 'like', follow: 'follow', downvote: 'downvote' };
@@ -402,6 +408,8 @@ function renderCartBar() {
                 </div>
                 ${itemsHTML}
                 <div class="bc-cart-footer">
+                    <div class="bc-cart-fee"><i class="fa-solid fa-gas-pump"></i> ${t('agora.cart.totalFee', { fee: formatted })}</div>
+                    ${savingsPct > 0 ? `<div class="bc-cart-savings"><i class="fa-solid fa-bolt"></i> ${t('agora.cart.savings', { pct: String(savingsPct) })}</div>` : ''}
                     <div class="bc-cart-warning"><i class="fa-solid fa-circle-info"></i> ${t('agora.cart.notOnChainYet')}</div>
                 </div>
             </div>`;
@@ -412,14 +420,15 @@ function renderCartBar() {
             ${BC.cartVisible ? panelHTML : ''}
             <div class="bc-cart-summary" onclick="AgoraPage.toggleCart()">
                 <div class="bc-cart-info">
-                    <span class="bc-cart-badge">${count}</span>
-                    <span class="bc-cart-label">${t('agora.cart.actionsNotOnChain', {count: String(count)})}</span>
+                    <span class="bc-cart-badge" id="bc-cart-badge">${count}</span>
+                    <span class="bc-cart-label">${count} ${count === 1 ? t('agora.cart.action') : t('agora.cart.actions')}</span>
+                    ${savingsPct > 0 ? `<span class="bc-cart-savings-inline">-${savingsPct}% gas</span>` : ''}
                 </div>
                 <div class="bc-cart-actions">
                     <button class="bc-cart-submit-btn" onclick="event.stopPropagation(); AgoraPage.submitCart()" ${BC.cartSubmitting ? 'disabled' : ''}>
                         ${BC.cartSubmitting
                             ? `<i class="fa-solid fa-spinner fa-spin"></i> ${t('common.processing')}`
-                            : `<i class="fa-solid fa-link"></i> ${t('agora.cart.submit')}`}
+                            : `<i class="fa-solid fa-link"></i> ${formatted !== '0.0' ? formatted + ' ETH' : t('agora.cart.submit')}`}
                     </button>
                     <button class="bc-cart-toggle" onclick="event.stopPropagation(); AgoraPage.toggleCart()">
                         <i class="fa-solid fa-chevron-${BC.cartVisible ? 'down' : 'up'}"></i>

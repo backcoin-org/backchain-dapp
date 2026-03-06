@@ -170,8 +170,8 @@ export async function doLike(postId) {
     const postLabel = `Post #${postId}`;
     BC.actionCart.push({ type: 'like', targetId: String(postId), label: postLabel });
     _saveCart();
-    showToast(t('agora.toast.likeAddedToCart'), 'success');
     BC._render();
+    _pulseCartBadge();
 }
 
 export async function doSuperLike(postId, amount) {
@@ -196,8 +196,8 @@ export async function doDownvote(postId) {
     const postLabel = `Post #${postId}`;
     BC.actionCart.push({ type: 'downvote', targetId: String(postId), label: postLabel });
     _saveCart();
-    showToast(t('agora.toast.downvoteAddedToCart'), 'success');
     BC._render();
+    _pulseCartBadge();
 }
 
 export async function doDeletePost(postId) {
@@ -282,8 +282,8 @@ export async function doFollow(address) {
     const name = getProfileName(address);
     BC.actionCart.push({ type: 'follow', targetId: address, label: name });
     _saveCart();
-    showToast(t('agora.toast.followAddedToCart'), 'success');
     BC._render();
+    _pulseCartBadge();
 }
 
 export async function doUnfollow(address) {
@@ -818,6 +818,17 @@ function _saveCart() {
     try {
         localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(BC.actionCart));
     } catch (_) {}
+}
+
+function _pulseCartBadge() {
+    requestAnimationFrame(() => {
+        const badge = document.getElementById('bc-cart-badge');
+        if (badge) {
+            badge.classList.remove('pulse');
+            void badge.offsetWidth; // force reflow
+            badge.classList.add('pulse');
+        }
+    });
 }
 
 export function restoreCart() {

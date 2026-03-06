@@ -1794,6 +1794,10 @@ export default {
             clear: 'Clear',
             notOnChainYet: 'Not registered on blockchain yet',
             actionsNotOnChain: '<strong>{count} action(s)</strong> not on blockchain yet',
+            action: 'action',
+            actions: 'actions',
+            totalFee: 'Fee: {fee} ETH',
+            savings: 'Saving ~{pct}% on gas with batching',
         },
 
         // Post Detail

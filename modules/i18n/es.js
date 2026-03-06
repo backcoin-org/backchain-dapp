@@ -1792,6 +1792,10 @@ export default {
             clear: 'Limpiar',
             notOnChainYet: 'No registrado en blockchain aún',
             actionsNotOnChain: '<strong>{count} acción(es)</strong> no registradas en blockchain aún',
+            action: 'acción',
+            actions: 'acciones',
+            totalFee: 'Tarifa: {fee} ETH',
+            savings: 'Ahorrando ~{pct}% de gas con batching',
         },
 
         // Post Detail

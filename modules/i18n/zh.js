@@ -1792,6 +1792,10 @@ export default {
             clear: '清空',
             notOnChainYet: '尚未注册到区块链',
             actionsNotOnChain: '<strong>{count} 个操作</strong>尚未上链',
+            action: '个操作',
+            actions: '个操作',
+            totalFee: '费用: {fee} ETH',
+            savings: '批量节省 ~{pct}% gas',
         },
 
         // Post Detail
